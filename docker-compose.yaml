@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: queueti
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  queueti:
+    build: .
+    ports:
+      - "50051:50051"
+      - "8080:8080"
+    environment:
+      QUEUETI_DB_HOST: postgres
+      QUEUETI_DB_PORT: "5432"
+      QUEUETI_DB_USER: postgres
+      QUEUETI_DB_PASSWORD: postgres
+      QUEUETI_DB_NAME: queueti
+      QUEUETI_DB_SSLMODE: disable
+      QUEUETI_SERVER_PORT: "50051"
+      QUEUETI_SERVER_HTTP_PORT: "8080"
+      QUEUETI_AUTH_ENABLED: "true"
+      QUEUETI_AUTH_USERNAME: "admin"
+      QUEUETI_AUTH_PASSWORD: "secret"
+    healthcheck:
+      test: ["CMD", "/healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  admin-ui:
+    build: ./admin-ui
+    ports:
+      - "8081:8080"
+    depends_on:
+      queueti:
+        condition: service_healthy
+
+volumes:
+  pgdata:

@@ -1,0 +1,20 @@
+server:
+  port: 50051
+  http_port: 8080
+
+db:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  name: queueti
+  sslmode: disable
+
+queue:
+  visibility_timeout: 30s
+
+auth:
+  enabled: false
+  username: admin
+  password: secret
+

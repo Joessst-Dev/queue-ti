@@ -1,0 +1,57 @@
+{
+  "name": "@admin-ui/source",
+  "version": "0.0.0",
+  "license": "MIT",
+  "scripts": {
+    "start": "nx serve",
+    "build": "nx build",
+    "test": "nx test"
+  },
+  "private": true,
+  "dependencies": {
+    "@angular/common": "~21.2.0",
+    "@angular/compiler": "~21.2.0",
+    "@angular/core": "~21.2.0",
+    "@angular/forms": "~21.2.0",
+    "@angular/platform-browser": "~21.2.0",
+    "@angular/router": "~21.2.0",
+    "rxjs": "~7.8.0"
+  },
+  "devDependencies": {
+    "@angular-devkit/core": "~21.2.0",
+    "@angular-devkit/schematics": "~21.2.0",
+    "@angular/build": "~21.2.0",
+    "@angular/cli": "~21.2.0",
+    "@angular/compiler-cli": "~21.2.0",
+    "@angular/language-service": "~21.2.0",
+    "@eslint/js": "^9.8.0",
+    "@nx/angular": "22.6.5",
+    "@nx/eslint": "22.6.5",
+    "@nx/eslint-plugin": "22.6.5",
+    "@nx/js": "22.6.5",
+    "@nx/web": "22.6.5",
+    "@nx/workspace": "22.6.5",
+    "@oxc-project/runtime": "^0.115.0",
+    "@schematics/angular": "~21.2.0",
+    "@swc-node/register": "~1.11.1",
+    "@swc/core": "~1.15.5",
+    "@swc/helpers": "~0.5.18",
+    "@tailwindcss/postcss": "^4.2.2",
+    "@typescript-eslint/utils": "^8.40.0",
+    "angular-eslint": "^21.2.0",
+    "eslint": "^9.8.0",
+    "eslint-config-prettier": "^10.0.0",
+    "jsdom": "^27.1.0",
+    "nx": "22.6.5",
+    "postcss": "^8.5.10",
+    "prettier": "~3.6.2",
+    "tailwindcss": "^4.2.2",
+    "tslib": "^2.3.0",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "^8.40.0",
+    "vitest": "^4.0.8"
+  },
+  "nx": {
+    "includedScripts": []
+  }
+}

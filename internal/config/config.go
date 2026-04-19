@@ -1,0 +1,92 @@
+package config
+
+import (
+	"errors"
+	"strings"
+	"time"
+
+	"github.com/spf13/viper"
+)
+
+type Config struct {
+	Server ServerConfig
+	DB     DBConfig
+	Queue  QueueConfig
+	Auth   AuthConfig
+}
+
+type ServerConfig struct {
+	Port     int
+	HTTPPort int `mapstructure:"http_port"`
+}
+
+type DBConfig struct {
+	Host     string
+	Port     int
+	User     string
+	Password string
+	Name     string
+	SSLMode  string
+}
+
+type QueueConfig struct {
+	VisibilityTimeout time.Duration `mapstructure:"visibility_timeout"`
+}
+
+type AuthConfig struct {
+	Enabled  bool
+	Username string
+	Password string
+}
+
+func Load() (*Config, error) {
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")
+	viper.AddConfigPath("/etc/queueti/")
+
+	viper.SetEnvPrefix("QUEUETI")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
+
+	viper.SetDefault("server.port", 50051)
+	viper.SetDefault("server.http_port", 8080)
+	viper.SetDefault("db.host", "localhost")
+	viper.SetDefault("db.port", 5432)
+	viper.SetDefault("db.user", "postgres")
+	viper.SetDefault("db.password", "postgres")
+	viper.SetDefault("db.name", "queueti")
+	viper.SetDefault("db.sslmode", "disable")
+	viper.SetDefault("queue.visibility_timeout", "30s")
+	viper.SetDefault("auth.enabled", false)
+	viper.SetDefault("auth.username", "")
+	viper.SetDefault("auth.password", "")
+
+	// Explicitly bind environment variables to config keys
+	_ = viper.BindEnv("server.port")
+	_ = viper.BindEnv("server.http_port")
+	_ = viper.BindEnv("db.host")
+	_ = viper.BindEnv("db.port")
+	_ = viper.BindEnv("db.user")
+	_ = viper.BindEnv("db.password")
+	_ = viper.BindEnv("db.name")
+	_ = viper.BindEnv("db.sslmode")
+	_ = viper.BindEnv("queue.visibility_timeout")
+	_ = viper.BindEnv("auth.enabled")
+	_ = viper.BindEnv("auth.username")
+	_ = viper.BindEnv("auth.password")
+
+	if err := viper.ReadInConfig(); err != nil {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if !errors.As(err, &configFileNotFoundError) {
+			return nil, err
+		}
+	}
+
+	var cfg Config
+	if err := viper.Unmarshal(&cfg); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
+}

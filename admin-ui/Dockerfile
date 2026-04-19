@@ -1,0 +1,14 @@
+FROM node:22-alpine3.21 AS build
+WORKDIR /app
+COPY package.json ./
+RUN npm install
+COPY . .
+RUN npx nx build admin-ui --configuration=production
+
+FROM nginx:alpine3.21
+RUN rm /etc/nginx/conf.d/default.conf && \
+    chown -R nginx:nginx /var/cache/nginx /var/run /run
+COPY --chown=nginx:nginx --from=build /app/dist/admin-ui/browser /usr/share/nginx/html
+COPY --chown=nginx:nginx nginx.conf /etc/nginx/conf.d/default.conf
+USER nginx
+EXPOSE 8080

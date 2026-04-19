@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package queue;
+
+option go_package = "github.com/Joessst-Dev/queue-ti/pb";
+
+import "google/protobuf/timestamp.proto";
+
+service QueueService {
+  rpc Enqueue(EnqueueRequest) returns (EnqueueResponse);
+  rpc Dequeue(DequeueRequest) returns (DequeueResponse);
+  rpc Ack(AckRequest) returns (AckResponse);
+}
+
+message EnqueueRequest {
+  string topic = 1;
+  bytes payload = 2;
+  map<string, string> metadata = 3;
+}
+
+message EnqueueResponse {
+  string id = 1;
+}
+
+message DequeueRequest {
+  string topic = 1;
+}
+
+message DequeueResponse {
+  string id = 1;
+  string topic = 2;
+  bytes payload = 3;
+  map<string, string> metadata = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message AckRequest {
+  string id = 1;
+}
+
+message AckResponse {}
+
