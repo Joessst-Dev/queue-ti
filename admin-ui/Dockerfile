@@ -11,4 +11,4 @@ RUN rm /etc/nginx/conf.d/default.conf && \
 COPY --chown=nginx:nginx --from=build /app/dist/admin-ui/browser /usr/share/nginx/html
 COPY --chown=nginx:nginx nginx.conf /etc/nginx/conf.d/default.conf
 USER nginx
-EXPOSE 8080
+EXPOSE 80

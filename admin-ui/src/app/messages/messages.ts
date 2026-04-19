@@ -43,12 +43,40 @@ interface MetadataRowModel {
         <div
           class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between"
         >
-          <h1 class="text-xl font-bold text-gray-900">QueueTI Admin</h1>
+          <div class="flex items-center gap-2">
+            <svg
+              class="w-6 h-6 text-indigo-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z"
+              />
+            </svg>
+            <h1 class="text-xl font-bold text-gray-900">QueueTI Admin</h1>
+          </div>
           @if (auth.isAuthenticated()) {
             <button
               (click)="onLogout()"
-              class="text-sm text-gray-600 hover:text-gray-900"
+              class="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
             >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15"
+                />
+              </svg>
               Sign out
             </button>
           }
@@ -61,7 +89,24 @@ interface MetadataRowModel {
           <div
             class="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-wrap gap-4"
           >
-            <h2 class="text-lg font-semibold text-gray-900">Messages</h2>
+            <h2
+              class="flex items-center gap-2 text-lg font-semibold text-gray-900"
+            >
+              <svg
+                class="w-5 h-5 text-gray-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
+                />
+              </svg>
+              Messages
+            </h2>
             <div class="flex items-center gap-3">
               <input
                 type="text"
@@ -72,8 +117,21 @@ interface MetadataRowModel {
               />
               <button
                 (click)="loadMessages()"
-                class="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                class="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 cursor-pointer"
               >
+                <svg
+                  class="inline w-4 h-4 mr-1"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182"
+                  />
+                </svg>
                 Refresh
               </button>
             </div>
@@ -169,7 +227,7 @@ interface MetadataRowModel {
                 } @empty {
                   <tr>
                     <td
-                      colspan="6"
+                      colspan="7"
                       class="px-6 py-12 text-center text-sm text-gray-500"
                     >
                       @if (loadingMessages()) {
@@ -188,7 +246,24 @@ interface MetadataRowModel {
         <!-- Enqueue Section -->
         <section class="bg-white shadow rounded-lg">
           <div class="px-6 py-4 border-b border-gray-200">
-            <h2 class="text-lg font-semibold text-gray-900">Enqueue Message</h2>
+            <h2
+              class="flex items-center gap-2 text-lg font-semibold text-gray-900"
+            >
+              <svg
+                class="w-5 h-5 text-gray-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                />
+              </svg>
+              Enqueue Message
+            </h2>
           </div>
           <div class="px-6 py-4">
             @if (enqueueSuccess()) {
@@ -206,7 +281,7 @@ interface MetadataRowModel {
               </div>
             }
 
-            <form (ngSubmit)="onEnqueue()" class="space-y-4">
+            <form (submit)="onEnqueue($event)" class="space-y-4">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label
@@ -253,9 +328,22 @@ interface MetadataRowModel {
                     id="add-metadata-field"
                     type="button"
                     (click)="addMetadataRow()"
-                    class="text-sm text-indigo-600 hover:text-indigo-800"
+                    class="text-sm text-indigo-600 hover:text-indigo-800 cursor-pointer"
                   >
-                    + Add field
+                    <svg
+                      class="inline w-4 h-4 mr-0.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke-width="1.5"
+                      stroke="currentColor"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M12 4.5v15m7.5-7.5h-15"
+                      />
+                    </svg>
+                    Add field
                   </button>
                 </div>
                 @for (row of metadataRows(); track $index) {
@@ -277,7 +365,7 @@ interface MetadataRowModel {
                     <button
                       type="button"
                       (click)="removeMetadataRow($index)"
-                      class="px-2 text-gray-400 hover:text-red-600 text-lg"
+                      class="px-2 text-gray-400 hover:text-red-600 text-lg cursor-pointer"
                     >
                       &times;
                     </button>
@@ -288,9 +376,45 @@ interface MetadataRowModel {
               <button
                 type="submit"
                 [disabled]="enqueueLoading()"
-                class="px-4 py-2 bg-indigo-600 text-white font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="px-4 py-2 bg-indigo-600 text-white font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {{ enqueueLoading() ? 'Sending...' : 'Enqueue' }}
+                @if (enqueueLoading()) {
+                  <svg
+                    class="inline w-4 h-4 mr-1 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    ></circle>
+                    <path
+                      class="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    ></path>
+                  </svg>
+                  Sending...
+                } @else {
+                  <svg
+                    class="inline w-4 h-4 mr-1"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5"
+                    />
+                  </svg>
+                  Enqueue
+                }
               </button>
             </form>
           </div>
@@ -303,6 +427,8 @@ export class Messages {
   protected auth = inject(AuthService);
   private queue = inject(QueueService);
   private router = inject(Router);
+
+  ackEnabled = signal(false);
 
   private refreshTrigger$ = new Subject<string | undefined>();
 
@@ -407,7 +533,8 @@ export class Messages {
     this.refreshTrigger$.next(filter || undefined);
   }
 
-  onEnqueue() {
+  onEnqueue(event: Event) {
+    event.preventDefault();
     const metadata: Record<string, string> = {};
     for (const row of this.metadataRows()) {
       const key = row.form.key().value().trim();

@@ -22,6 +22,21 @@ interface LoginModel {
     <div class="min-h-screen flex items-center justify-center bg-gray-50">
       <div class="w-full max-w-sm">
         <div class="bg-white shadow rounded-lg p-8">
+          <div class="flex justify-center mb-4">
+            <svg
+              class="w-10 h-10 text-indigo-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z"
+              />
+            </svg>
+          </div>
           <h1 class="text-2xl font-bold text-gray-900 mb-6 text-center">
             Queue-ti Admin
           </h1>
@@ -34,7 +49,7 @@ interface LoginModel {
             </div>
           }
 
-          <form (ngSubmit)="onLogin()" class="space-y-4">
+          <form (submit)="onLogin($event)" class="space-y-4">
             <div>
               <label
                 for="username"
@@ -64,9 +79,45 @@ interface LoginModel {
             <button
               type="submit"
               [disabled]="loading()"
-              class="w-full py-2 px-4 bg-indigo-600 text-white font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="w-full py-2 px-4 bg-indigo-600 text-white font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {{ loading() ? 'Signing in...' : 'Sign in' }}
+              @if (loading()) {
+                <svg
+                  class="inline w-4 h-4 mr-1 animate-spin"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    class="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    stroke-width="4"
+                  ></circle>
+                  <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  ></path>
+                </svg>
+                Signing in...
+              } @else {
+                <svg
+                  class="inline w-4 h-4 mr-1"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9"
+                  />
+                </svg>
+                Sign in
+              }
             </button>
           </form>
         </div>
@@ -115,7 +166,8 @@ export class Login {
   error = computed(() => this.loginState().error);
   loading = computed(() => this.loginState().loading);
 
-  onLogin() {
+  onLogin(event: Event): void {
+    event.preventDefault();
     this.loginTrigger$.next({
       username: this.loginForm.username().value(),
       password: this.loginForm.password().value(),
