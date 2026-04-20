@@ -108,7 +108,7 @@ func (s *Service) Ack(ctx context.Context, id string) error {
 // List returns all messages, optionally filtered by topic.
 func (s *Service) List(ctx context.Context, topic string) ([]Message, error) {
 	var query string
-	var args []interface{}
+	var args []any
 
 	if topic != "" {
 		query = `SELECT id, topic, payload, metadata, status, created_at FROM messages WHERE topic = $1 ORDER BY created_at DESC`
