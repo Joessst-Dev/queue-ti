@@ -112,16 +112,16 @@ jobs:
       - name: Set up Node.js 22
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          # Node 22 LTS is the minimum required by Angular 21 and Nx 22.
           node-version: "22"
-          # Cache npm's downloaded packages; key is derived from
-          # admin-ui/package-lock.json automatically.
-          cache: "npm"
-          cache-dependency-path: "**/package-lock.json"
+
+      - name: Cache npm packages
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}
+          restore-keys: npm-${{ runner.os }}-
 
       - name: Install Node dependencies
-        # ci is faster than install: it does not resolve, only installs from the
-        # lockfile — fails if the lockfile is out of sync.
         run: npm ci
 
       - name: Cache Nx computation cache
