@@ -80,7 +80,7 @@ jobs:
       - name: Install Ginkgo CLI
         # Install the ginkgo binary so `make test` / `ginkgo ./...` works.
         # Using `go install` ensures the version is tied to the go.sum entry.
-        run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.28.1
 
       - name: Run Go tests (Ginkgo)
         # make test runs: ginkgo ./...

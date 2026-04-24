@@ -23,8 +23,7 @@ var _ = Describe("Queue Service", func() {
 		ctx = context.Background()
 
 		var err error
-		dsn := "postgres://postgres:postgres@localhost:5432/queueti_test?sslmode=disable"
-		pool, err = pgxpool.New(ctx, dsn)
+		pool, err = pgxpool.New(ctx, containerDSN)
 		Expect(err).NotTo(HaveOccurred())
 
 		err = db.Migrate(ctx, pool)
