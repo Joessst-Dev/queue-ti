@@ -1,0 +1,170 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+# Limit concurrent runs on the same ref: cancel in-flight runs on new pushes,
+# but never cancel runs on the main branch (let them finish for accurate status).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1: Go backend — build + test
+  # Tests use testcontainers-go, which spins up PostgreSQL containers
+  # programmatically via the Docker socket available on ubuntu-latest runners.
+  # One package (internal/queue) uses a hard-coded localhost:5432 DSN, so we
+  # also start a GitHub Actions service container to satisfy that dependency.
+  # ─────────────────────────────────────────────────────────────────────────────
+  backend:
+    name: "Backend: Build & Test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      # Satisfies internal/queue/service_test.go which hard-codes
+      # postgres://postgres:postgres@localhost:5432/queueti_test
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: queueti_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Viper reads QUEUETI_* env vars; set DB coordinates matching the
+      # service container above so any test that falls back to config.Load()
+      # also resolves correctly.
+      QUEUETI_DB_HOST: localhost
+      QUEUETI_DB_PORT: 5432
+      QUEUETI_DB_USER: postgres
+      QUEUETI_DB_PASSWORD: postgres
+      QUEUETI_DB_NAME: queueti_test
+      QUEUETI_DB_SSLMODE: disable
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go ${{ '1.25.5' }}
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: "1.25.5"
+          # actions/setup-go caches the module download cache (~/.cache/go) and
+          # the build cache (~/.cache/go-build) automatically when cache: true
+          # (the default). Cache key is derived from go.sum.
+          cache: true
+
+      - name: Install dependencies (go mod tidy)
+        run: make deps
+
+      - name: Build backend binary
+        # Compile the server to catch any build-breaking errors before running
+        # the full test suite, which is slower due to testcontainers startup.
+        run: go build -v ./cmd/server/...
+
+      - name: Install Ginkgo CLI
+        # Install the ginkgo binary so `make test` / `ginkgo ./...` works.
+        # Using `go install` ensures the version is tied to the go.sum entry.
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
+
+      - name: Run Go tests (Ginkgo)
+        # make test runs: ginkgo ./...
+        # -r  = recurse into subdirectories
+        # --randomize-all = catch order-dependent bugs
+        # --fail-fast = bail on the first suite failure for faster feedback
+        # Testcontainers packages pull the postgres:16-alpine image on first run;
+        # subsequent runs hit the Docker layer cache on the same runner.
+        run: make test
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2: Angular frontend — build, test, lint
+  # Runs in parallel with the backend job.
+  # All Nx commands are run from admin-ui/ because nx.json and project.json live
+  # there; the Nx daemon is disabled to avoid background process cleanup issues
+  # in CI.
+  # ─────────────────────────────────────────────────────────────────────────────
+  frontend:
+    name: "Frontend: Build, Test & Lint"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        # Run every step inside the admin-ui workspace directory.
+        working-directory: admin-ui
+
+    env:
+      # Disable the Nx daemon in CI — it adds no benefit and can leave orphan
+      # processes that confuse the runner.
+      NX_DAEMON: "false"
+      # Nx telemetry is off in CI to avoid noise and latency.
+      NX_CLOUD_NO_TIMEOUTS: "true"
+      NX_NO_CLOUD: "true"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          # Node 22 LTS is the minimum required by Angular 21 and Nx 22.
+          node-version: "22"
+          # Cache npm's downloaded packages; key is derived from
+          # admin-ui/package-lock.json automatically.
+          cache: "npm"
+          cache-dependency-path: admin-ui/package-lock.json
+
+      - name: Install Node dependencies
+        # ci is faster than install: it does not resolve, only installs from the
+        # lockfile — fails if the lockfile is out of sync.
+        run: npm ci
+
+      - name: Cache Nx computation cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: admin-ui/.nx/cache
+          # Nx cache is keyed on the lockfile + all source files via a hash;
+          # we use the lockfile as the primary key and fall back to any prior
+          # cache for the same branch prefix for partial hits.
+          key: nx-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}-${{ hashFiles('admin-ui/src/**') }}
+          restore-keys: |
+            nx-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}-
+            nx-${{ runner.os }}-
+
+      - name: Build Angular application (production)
+        # Builds to admin-ui/dist/admin-ui/browser via @angular/build:application.
+        # Runs production configuration by default (set in project.json).
+        run: npx nx build
+
+      - name: Run unit tests (Vitest, headless)
+        # @angular/build:unit-test executor runs Vitest. No browser needed.
+        run: npx nx test
+
+      - name: Run ESLint
+        run: npx nx lint
+
+      - name: Upload build artifact
+        # Upload the production build so it can be downloaded from the Actions UI
+        # or used by a subsequent deploy job.
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: admin-ui-dist-${{ github.sha }}
+          path: admin-ui/dist/admin-ui/
+          retention-days: 7
