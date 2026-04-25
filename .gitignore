@@ -48,7 +48,6 @@ admin-ui/out-tsc
 
 # Frontend - dependencies
 admin-ui/node_modules
-admin-ui/package-lock.json
 
 # Frontend - misc
 admin-ui/.sass-cache
