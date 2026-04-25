@@ -1,0 +1,1 @@
+- [README Initial Documentation](readme_initial_write.md) — Comprehensive README covering overview, architecture, getting started, config, API reference, tests
