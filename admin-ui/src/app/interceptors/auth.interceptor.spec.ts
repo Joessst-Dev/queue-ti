@@ -96,7 +96,7 @@ describe('authInterceptor', () => {
       it('should call auth.logout()', () => {
         setup({ authHeader: 'Basic dXNlcjpwYXNz', isAuthenticated: true });
 
-        http.get('/api/messages').subscribe({ error: () => {} });
+        http.get('/api/messages').subscribe({ error: vi.fn() });
         httpController
           .expectOne('/api/messages')
           .flush('Unauthorized', { status: 401, statusText: 'Unauthorized' });
@@ -107,7 +107,7 @@ describe('authInterceptor', () => {
       it('should navigate to /login', () => {
         setup({ authHeader: 'Basic dXNlcjpwYXNz', isAuthenticated: true });
 
-        http.get('/api/messages').subscribe({ error: () => {} });
+        http.get('/api/messages').subscribe({ error: vi.fn() });
         httpController
           .expectOne('/api/messages')
           .flush('Unauthorized', { status: 401, statusText: 'Unauthorized' });
@@ -120,7 +120,7 @@ describe('authInterceptor', () => {
       it('should not call logout or navigate', () => {
         setup({ authHeader: null, isAuthenticated: false });
 
-        http.get('/api/messages').subscribe({ error: () => {} });
+        http.get('/api/messages').subscribe({ error: vi.fn() });
         httpController
           .expectOne('/api/messages')
           .flush('Unauthorized', { status: 401, statusText: 'Unauthorized' });

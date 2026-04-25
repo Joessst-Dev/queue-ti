@@ -179,7 +179,7 @@ describe('Messages', () => {
         b.textContent?.trim().includes('Sign out'),
       );
       expect(signOutButton).not.toBeUndefined();
-      signOutButton!.click();
+      signOutButton?.click();
 
       expect(authService.logout).toHaveBeenCalledOnce();
     });
@@ -191,7 +191,7 @@ describe('Messages', () => {
       const signOutButton = Array.from(el.querySelectorAll('button')).find((b) =>
         b.textContent?.trim().includes('Sign out'),
       );
-      signOutButton!.click();
+      signOutButton?.click();
 
       expect(router.navigate).toHaveBeenCalledWith(['/login']);
     });

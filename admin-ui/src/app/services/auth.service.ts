@@ -1,6 +1,6 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of, map, tap, catchError, switchMap } from 'rxjs';
+import { Observable, of, map, tap, catchError } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -16,7 +16,7 @@ export class AuthService {
 
   checkAuthStatus(): Observable<boolean> {
     if (this._authRequired() !== null) {
-      return of(this._authRequired()!);
+      return of(this._authRequired() as boolean);
     }
     return this.http.get<{ auth_required: boolean }>('/api/auth/status').pipe(
       map((resp) => resp.auth_required),

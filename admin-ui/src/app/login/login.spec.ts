@@ -70,8 +70,7 @@ describe('Login', () => {
       const { fixture, router } = await setup(true);
       const el: HTMLElement = fixture.nativeElement;
 
-      const form = el.querySelector('form')!;
-      form.dispatchEvent(new Event('submit'));
+      el.querySelector('form')?.dispatchEvent(new Event('submit'));
       await fixture.whenStable();
       fixture.detectChanges();
 
@@ -84,8 +83,7 @@ describe('Login', () => {
       const { fixture } = await setup(false);
       const el: HTMLElement = fixture.nativeElement;
 
-      const form = el.querySelector('form')!;
-      form.dispatchEvent(new Event('submit'));
+      el.querySelector('form')?.dispatchEvent(new Event('submit'));
       await fixture.whenStable();
       fixture.detectChanges();
 
@@ -96,8 +94,7 @@ describe('Login', () => {
       const { fixture, router } = await setup(false);
       const el: HTMLElement = fixture.nativeElement;
 
-      const form = el.querySelector('form')!;
-      form.dispatchEvent(new Event('submit'));
+      el.querySelector('form')?.dispatchEvent(new Event('submit'));
       await fixture.whenStable();
       fixture.detectChanges();
 
@@ -131,14 +128,13 @@ describe('Login', () => {
       await fixture.whenStable();
 
       const el: HTMLElement = fixture.nativeElement;
-      const form = el.querySelector('form')!;
-      form.dispatchEvent(new Event('submit'));
+      el.querySelector('form')?.dispatchEvent(new Event('submit'));
       fixture.detectChanges();
       await fixture.whenStable();
       fixture.detectChanges();
 
-      const button = el.querySelector<HTMLButtonElement>('button[type="submit"]')!;
-      expect(button.disabled).toBe(true);
+      const button = el.querySelector<HTMLButtonElement>('button[type="submit"]');
+      expect(button?.disabled).toBe(true);
     });
   });
 });
