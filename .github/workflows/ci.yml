@@ -121,6 +121,9 @@ jobs:
           key: npm-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}
           restore-keys: npm-${{ runner.os }}-
 
+      - name: Pin npm version
+        run: npm install -g npm@11.10.1
+
       - name: Install Node dependencies
         run: npm ci
 
