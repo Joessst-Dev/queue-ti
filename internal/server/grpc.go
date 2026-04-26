@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -45,7 +46,15 @@ func (s *GRPCServer) Dequeue(ctx context.Context, req *pb.DequeueRequest) (*pb.D
 		return nil, status.Error(codes.InvalidArgument, "topic is required")
 	}
 
-	msg, err := s.queueService.Dequeue(ctx, req.Topic)
+	var vt time.Duration
+	if req.VisibilityTimeoutSeconds != nil {
+		if *req.VisibilityTimeoutSeconds == 0 {
+			return nil, status.Error(codes.InvalidArgument, "visibility_timeout_seconds must be greater than zero")
+		}
+		vt = time.Duration(*req.VisibilityTimeoutSeconds) * time.Second
+	}
+
+	msg, err := s.queueService.Dequeue(ctx, req.Topic, vt)
 	if err != nil {
 		if errors.Is(err, queue.ErrNoMessage) {
 			slog.Debug("grpc dequeue: no messages", "topic", req.Topic)

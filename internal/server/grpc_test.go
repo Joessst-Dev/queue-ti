@@ -135,6 +135,60 @@ var _ = Describe("gRPC Server", func() {
 		})
 	})
 
+	// Tests for the optional VisibilityTimeoutSeconds field on DequeueRequest
+	Describe("gRPC Dequeue with VisibilityTimeoutSeconds", func() {
+		BeforeEach(func() {
+			// Seed one message so dequeue calls have something to return.
+			_, err := client.Enqueue(ctx, &pb.EnqueueRequest{
+				Topic:   "vt-grpc-topic",
+				Payload: []byte("vt payload"),
+			})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when VisibilityTimeoutSeconds is nil", func() {
+			It("should use the server default and dequeue successfully", func() {
+				resp, err := client.Dequeue(ctx, &pb.DequeueRequest{
+					Topic:                    "vt-grpc-topic",
+					VisibilityTimeoutSeconds: nil,
+				})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Id).NotTo(BeEmpty())
+			})
+		})
+
+		Context("when VisibilityTimeoutSeconds is set to 60", func() {
+			It("should dequeue successfully with no error", func() {
+				timeout := uint32(60)
+				resp, err := client.Dequeue(ctx, &pb.DequeueRequest{
+					Topic:                    "vt-grpc-topic",
+					VisibilityTimeoutSeconds: &timeout,
+				})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Id).NotTo(BeEmpty())
+			})
+		})
+
+		Context("when VisibilityTimeoutSeconds is set to 0", func() {
+			It("should return an InvalidArgument error", func() {
+				// Enqueue a second message so the 0-timeout attempt has a candidate
+				// (the first was consumed above; each Context gets its own BeforeEach).
+				timeout := uint32(0)
+				_, err := client.Dequeue(ctx, &pb.DequeueRequest{
+					Topic:                    "vt-grpc-topic",
+					VisibilityTimeoutSeconds: &timeout,
+				})
+
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+			})
+		})
+	})
+
 	// Tests for the Ack RPC endpoint
 	Describe("Ack", func() {
 		Context("Given a message has been dequeued and is being processed", func() {

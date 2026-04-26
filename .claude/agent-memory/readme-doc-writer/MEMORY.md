@@ -3,3 +3,4 @@
 - [Frontend UI Features Added](frontend_ui_features.md) — Admin UI now shows retry counts, expiry, DLQ highlighting, and Nack/Requeue actions
 - [Log Level Configuration Documentation](log_level_feature.md) — Top-level log_level config key with debug/info/warn/error levels and QUEUETI_LOG_LEVEL env var
 - [Prometheus Metrics & Observability](observability_metrics.md) — /metrics endpoint, all counter/gauge definitions, nack outcomes, stats API integration
+- [Per-Dequeue Visibility Timeout Override](per_dequeue_visibility_timeout.md) — Optional visibility_timeout_seconds in DequeueRequest overrides server default per-call

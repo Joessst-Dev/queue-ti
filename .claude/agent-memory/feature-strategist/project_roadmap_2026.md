@@ -16,3 +16,11 @@ The team is now looking for the next three features beyond the original four.
 **Why:** Avro schema validation is still on the table but the team wants fresh recommendations on what else to prioritize alongside or instead of it.
 
 **How to apply:** When suggesting next features, treat Retries/TTL/DLQ as existing primitives to build on. Avro schema validation is a live candidate — score it honestly against alternatives.
+
+## Next Three Features (recommended 2026-04-26)
+
+1. **Configurable visibility timeout per dequeue** — S / Med. Proto field on DequeueRequest; one queue method change. Quick consumer unblocking win.
+2. **Topic-level configuration** — M / High. New `topics` table, per-topic TTL/retries/max-depth, config UI tab. Highest leverage; enables multi-tenancy.
+3. **Scheduled / delayed message delivery** — M / High. New `deliver_at` column on `messages`; filter in dequeue query. Unlocks backoff, deferred jobs, cron-style patterns.
+
+Avro schema validation ranked 4th — high effort, niche audience, deferred again.

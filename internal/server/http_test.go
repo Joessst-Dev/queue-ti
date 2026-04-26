@@ -567,7 +567,7 @@ var _ = Describe("HTTP Server", func() {
 				dlqMessageID, err = dlqService.Enqueue(httpTestCtx, "payments", []byte("charge"), nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				_, err = dlqService.Dequeue(httpTestCtx, "payments")
+				_, err = dlqService.Dequeue(httpTestCtx, "payments", 0)
 				Expect(err).NotTo(HaveOccurred())
 
 				err = dlqService.Nack(httpTestCtx, dlqMessageID, "gateway timeout")
@@ -809,7 +809,7 @@ var _ = Describe("HTTP Server", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				// Dequeue 1 from "orders" to put it into processing state
-				_, err = queueService.Dequeue(httpTestCtx, "orders")
+				_, err = queueService.Dequeue(httpTestCtx, "orders", 0)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Enqueue 1 pending on "payments"

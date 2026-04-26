@@ -93,7 +93,12 @@ func (s *Service) Enqueue(ctx context.Context, topic string, payload []byte, met
 	return id, nil
 }
 
-func (s *Service) Dequeue(ctx context.Context, topic string) (*Message, error) {
+func (s *Service) Dequeue(ctx context.Context, topic string, visibilityTimeout time.Duration) (*Message, error) {
+	vt := s.visibilityTimeout
+	if visibilityTimeout > 0 {
+		vt = visibilityTimeout
+	}
+
 	query := `
 		UPDATE messages
 		SET status = 'processing',
@@ -118,7 +123,7 @@ func (s *Service) Dequeue(ctx context.Context, topic string) (*Message, error) {
 	var metaJSON []byte
 	var lastError *string
 	err := s.pool.QueryRow(ctx, query,
-		fmt.Sprintf("%d seconds", int(s.visibilityTimeout.Seconds())),
+		fmt.Sprintf("%d seconds", int(vt.Seconds())),
 		topic,
 	).Scan(
 		&msg.ID, &msg.Topic, &msg.Payload, &metaJSON,

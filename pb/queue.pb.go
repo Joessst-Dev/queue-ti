@@ -127,10 +127,11 @@ func (x *EnqueueResponse) GetId() string {
 }
 
 type DequeueRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	Topic                    string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	VisibilityTimeoutSeconds *uint32                `protobuf:"varint,2,opt,name=visibility_timeout_seconds,json=visibilityTimeoutSeconds,proto3,oneof" json:"visibility_timeout_seconds,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *DequeueRequest) Reset() {
@@ -168,6 +169,13 @@ func (x *DequeueRequest) GetTopic() string {
 		return x.Topic
 	}
 	return ""
+}
+
+func (x *DequeueRequest) GetVisibilityTimeoutSeconds() uint32 {
+	if x != nil && x.VisibilityTimeoutSeconds != nil {
+		return *x.VisibilityTimeoutSeconds
+	}
+	return 0
 }
 
 type DequeueResponse struct {
@@ -443,9 +451,11 @@ const file_queue_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"!\n" +
 	"\x0fEnqueueResponse\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"&\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x88\x01\n" +
 	"\x0eDequeueRequest\x12\x14\n" +
-	"\x05topic\x18\x01 \x01(\tR\x05topic\"\xcd\x02\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\x12A\n" +
+	"\x1avisibility_timeout_seconds\x18\x02 \x01(\rH\x00R\x18visibilityTimeoutSeconds\x88\x01\x01B\x1d\n" +
+	"\x1b_visibility_timeout_seconds\"\xcd\x02\n" +
 	"\x0fDequeueResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05topic\x18\x02 \x01(\tR\x05topic\x12\x18\n" +
@@ -524,6 +534,7 @@ func file_queue_proto_init() {
 	if File_queue_proto != nil {
 		return
 	}
+	file_queue_proto_msgTypes[2].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

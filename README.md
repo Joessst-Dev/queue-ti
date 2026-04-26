@@ -216,8 +216,10 @@ internal/
 - **Dequeue algorithm**:
   1. Query for the oldest pending message in the topic that is either not yet visible or has expired, has not exceeded its retry limit, and has not expired by TTL.
   2. Use `FOR UPDATE SKIP LOCKED` to prevent concurrent consumers from acquiring the same message.
-  3. Transition the message to `'processing'` status and set `visibility_timeout` to `now() + [configured duration]`.
+  3. Transition the message to `'processing'` status and set `visibility_timeout` to `now() + [visibility timeout duration]`. The duration is determined by the optional `visibility_timeout_seconds` field in the `DequeueRequest` (if provided and > 0), or falls back to the server-wide `visibility_timeout` configuration.
   4. Return the message to the consumer.
+
+- **Per-dequeue visibility timeout override**: Clients can override the server-wide visibility timeout on a per-dequeue basis by setting the optional `visibility_timeout_seconds` field in the `DequeueRequest`. This is useful for consumers with variable processing times. For example, a slow batch processor can request a longer timeout without changing the global config. When `visibility_timeout_seconds` is omitted or not set, the server-wide default (typically 30 seconds) applies. Setting `visibility_timeout_seconds` to 0 is rejected with an `InvalidArgument` error.
 
 - **Message statuses**:
   - **pending** (yellow badge) — Ready to be dequeued (initial state after enqueue, or reset after a nack with retries remaining, or after requeue from DLQ)
@@ -296,7 +298,8 @@ Dequeues the next available message from a topic.
 rpc Dequeue(DequeueRequest) returns (DequeueResponse);
 
 message DequeueRequest {
-  string topic = 1;  // Topic name (required)
+  string topic = 1;                           // Topic name (required)
+  optional uint32 visibility_timeout_seconds = 2;  // Visibility timeout override (optional, > 0 if set)
 }
 
 message DequeueResponse {
@@ -305,10 +308,25 @@ message DequeueResponse {
   bytes payload = 3;                    // Message payload
   map<string, string> metadata = 4;     // Metadata
   google.protobuf.Timestamp created_at = 5;  // Creation timestamp
+  int32 retry_count = 6;                // Current retry count
+  int32 max_retries = 7;                // Maximum retries for this message
 }
 ```
 
 Returns `codes.NotFound` if no messages are available; otherwise returns the next message and transitions it to `'processing'` status with a visibility timeout.
+
+**Visibility Timeout Behavior**:
+- When `visibility_timeout_seconds` is **omitted or not set**, the server-wide `visibility_timeout` configuration is used (default 30 seconds).
+- When `visibility_timeout_seconds` is **set to a value > 0**, that duration (in seconds) overrides the server-wide configuration for this dequeue operation only.
+- When `visibility_timeout_seconds` is **set to 0**, the request is rejected with `codes.InvalidArgument`.
+
+**Example**: To dequeue a message with a custom 120-second visibility timeout:
+```protobuf
+DequeueRequest {
+  topic: "orders"
+  visibility_timeout_seconds: 120
+}
+```
 
 #### Ack
 

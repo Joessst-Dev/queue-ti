@@ -132,7 +132,7 @@ var _ = Describe("Queue Service", func() {
 
 			It("should return the oldest pending message first (FIFO)", func() {
 				// When we dequeue from the topic
-				msg, err := service.Dequeue(ctx, "test-topic")
+				msg, err := service.Dequeue(ctx, "test-topic", 0)
 
 				// Then the first enqueued message is returned
 				Expect(err).NotTo(HaveOccurred())
@@ -144,7 +144,7 @@ var _ = Describe("Queue Service", func() {
 		Context("Given an empty topic with no pending messages", func() {
 			It("should return ErrNoMessage", func() {
 				// When we attempt to dequeue from a topic with no messages
-				_, err := service.Dequeue(ctx, "empty-topic")
+				_, err := service.Dequeue(ctx, "empty-topic", 0)
 
 				// Then the specific no-message error is returned
 				Expect(err).To(Equal(queue.ErrNoMessage))
@@ -157,14 +157,14 @@ var _ = Describe("Queue Service", func() {
 				_, err := service.Enqueue(ctx, "test-topic", []byte("only-one"), nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				msg, err := service.Dequeue(ctx, "test-topic")
+				msg, err := service.Dequeue(ctx, "test-topic", 0)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(msg).NotTo(BeNil())
 			})
 
 			It("should not deliver the same message twice", func() {
 				// When we attempt to dequeue again
-				_, err := service.Dequeue(ctx, "test-topic")
+				_, err := service.Dequeue(ctx, "test-topic", 0)
 
 				// Then no message is available
 				Expect(err).To(Equal(queue.ErrNoMessage))
@@ -182,7 +182,7 @@ var _ = Describe("Queue Service", func() {
 			})
 
 			It("should not return the expired message", func() {
-				_, err := service.Dequeue(ctx, "exp-topic")
+				_, err := service.Dequeue(ctx, "exp-topic", 0)
 				Expect(err).To(Equal(queue.ErrNoMessage))
 			})
 		})
@@ -198,7 +198,7 @@ var _ = Describe("Queue Service", func() {
 			})
 
 			It("should not return the retry-exhausted message", func() {
-				_, err := service.Dequeue(ctx, "exhausted-topic")
+				_, err := service.Dequeue(ctx, "exhausted-topic", 0)
 				Expect(err).To(Equal(queue.ErrNoMessage))
 			})
 		})
@@ -210,7 +210,7 @@ var _ = Describe("Queue Service", func() {
 			})
 
 			It("should return the message normally", func() {
-				msg, err := service.Dequeue(ctx, "available-topic")
+				msg, err := service.Dequeue(ctx, "available-topic", 0)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(msg).NotTo(BeNil())
 				Expect(msg.Payload).To(Equal([]byte("work")))
@@ -229,7 +229,7 @@ var _ = Describe("Queue Service", func() {
 				messageID, err = service.Enqueue(ctx, "test-topic", []byte("ack-me"), nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				_, err = service.Dequeue(ctx, "test-topic")
+				_, err = service.Dequeue(ctx, "test-topic", 0)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -269,7 +269,7 @@ var _ = Describe("Queue Service", func() {
 				messageID, err = service.Enqueue(ctx, "nack-topic", []byte("work"), nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				_, err = service.Dequeue(ctx, "nack-topic")
+				_, err = service.Dequeue(ctx, "nack-topic", 0)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -300,7 +300,7 @@ var _ = Describe("Queue Service", func() {
 				messageID, err = service.Enqueue(ctx, "retry-nack-topic", []byte("retry"), nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				_, err = service.Dequeue(ctx, "retry-nack-topic")
+				_, err = service.Dequeue(ctx, "retry-nack-topic", 0)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -316,7 +316,7 @@ var _ = Describe("Queue Service", func() {
 				Expect(msgStatus).To(Equal("pending"))
 
 				// Confirm it can actually be dequeued again.
-				msg, err := service.Dequeue(ctx, "retry-nack-topic")
+				msg, err := service.Dequeue(ctx, "retry-nack-topic", 0)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(msg.ID).To(Equal(messageID))
 			})
@@ -331,7 +331,7 @@ var _ = Describe("Queue Service", func() {
 				messageID, err = service.Enqueue(ctx, "final-nack-topic", []byte("one-shot"), nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				_, err = service.Dequeue(ctx, "final-nack-topic")
+				_, err = service.Dequeue(ctx, "final-nack-topic", 0)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -347,7 +347,7 @@ var _ = Describe("Queue Service", func() {
 				Expect(msgStatus).To(Equal("failed"))
 
 				// Confirm it is no longer dequeue-able.
-				_, err = service.Dequeue(ctx, "final-nack-topic")
+				_, err = service.Dequeue(ctx, "final-nack-topic", 0)
 				Expect(err).To(Equal(queue.ErrNoMessage))
 			})
 		})
@@ -389,7 +389,7 @@ var _ = Describe("Queue Service", func() {
 				_, err := service.Enqueue(ctx, "meta-topic", []byte("data"), meta)
 				Expect(err).NotTo(HaveOccurred())
 
-				msg, err := service.Dequeue(ctx, "meta-topic")
+				msg, err := service.Dequeue(ctx, "meta-topic", 0)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Then the metadata is identical to what was enqueued
@@ -430,13 +430,13 @@ var _ = Describe("Queue Service", func() {
 					Expect(err).NotTo(HaveOccurred())
 
 					// First nack: retry_count becomes 1, still below threshold (2).
-					_, err = service.Dequeue(ctx, "orders")
+					_, err = service.Dequeue(ctx, "orders", 0)
 					Expect(err).NotTo(HaveOccurred())
 					err = service.Nack(ctx, messageID, "transient")
 					Expect(err).NotTo(HaveOccurred())
 
 					// Second nack: retry_count becomes 2, equals threshold → DLQ promotion.
-					_, err = service.Dequeue(ctx, "orders")
+					_, err = service.Dequeue(ctx, "orders", 0)
 					Expect(err).NotTo(HaveOccurred())
 					err = service.Nack(ctx, messageID, "still failing")
 					Expect(err).NotTo(HaveOccurred())
@@ -463,7 +463,7 @@ var _ = Describe("Queue Service", func() {
 				})
 
 				It("should make the message dequeue-able on the DLQ topic", func() {
-					msg, err := service.Dequeue(ctx, "orders.dlq")
+					msg, err := service.Dequeue(ctx, "orders.dlq", 0)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(msg.ID).To(Equal(messageID))
@@ -472,7 +472,7 @@ var _ = Describe("Queue Service", func() {
 				})
 
 				It("should remove the message from the original topic", func() {
-					_, err := service.Dequeue(ctx, "orders")
+					_, err := service.Dequeue(ctx, "orders", 0)
 
 					Expect(err).To(Equal(queue.ErrNoMessage))
 				})
@@ -489,7 +489,7 @@ var _ = Describe("Queue Service", func() {
 					messageID, err = service.Enqueue(ctx, "invoices", []byte("work"), nil)
 					Expect(err).NotTo(HaveOccurred())
 
-					_, err = service.Dequeue(ctx, "invoices")
+					_, err = service.Dequeue(ctx, "invoices", 0)
 					Expect(err).NotTo(HaveOccurred())
 
 					err = service.Nack(ctx, messageID, "one failure")
@@ -523,7 +523,7 @@ var _ = Describe("Queue Service", func() {
 					messageID, err = service.Enqueue(ctx, "shipments", []byte("ship it"), nil)
 					Expect(err).NotTo(HaveOccurred())
 
-					_, err = service.Dequeue(ctx, "shipments")
+					_, err = service.Dequeue(ctx, "shipments", 0)
 					Expect(err).NotTo(HaveOccurred())
 
 					err = service.Nack(ctx, messageID, "carrier down")
@@ -562,7 +562,7 @@ var _ = Describe("Queue Service", func() {
 					err := service.Requeue(ctx, messageID)
 					Expect(err).NotTo(HaveOccurred())
 
-					msg, err := service.Dequeue(ctx, "shipments")
+					msg, err := service.Dequeue(ctx, "shipments", 0)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(msg.ID).To(Equal(messageID))
 				})
@@ -583,6 +583,86 @@ var _ = Describe("Queue Service", func() {
 					Expect(err).To(HaveOccurred())
 					Expect(err).To(MatchError(ContainSubstring(queue.ErrNotDLQ.Error())))
 				})
+			})
+		})
+	})
+
+	// Tests for per-dequeue configurable visibility timeout
+	Describe("Dequeue with custom visibility timeout", func() {
+		Context("when visibility_timeout_seconds is 0 (use server default)", func() {
+			It("should store visibility_timeout close to now() + server default", func() {
+				// Use a 30-second server default (the suite default).
+				id, err := service.Enqueue(ctx, "vt-default-topic", []byte("payload"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				before := time.Now()
+				// When we dequeue with 0 (use server default of 30s)
+				msg, err := service.Dequeue(ctx, "vt-default-topic", 0)
+				after := time.Now()
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msg).NotTo(BeNil())
+
+				// Then visibility_timeout is approximately now + 30s
+				var vt time.Time
+				err = pool.QueryRow(ctx,
+					`SELECT visibility_timeout FROM messages WHERE id = $1`, id,
+				).Scan(&vt)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(vt).To(BeTemporally(">=", before.Add(30*time.Second-time.Second)))
+				Expect(vt).To(BeTemporally("<=", after.Add(30*time.Second+time.Second)))
+			})
+		})
+
+		Context("when a custom visibility_timeout_seconds of 2 is provided", func() {
+			It("should store visibility_timeout close to now() + 2s", func() {
+				id, err := service.Enqueue(ctx, "vt-custom-topic", []byte("payload"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				before := time.Now()
+				// When we dequeue with a 2-second custom timeout
+				msg, err := service.Dequeue(ctx, "vt-custom-topic", 2*time.Second)
+				after := time.Now()
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msg).NotTo(BeNil())
+
+				// Then visibility_timeout is approximately now + 2s, not now + 30s
+				var vt time.Time
+				err = pool.QueryRow(ctx,
+					`SELECT visibility_timeout FROM messages WHERE id = $1`, id,
+				).Scan(&vt)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(vt).To(BeTemporally(">=", before.Add(2*time.Second-time.Second)))
+				Expect(vt).To(BeTemporally("<=", after.Add(2*time.Second+time.Second)))
+
+				// And crucially the custom timeout is much shorter than the server default (30s)
+				Expect(vt).To(BeTemporally("<", time.Now().Add(30*time.Second)))
+			})
+		})
+
+		Context("when visibility_timeout_seconds is negative", func() {
+			It("should fall back to the server default and dequeue successfully", func() {
+				id, err := service.Enqueue(ctx, "vt-negative-topic", []byte("payload"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				before := time.Now()
+				// When we pass a negative duration (treated as "not set", falls back to server default)
+				msg, err := service.Dequeue(ctx, "vt-negative-topic", -1*time.Second)
+				after := time.Now()
+
+				// Then the dequeue succeeds — the negative value is ignored
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msg).NotTo(BeNil())
+
+				// And visibility_timeout reflects the server default (30s), not -1s
+				var vt time.Time
+				err = pool.QueryRow(ctx,
+					`SELECT visibility_timeout FROM messages WHERE id = $1`, id,
+				).Scan(&vt)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(vt).To(BeTemporally(">=", before.Add(30*time.Second-time.Second)))
+				Expect(vt).To(BeTemporally("<=", after.Add(30*time.Second+time.Second)))
 			})
 		})
 	})

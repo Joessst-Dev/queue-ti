@@ -25,6 +25,7 @@ message EnqueueResponse {
 
 message DequeueRequest {
   string topic = 1;
+  optional uint32 visibility_timeout_seconds = 2;
 }
 
 message DequeueResponse {
