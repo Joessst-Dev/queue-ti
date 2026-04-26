@@ -315,25 +315,38 @@ func (s *Service) Requeue(ctx context.Context, id string) error {
 	return nil
 }
 
-// List returns all messages, optionally filtered by topic.
-func (s *Service) List(ctx context.Context, topic string) ([]Message, error) {
-	var query string
+// List returns paginated messages, optionally filtered by topic.
+// Returns the page of messages, the total matching count, and any error.
+func (s *Service) List(ctx context.Context, topic string, limit, offset int) ([]Message, int, error) {
+	var countQuery, selectQuery string
 	var args []any
 
 	if topic != "" {
-		query = `SELECT id, topic, payload, metadata, status, retry_count, max_retries, last_error,
-		               expires_at, created_at, COALESCE(original_topic, ''), dlq_moved_at
-		         FROM messages WHERE topic = $1 ORDER BY created_at DESC`
-		args = append(args, topic)
+		countQuery = `SELECT COUNT(*) FROM messages WHERE topic = $1`
+		selectQuery = `SELECT id, topic, payload, metadata, status, retry_count, max_retries, last_error,
+		                      expires_at, created_at, COALESCE(original_topic, ''), dlq_moved_at
+		               FROM messages WHERE topic = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+		args = []any{topic, limit, offset}
 	} else {
-		query = `SELECT id, topic, payload, metadata, status, retry_count, max_retries, last_error,
-		               expires_at, created_at, COALESCE(original_topic, ''), dlq_moved_at
-		         FROM messages ORDER BY created_at DESC`
+		countQuery = `SELECT COUNT(*) FROM messages`
+		selectQuery = `SELECT id, topic, payload, metadata, status, retry_count, max_retries, last_error,
+		                      expires_at, created_at, COALESCE(original_topic, ''), dlq_moved_at
+		               FROM messages ORDER BY created_at DESC LIMIT $1 OFFSET $2`
+		args = []any{limit, offset}
 	}
 
-	rows, err := s.pool.Query(ctx, query, args...)
+	var total int
+	var countArgs []any
+	if topic != "" {
+		countArgs = []any{topic}
+	}
+	if err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("list count: %w", err)
+	}
+
+	rows, err := s.pool.Query(ctx, selectQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list: %w", err)
+		return nil, 0, fmt.Errorf("list: %w", err)
 	}
 	defer rows.Close()
 
@@ -348,20 +361,21 @@ func (s *Service) List(ctx context.Context, topic string) ([]Message, error) {
 			&msg.ExpiresAt, &msg.CreatedAt,
 			&msg.OriginalTopic, &msg.DLQMovedAt,
 		); err != nil {
-			return nil, fmt.Errorf("list scan: %w", err)
+			return nil, 0, fmt.Errorf("list scan: %w", err)
 		}
 		if lastError != nil {
 			msg.LastError = *lastError
 		}
 		if metaJSON != nil {
 			if err := json.Unmarshal(metaJSON, &msg.Metadata); err != nil {
-				return nil, fmt.Errorf("list unmarshal metadata: %w", err)
+				return nil, 0, fmt.Errorf("list unmarshal metadata: %w", err)
 			}
 		}
 		messages = append(messages, msg)
 	}
 
-	return messages, nil
+	slog.Debug("list messages", "topic", topic, "limit", limit, "offset", offset, "total", total, "returned", len(messages))
+	return messages, total, nil
 }
 
 // StartExpiryReaper launches a background goroutine that periodically marks

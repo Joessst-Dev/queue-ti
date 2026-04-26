@@ -4,7 +4,7 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { QueueService, QueueMessage, EnqueueRequest } from './queue.service';
+import { QueueService, QueueMessage, PagedMessages, EnqueueRequest } from './queue.service';
 
 const makeMessage = (overrides: Partial<QueueMessage> = {}): QueueMessage => ({
   id: 'msg-1',
@@ -39,24 +39,30 @@ describe('QueueService', () => {
   });
 
   describe('listMessages()', () => {
+    const emptyPage: PagedMessages = { items: [], total: 0, limit: 50, offset: 0 };
+
     describe('when called without a topic', () => {
-      it('should make GET /api/messages with no params', () => {
+      it('should make GET /api/messages with limit and offset but no topic param', () => {
         service.listMessages().subscribe();
 
-        const req = httpController.expectOne('/api/messages');
+        const req = httpController.expectOne(
+          (r) => r.url === '/api/messages' && !r.params.has('topic'),
+        );
         expect(req.request.method).toBe('GET');
-        expect(req.request.params.keys()).toHaveLength(0);
-        req.flush([]);
+        expect(req.request.params.get('limit')).toBe('50');
+        expect(req.request.params.get('offset')).toBe('0');
+        req.flush(emptyPage);
       });
 
-      it('should return the list of messages from the server', () => {
+      it('should return the paged response from the server', () => {
         const messages = [makeMessage({ id: 'msg-1' }), makeMessage({ id: 'msg-2' })];
-        let result: QueueMessage[] | undefined;
+        const page: PagedMessages = { items: messages, total: 2, limit: 50, offset: 0 };
+        let result: PagedMessages | undefined;
 
         service.listMessages().subscribe((v) => (result = v));
-        httpController.expectOne('/api/messages').flush(messages);
+        httpController.expectOne((r) => r.url === '/api/messages').flush(page);
 
-        expect(result).toEqual(messages);
+        expect(result).toEqual(page);
       });
     });
 
@@ -68,15 +74,17 @@ describe('QueueService', () => {
           (r) => r.url === '/api/messages' && r.params.get('topic') === 'orders',
         );
         expect(req.request.method).toBe('GET');
-        req.flush([]);
+        req.flush(emptyPage);
       });
 
       it('should not include topic param when topic is an empty string', () => {
         service.listMessages('').subscribe();
 
-        const req = httpController.expectOne('/api/messages');
+        const req = httpController.expectOne(
+          (r) => r.url === '/api/messages' && !r.params.has('topic'),
+        );
         expect(req.request.params.has('topic')).toBe(false);
-        req.flush([]);
+        req.flush(emptyPage);
       });
     });
   });

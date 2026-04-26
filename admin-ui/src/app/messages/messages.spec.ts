@@ -2,7 +2,9 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { Router } from '@angular/router';
+import { By } from '@angular/platform-browser';
 import { of, throwError } from 'rxjs';
+import { CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Messages } from './messages';
 import { AuthService } from '../services/auth.service';
 import { QueueService, QueueMessage } from '../services/queue.service';
@@ -40,7 +42,12 @@ const makeQueueService = (opts: {
     listMessages: vi.fn().mockReturnValue(
       opts.listResult === 'error'
         ? throwError(() => ({ error: { error: 'Failed to load messages' } }))
-        : of(opts.listResult),
+        : of({
+            items: opts.listResult as QueueMessage[],
+            total: (opts.listResult as QueueMessage[]).length,
+            limit: 50,
+            offset: 0,
+          }),
     ),
     enqueueMessage: vi.fn().mockReturnValue(
       opts.enqueueResult === 'error'
@@ -95,6 +102,16 @@ const setup = async (opts: {
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges();
+
+  // JSDOM reports all elements as having zero dimensions. Give the CDK viewport
+  // a non-zero clientHeight so it renders items instead of the empty virtual range.
+  const vpQuery = fixture.debugElement.query(By.directive(CdkVirtualScrollViewport));
+  if (vpQuery) {
+    Object.defineProperty(vpQuery.nativeElement, 'clientHeight', { value: 520, configurable: true });
+    vpQuery.injector.get(CdkVirtualScrollViewport).checkViewportSize();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
 
   return { fixture, authService, queueService, router };
 };

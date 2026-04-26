@@ -127,16 +127,35 @@ type messageResponse struct {
 	DLQMovedAt    *string           `json:"dlq_moved_at,omitempty"`
 }
 
+type listResponse struct {
+	Items  []messageResponse `json:"items"`
+	Total  int               `json:"total"`
+	Limit  int               `json:"limit"`
+	Offset int               `json:"offset"`
+}
+
 func (s *HTTPServer) listMessages(c *fiber.Ctx) error {
 	topic := c.Query("topic")
 
-	messages, err := s.queueService.List(c.Context(), topic)
+	limit := c.QueryInt("limit", 50)
+	if limit < 1 {
+		limit = 1
+	} else if limit > 200 {
+		limit = 200
+	}
+
+	offset := c.QueryInt("offset", 0)
+	if offset < 0 {
+		offset = 0
+	}
+
+	messages, total, err := s.queueService.List(c.Context(), topic, limit, offset)
 	if err != nil {
 		slog.Error("list messages failed", "topic", topic, "error", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	resp := make([]messageResponse, 0, len(messages))
+	items := make([]messageResponse, 0, len(messages))
 	for _, m := range messages {
 		r := messageResponse{
 			ID:            m.ID,
@@ -158,10 +177,15 @@ func (s *HTTPServer) listMessages(c *fiber.Ctx) error {
 			formatted := m.DLQMovedAt.Format("2006-01-02T15:04:05Z07:00")
 			r.DLQMovedAt = &formatted
 		}
-		resp = append(resp, r)
+		items = append(items, r)
 	}
 
-	return c.JSON(resp)
+	return c.JSON(listResponse{
+		Items:  items,
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	})
 }
 
 func (s *HTTPServer) enqueueMessage(c *fiber.Ctx) error {

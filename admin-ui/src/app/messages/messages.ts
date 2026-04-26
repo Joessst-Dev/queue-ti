@@ -4,18 +4,14 @@ import { FormField, form, schema, required } from '@angular/forms/signals';
 import { SlicePipe, DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { Subject, switchMap, map, catchError, of, startWith, tap } from 'rxjs';
+import { CdkVirtualScrollViewport, CdkVirtualForOf, CdkFixedSizeVirtualScroll } from '@angular/cdk/scrolling';
 import { AuthService } from '../services/auth.service';
 import {
   QueueService,
   QueueMessage,
   EnqueueRequest,
+  PAGE_SIZE,
 } from '../services/queue.service';
-
-interface MessagesState {
-  messages: QueueMessage[];
-  loading: boolean;
-  error: string;
-}
 
 interface EnqueueState {
   id: string;
@@ -35,7 +31,7 @@ interface MetadataRowModel {
 
 @Component({
   selector: 'app-messages',
-  imports: [FormField, SlicePipe, DatePipe],
+  imports: [FormField, SlicePipe, DatePipe, CdkVirtualScrollViewport, CdkVirtualForOf, CdkFixedSizeVirtualScroll],
   template: `
     <div class="min-h-screen bg-gray-50">
       <!-- Header -->
@@ -144,7 +140,19 @@ interface MetadataRowModel {
           }
 
           <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
+            <!-- Fixed header table -->
+            <table class="min-w-full" style="table-layout: fixed;">
+              <colgroup>
+                <col style="width: 140px;" />
+                <col style="width: 140px;" />
+                <col style="width: 200px;" />
+                <col style="width: 100px;" />
+                <col style="width: 90px;" />
+                <col style="width: 120px;" />
+                <col style="width: 180px;" />
+                <col style="width: 120px;" />
+                <col style="width: 140px;" />
+              </colgroup>
               <thead class="bg-gray-50">
                 <tr>
                   <th
@@ -194,9 +202,23 @@ interface MetadataRowModel {
                   </th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-gray-200">
-                @for (msg of messages(); track msg.id) {
-                  <tr [class]="rowClasses(msg)">
+            </table>
+            <!-- Virtual scroll body -->
+            <cdk-virtual-scroll-viewport itemSize="73" class="overflow-x-hidden" style="height: 520px;">
+              <table class="min-w-full divide-y divide-gray-200" style="table-layout: fixed;">
+                <colgroup>
+                  <col style="width: 140px;" />
+                  <col style="width: 140px;" />
+                  <col style="width: 200px;" />
+                  <col style="width: 100px;" />
+                  <col style="width: 90px;" />
+                  <col style="width: 120px;" />
+                  <col style="width: 180px;" />
+                  <col style="width: 120px;" />
+                  <col style="width: 140px;" />
+                </colgroup>
+                <tbody class="divide-y divide-gray-200">
+                  <tr *cdkVirtualFor="let msg of allMessages(); trackBy: trackByMsgId" [class]="rowClasses(msg)">
                     <td class="px-6 py-4 text-sm font-mono text-gray-600">
                       <div class="flex items-center gap-1">
                         <span [title]="msg.id"
@@ -318,22 +340,29 @@ interface MetadataRowModel {
                       }
                     </td>
                   </tr>
-                } @empty {
-                  <tr>
-                    <td
-                      colspan="9"
-                      class="px-6 py-12 text-center text-sm text-gray-500"
-                    >
-                      @if (loadingMessages()) {
-                        Loading messages...
-                      } @else {
+                  @if (allMessages().length === 0 && !loadingMessages()) {
+                    <tr>
+                      <td
+                        colspan="9"
+                        class="px-6 py-12 text-center text-sm text-gray-500"
+                      >
                         No messages found
-                      }
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
+                      </td>
+                    </tr>
+                  }
+                  @if (allMessages().length === 0 && loadingMessages()) {
+                    <tr>
+                      <td
+                        colspan="9"
+                        class="px-6 py-12 text-center text-sm text-gray-500"
+                      >
+                        Loading messages...
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </cdk-virtual-scroll-viewport>
           </div>
         </section>
 
@@ -528,39 +557,17 @@ export class Messages {
   nackError = signal('');
   copiedId = signal<string | null>(null);
 
-  private refreshTrigger$ = new Subject<string | undefined>();
   private requeueTrigger$ = new Subject<string>();
   private nackTrigger$ = new Subject<{ id: string; error: string }>();
 
-  private messagesState = toSignal(
-    this.refreshTrigger$.pipe(
-      switchMap((topic) =>
-        this.queue.listMessages(topic).pipe(
-          map(
-            (msgs) =>
-              ({ messages: msgs, loading: false, error: '' }) as MessagesState,
-          ),
-          catchError((err) =>
-            of({
-              messages: [],
-              loading: false,
-              error: err.error?.error || 'Failed to load messages',
-            } as MessagesState),
-          ),
-          startWith({
-            messages: [],
-            loading: true,
-            error: '',
-          } as MessagesState),
-        ),
-      ),
-    ),
-    { initialValue: { messages: [], loading: false, error: '' } },
-  );
+  allMessages = signal<QueueMessage[]>([]);
+  messagesTotal = signal(0);
+  loadingMessages = signal(false);
+  messagesError = signal('');
 
-  messages = computed(() => this.messagesState().messages);
-  messagesError = computed(() => this.messagesState().error);
-  loadingMessages = computed(() => this.messagesState().loading);
+  private readonly PAGE_SIZE = PAGE_SIZE;
+  private currentOffset = 0;
+  private currentTopic: string | undefined;
 
   private enqueueModel = signal<EnqueueModel>({ topic: '', payload: '' });
 
@@ -653,6 +660,10 @@ export class Messages {
 
   objectKeys = Object.keys;
 
+  trackByMsgId(_: number, msg: QueueMessage): string {
+    return msg.id;
+  }
+
   constructor() {
     this.loadMessages();
   }
@@ -688,9 +699,38 @@ export class Messages {
     this.nackTrigger$.next({ id, error: this.nackError() });
   }
 
-  loadMessages() {
-    const filter = this.filterForm().value();
-    this.refreshTrigger$.next(filter || undefined);
+  loadMessages(reset = true): void {
+    const topic = this.filterForm().value() || undefined;
+    if (reset) {
+      this.currentOffset = 0;
+      this.currentTopic = topic;
+      this.allMessages.set([]);
+      this.messagesTotal.set(0);
+    }
+    if (this.loadingMessages()) return;
+    this.loadingMessages.set(true);
+    this.messagesError.set('');
+
+    this.queue.listMessages(this.currentTopic, this.currentOffset).subscribe({
+      next: (page) => {
+        this.allMessages.update((msgs) => [...msgs, ...page.items]);
+        this.messagesTotal.set(page.total);
+        this.currentOffset += page.items.length;
+        this.loadingMessages.set(false);
+      },
+      error: (err: { error?: { error?: string } }) => {
+        this.messagesError.set(err.error?.error ?? 'Failed to load messages');
+        this.loadingMessages.set(false);
+      },
+    });
+  }
+
+  onScrollIndexChange(index: number): void {
+    const loaded = this.allMessages().length;
+    const total = this.messagesTotal();
+    if (loaded > 0 && index >= loaded - 15 && loaded < total) {
+      this.loadMessages(false);
+    }
   }
 
   onEnqueue(event: Event) {

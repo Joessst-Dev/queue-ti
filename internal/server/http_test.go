@@ -30,6 +30,13 @@ var (
 	pgContainer  *tcpostgres.PostgresContainer
 )
 
+type listResult struct {
+	Items  []map[string]any `json:"items"`
+	Total  int              `json:"total"`
+	Limit  int              `json:"limit"`
+	Offset int              `json:"offset"`
+}
+
 var _ = BeforeSuite(func() {
 	httpTestCtx = context.Background()
 
@@ -257,18 +264,19 @@ var _ = Describe("HTTP Server", func() {
 		})
 
 		Context("Given no messages exist", func() {
-			It("should return an empty array", func() {
+			It("should return an empty items array with zero total", func() {
 				// When we call the list endpoint on an empty queue
 				req := httptest.NewRequest("GET", "/api/messages", nil)
 				resp, err := httpServer.App.Test(req)
 
-				// Then an empty JSON array is returned
+				// Then an empty items array is returned with total 0
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 
-				var messages []map[string]any
-				Expect(json.NewDecoder(resp.Body).Decode(&messages)).To(Succeed())
-				Expect(messages).To(BeEmpty())
+				var result listResult
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result.Items).To(BeEmpty())
+				Expect(result.Total).To(Equal(0))
 			})
 		})
 
@@ -290,9 +298,9 @@ var _ = Describe("HTTP Server", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 
-				var messages []map[string]any
-				Expect(json.NewDecoder(resp.Body).Decode(&messages)).To(Succeed())
-				Expect(messages).To(HaveLen(2))
+				var result listResult
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result.Items).To(HaveLen(2))
 			})
 
 			It("should return only messages matching the topic query parameter", func() {
@@ -304,11 +312,11 @@ var _ = Describe("HTTP Server", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 
-				var messages []map[string]any
-				Expect(json.NewDecoder(resp.Body).Decode(&messages)).To(Succeed())
-				Expect(messages).To(HaveLen(1))
-				Expect(messages[0]["topic"]).To(Equal("topic-alpha"))
-				Expect(messages[0]["payload"]).To(Equal("msg-alpha"))
+				var result listResult
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result.Items).To(HaveLen(1))
+				Expect(result.Items[0]["topic"]).To(Equal("topic-alpha"))
+				Expect(result.Items[0]["payload"]).To(Equal("msg-alpha"))
 			})
 		})
 
@@ -326,11 +334,11 @@ var _ = Describe("HTTP Server", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 
-				var messages []map[string]any
-				Expect(json.NewDecoder(resp.Body).Decode(&messages)).To(Succeed())
-				Expect(messages).To(HaveLen(1))
+				var result listResult
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result.Items).To(HaveLen(1))
 
-				msg := messages[0]
+				msg := result.Items[0]
 				Expect(msg["id"]).To(Equal(id))
 				Expect(msg["topic"]).To(Equal("topic-fields"))
 				Expect(msg["payload"]).To(Equal("hello"))
@@ -362,9 +370,9 @@ var _ = Describe("HTTP Server", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 
-				var messages []map[string]any
-				Expect(json.NewDecoder(resp.Body).Decode(&messages)).To(Succeed())
-				Expect(messages).To(HaveLen(1))
+				var result listResult
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result.Items).To(HaveLen(1))
 			})
 		})
 	})
@@ -456,10 +464,10 @@ var _ = Describe("HTTP Server", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(listResp.StatusCode).To(Equal(200))
 
-				var messages []map[string]any
-				Expect(json.NewDecoder(listResp.Body).Decode(&messages)).To(Succeed())
-				Expect(messages).To(HaveLen(1))
-				Expect(messages[0]["payload"]).To(Equal("check me"))
+				var result listResult
+				Expect(json.NewDecoder(listResp.Body).Decode(&result)).To(Succeed())
+				Expect(result.Items).To(HaveLen(1))
+				Expect(result.Items[0]["payload"]).To(Equal("check me"))
 			})
 
 			It("should persist metadata when metadata is provided", func() {
@@ -478,12 +486,12 @@ var _ = Describe("HTTP Server", func() {
 				listResp, err := httpServer.App.Test(listReq)
 				Expect(err).NotTo(HaveOccurred())
 
-				var messages []map[string]any
-				Expect(json.NewDecoder(listResp.Body).Decode(&messages)).To(Succeed())
-				Expect(messages).To(HaveLen(1))
+				var result listResult
+				Expect(json.NewDecoder(listResp.Body).Decode(&result)).To(Succeed())
+				Expect(result.Items).To(HaveLen(1))
 
 				// Then the metadata fields are preserved
-				metadata, ok := messages[0]["metadata"].(map[string]any)
+				metadata, ok := result.Items[0]["metadata"].(map[string]any)
 				Expect(ok).To(BeTrue())
 				Expect(metadata["env"]).To(Equal("test"))
 				Expect(metadata["version"]).To(Equal("1"))
@@ -587,6 +595,109 @@ var _ = Describe("HTTP Server", func() {
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(404))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
+	// GET /api/messages pagination
+	// ---------------------------------------------------------------------------
+
+	Describe("GET /api/messages pagination", func() {
+		var httpServer *server.HTTPServer
+		const paginationTopic = "pagination-topic"
+
+		BeforeEach(func() {
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false})
+
+			// Given 5 messages are enqueued on the same topic
+			for i := 0; i < 5; i++ {
+				payload := fmt.Sprintf("msg-%d", i)
+				_, err := queueService.Enqueue(httpTestCtx, paginationTopic, []byte(payload), nil)
+				Expect(err).NotTo(HaveOccurred())
+			}
+		})
+
+		Context("When limit=2 and offset=0 are requested", func() {
+			It("should return the first 2 items with total=5", func() {
+				req := httptest.NewRequest("GET", "/api/messages?topic="+paginationTopic+"&limit=2&offset=0", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var result listResult
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result.Items).To(HaveLen(2))
+				Expect(result.Total).To(Equal(5))
+				Expect(result.Limit).To(Equal(2))
+				Expect(result.Offset).To(Equal(0))
+			})
+		})
+
+		Context("When limit=2 and offset=2 are requested", func() {
+			It("should return items 3 and 4 with total=5", func() {
+				req := httptest.NewRequest("GET", "/api/messages?topic="+paginationTopic+"&limit=2&offset=2", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var result listResult
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result.Items).To(HaveLen(2))
+				Expect(result.Total).To(Equal(5))
+			})
+		})
+
+		Context("When limit=2 and offset=4 are requested (last page)", func() {
+			It("should return only the remaining 1 item with total=5", func() {
+				req := httptest.NewRequest("GET", "/api/messages?topic="+paginationTopic+"&limit=2&offset=4", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var result listResult
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result.Items).To(HaveLen(1))
+				Expect(result.Total).To(Equal(5))
+			})
+		})
+
+		Context("When limit=2 and offset=5 are requested (past the end)", func() {
+			It("should return an empty items array with total=5", func() {
+				req := httptest.NewRequest("GET", "/api/messages?topic="+paginationTopic+"&limit=2&offset=5", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var result listResult
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result.Items).To(BeEmpty())
+				Expect(result.Total).To(Equal(5))
+			})
+		})
+
+		Context("When a topic filter is applied alongside pagination", func() {
+			BeforeEach(func() {
+				// Enqueue an extra message on a different topic to confirm the count is scoped
+				_, err := queueService.Enqueue(httpTestCtx, "other-topic", []byte("noise"), nil)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should report a total that matches only the filtered topic count", func() {
+				req := httptest.NewRequest("GET", "/api/messages?topic="+paginationTopic+"&limit=10&offset=0", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var result listResult
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result.Total).To(Equal(5))
+				Expect(result.Items).To(HaveLen(5))
 			})
 		})
 	})

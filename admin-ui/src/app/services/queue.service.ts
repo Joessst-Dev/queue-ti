@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
 
 export interface QueueMessage {
   id: string;
@@ -22,16 +23,25 @@ export interface EnqueueRequest {
   metadata: Record<string, string>;
 }
 
+export interface PagedMessages {
+  items: QueueMessage[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export const PAGE_SIZE = 50;
+
 @Injectable({ providedIn: 'root' })
 export class QueueService {
   private http = inject(HttpClient);
 
-  listMessages(topic?: string) {
-    const params: Record<string, string> = {};
+  listMessages(topic?: string, offset = 0): Observable<PagedMessages> {
+    const params: Record<string, string | number> = { limit: PAGE_SIZE, offset };
     if (topic) {
       params['topic'] = topic;
     }
-    return this.http.get<QueueMessage[]>('/api/messages', { params });
+    return this.http.get<PagedMessages>('/api/messages', { params });
   }
 
   enqueueMessage(req: EnqueueRequest) {
