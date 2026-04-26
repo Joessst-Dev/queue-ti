@@ -35,7 +35,7 @@ var _ = Describe("gRPC Server", func() {
 		_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM messages")
 		Expect(err).NotTo(HaveOccurred())
 
-		queueService := queue.NewService(httpTestPool, 30*time.Second, 3, 0)
+		queueService := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3)
 		grpcServer := server.NewGRPCServer(queueService)
 
 		lis := bufconn.Listen(1024 * 1024)

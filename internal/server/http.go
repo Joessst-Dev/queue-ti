@@ -43,6 +43,7 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig) *HTTPServer {
 	api.Get("/messages", s.withAuth(), s.listMessages)
 	api.Post("/messages", s.withAuth(), s.enqueueMessage)
 	api.Post("/messages/:id/nack", s.withAuth(), s.nackMessage)
+	api.Post("/messages/:id/requeue", s.withAuth(), s.requeueMessage)
 
 	s.App = app
 	return s
@@ -93,16 +94,18 @@ type nackRequest struct {
 }
 
 type messageResponse struct {
-	ID         string            `json:"id"`
-	Topic      string            `json:"topic"`
-	Payload    string            `json:"payload"`
-	Metadata   map[string]string `json:"metadata"`
-	Status     string            `json:"status"`
-	RetryCount int               `json:"retry_count"`
-	MaxRetries int               `json:"max_retries"`
-	LastError  string            `json:"last_error,omitempty"`
-	ExpiresAt  *string           `json:"expires_at,omitempty"`
-	CreatedAt  string            `json:"created_at"`
+	ID            string            `json:"id"`
+	Topic         string            `json:"topic"`
+	Payload       string            `json:"payload"`
+	Metadata      map[string]string `json:"metadata"`
+	Status        string            `json:"status"`
+	RetryCount    int               `json:"retry_count"`
+	MaxRetries    int               `json:"max_retries"`
+	LastError     string            `json:"last_error,omitempty"`
+	ExpiresAt     *string           `json:"expires_at,omitempty"`
+	CreatedAt     string            `json:"created_at"`
+	OriginalTopic string            `json:"original_topic,omitempty"`
+	DLQMovedAt    *string           `json:"dlq_moved_at,omitempty"`
 }
 
 func (s *HTTPServer) listMessages(c *fiber.Ctx) error {
@@ -116,19 +119,24 @@ func (s *HTTPServer) listMessages(c *fiber.Ctx) error {
 	resp := make([]messageResponse, 0, len(messages))
 	for _, m := range messages {
 		r := messageResponse{
-			ID:         m.ID,
-			Topic:      m.Topic,
-			Payload:    string(m.Payload),
-			Metadata:   m.Metadata,
-			Status:     m.Status,
-			RetryCount: m.RetryCount,
-			MaxRetries: m.MaxRetries,
-			LastError:  m.LastError,
-			CreatedAt:  m.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ID:            m.ID,
+			Topic:         m.Topic,
+			Payload:       string(m.Payload),
+			Metadata:      m.Metadata,
+			Status:        m.Status,
+			RetryCount:    m.RetryCount,
+			MaxRetries:    m.MaxRetries,
+			LastError:     m.LastError,
+			CreatedAt:     m.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			OriginalTopic: m.OriginalTopic,
 		}
 		if m.ExpiresAt != nil {
 			formatted := m.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")
 			r.ExpiresAt = &formatted
+		}
+		if m.DLQMovedAt != nil {
+			formatted := m.DLQMovedAt.Format("2006-01-02T15:04:05Z07:00")
+			r.DLQMovedAt = &formatted
 		}
 		resp = append(resp, r)
 	}
@@ -163,6 +171,19 @@ func (s *HTTPServer) nackMessage(c *fiber.Ctx) error {
 
 	if err := s.queueService.Nack(c.Context(), id, req.Error); err != nil {
 		if errors.Is(err, queue.ErrNotFound) || errors.Is(err, queue.ErrNotProcessing) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (s *HTTPServer) requeueMessage(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	if err := s.queueService.Requeue(c.Context(), id); err != nil {
+		if errors.Is(err, queue.ErrNotFound) || errors.Is(err, queue.ErrNotDLQ) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})

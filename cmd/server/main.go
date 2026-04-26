@@ -39,7 +39,12 @@ func main() {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	queueService := queue.NewService(pool, cfg.Queue.VisibilityTimeout, cfg.Queue.MaxRetries, cfg.Queue.MessageTTL)
+	if cfg.Queue.DLQThreshold > cfg.Queue.MaxRetries {
+		log.Printf("WARNING: queue.dlq_threshold (%d) is greater than queue.max_retries (%d); messages will be DLQ-promoted before exhausting all retries",
+			cfg.Queue.DLQThreshold, cfg.Queue.MaxRetries)
+	}
+
+	queueService := queue.NewService(pool, cfg.Queue.VisibilityTimeout, cfg.Queue.MaxRetries, cfg.Queue.MessageTTL, cfg.Queue.DLQThreshold)
 	queueService.StartExpiryReaper(ctx, time.Minute)
 
 	var opts []grpc.ServerOption
