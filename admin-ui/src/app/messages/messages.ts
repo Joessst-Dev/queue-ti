@@ -1,4 +1,4 @@
-import { Component, inject, computed, signal } from '@angular/core';
+import { Component, inject, computed, signal, afterEveryRender, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormField, form, schema, required } from '@angular/forms/signals';
 import { SlicePipe, DatePipe } from '@angular/common';
@@ -140,57 +140,89 @@ interface MetadataRowModel {
           }
 
           <div class="overflow-x-auto">
-            <cdk-virtual-scroll-viewport [itemSize]="73" style="height: 520px;">
-              <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50 sticky top-0 z-10">
-                  <tr>
-                    <th
-                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                    >
-                      ID
-                    </th>
-                    <th
-                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                    >
-                      Topic
-                    </th>
-                    <th
-                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                    >
-                      Payload
-                    </th>
-                    <th
-                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                    >
-                      Status
-                    </th>
-                    <th
-                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                    >
-                      Retries
-                    </th>
-                    <th
-                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                    >
-                      Expires
-                    </th>
-                    <th
-                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                    >
-                      Metadata
-                    </th>
-                    <th
-                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                    >
-                      Created
-                    </th>
-                    <th
-                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                    >
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
+            <!-- Header table — lives outside the viewport so it never gets translated away -->
+            <table
+              class="w-full table-fixed border-b border-gray-200"
+              [style.width]="'calc(100% - ' + scrollbarWidth() + 'px)'"
+            >
+              <colgroup>
+                <col style="width: 10%">
+                <col style="width: 13%">
+                <col style="width: 20%">
+                <col style="width: 9%">
+                <col style="width: 8%">
+                <col style="width: 10%">
+                <col style="width: 13%">
+                <col style="width: 10%">
+                <col style="width: 7%">
+              </colgroup>
+              <thead class="bg-gray-50">
+                <tr>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                  >
+                    ID
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                  >
+                    Topic
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                  >
+                    Payload
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                  >
+                    Status
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                  >
+                    Retries
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                  >
+                    Expires
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                  >
+                    Metadata
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                  >
+                    Created
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                  >
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+            </table>
+            <cdk-virtual-scroll-viewport
+              [itemSize]="73"
+              style="height: 520px;"
+              (scrolledIndexChange)="onScrollIndexChange($event)"
+            >
+              <table class="w-full table-fixed">
+                <colgroup>
+                  <col style="width: 10%">
+                  <col style="width: 13%">
+                  <col style="width: 20%">
+                  <col style="width: 9%">
+                  <col style="width: 8%">
+                  <col style="width: 10%">
+                  <col style="width: 13%">
+                  <col style="width: 10%">
+                  <col style="width: 7%">
+                </colgroup>
                 <tbody class="divide-y divide-gray-200">
                   <tr *cdkVirtualFor="let msg of allMessages(); trackBy: trackByMsgId" [class]="rowClasses(msg)">
                     <td class="px-6 py-4 text-sm font-mono text-gray-600">
@@ -525,6 +557,9 @@ export class Messages {
   private queue = inject(QueueService);
   private router = inject(Router);
 
+  private readonly viewport = viewChild(CdkVirtualScrollViewport);
+  scrollbarWidth = signal(0);
+
   ackEnabled = signal(false);
 
   nackOpenId = signal<string | null>(null);
@@ -640,6 +675,10 @@ export class Messages {
 
   constructor() {
     this.loadMessages();
+    afterEveryRender(() => {
+      const el = this.viewport()?.elementRef.nativeElement;
+      if (el) this.scrollbarWidth.set(el.offsetWidth - el.clientWidth);
+    });
   }
 
   statusClasses(status: string): string {
