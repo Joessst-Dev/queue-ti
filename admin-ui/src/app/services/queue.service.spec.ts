@@ -13,6 +13,12 @@ const makeMessage = (overrides: Partial<QueueMessage> = {}): QueueMessage => ({
   metadata: {},
   status: 'pending',
   created_at: '2024-01-01T00:00:00Z',
+  retry_count: 0,
+  max_retries: 3,
+  last_error: '',
+  expires_at: null,
+  original_topic: null,
+  dlq_moved_at: null,
   ...overrides,
 });
 
@@ -97,6 +103,43 @@ describe('QueueService', () => {
       httpController.expectOne('/api/messages').flush({ id: 'new-msg-id' });
 
       expect(result).toEqual({ id: 'new-msg-id' });
+    });
+  });
+
+  describe('nackMessage()', () => {
+    describe('when called with an id and an error string', () => {
+      it('should make POST /api/messages/:id/nack with the error body', () => {
+        service.nackMessage('msg-42', 'something went wrong').subscribe();
+
+        const req = httpController.expectOne('/api/messages/msg-42/nack');
+        expect(req.request.method).toBe('POST');
+        expect(req.request.body).toEqual({ error: 'something went wrong' });
+        req.flush(null);
+      });
+    });
+
+    describe('when called without an error string', () => {
+      it('should send an empty error string in the body', () => {
+        service.nackMessage('msg-99').subscribe();
+
+        const req = httpController.expectOne('/api/messages/msg-99/nack');
+        expect(req.request.method).toBe('POST');
+        expect(req.request.body).toEqual({ error: '' });
+        req.flush(null);
+      });
+    });
+  });
+
+  describe('requeueMessage()', () => {
+    describe('when called with an id', () => {
+      it('should make POST /api/messages/:id/requeue with an empty body', () => {
+        service.requeueMessage('msg-dlq-1').subscribe();
+
+        const req = httpController.expectOne('/api/messages/msg-dlq-1/requeue');
+        expect(req.request.method).toBe('POST');
+        expect(req.request.body).toEqual({});
+        req.flush(null);
+      });
     });
   });
 });

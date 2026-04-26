@@ -8,6 +8,12 @@ export interface QueueMessage {
   metadata: Record<string, string>;
   status: string;
   created_at: string;
+  retry_count: number;
+  max_retries: number;
+  last_error: string;
+  expires_at: string | null;
+  original_topic: string | null;
+  dlq_moved_at: string | null;
 }
 
 export interface EnqueueRequest {
@@ -30,5 +36,13 @@ export class QueueService {
 
   enqueueMessage(req: EnqueueRequest) {
     return this.http.post<{ id: string }>('/api/messages', req);
+  }
+
+  nackMessage(id: string, error?: string) {
+    return this.http.post<void>(`/api/messages/${id}/nack`, { error: error ?? '' });
+  }
+
+  requeueMessage(id: string) {
+    return this.http.post<void>(`/api/messages/${id}/requeue`, {});
   }
 }

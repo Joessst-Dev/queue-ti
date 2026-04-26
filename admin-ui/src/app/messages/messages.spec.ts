@@ -14,6 +14,12 @@ const makeMessage = (overrides: Partial<QueueMessage> = {}): QueueMessage => ({
   metadata: {},
   status: 'pending',
   created_at: '2024-01-15T10:30:00Z',
+  retry_count: 0,
+  max_retries: 3,
+  last_error: '',
+  expires_at: null,
+  original_topic: null,
+  dlq_moved_at: null,
   ...overrides,
 });
 
@@ -27,6 +33,8 @@ const makeAuthService = (authenticated = false) =>
 const makeQueueService = (opts: {
   listResult: QueueMessage[] | 'error';
   enqueueResult: { id: string } | 'error';
+  nackResult?: 'error';
+  requeueResult?: 'error';
 }) =>
   ({
     listMessages: vi.fn().mockReturnValue(
@@ -38,6 +46,16 @@ const makeQueueService = (opts: {
       opts.enqueueResult === 'error'
         ? throwError(() => ({ error: { error: 'Failed to enqueue message' } }))
         : of(opts.enqueueResult),
+    ),
+    nackMessage: vi.fn().mockReturnValue(
+      opts.nackResult === 'error'
+        ? throwError(() => ({ error: { error: 'Failed to nack' } }))
+        : of(undefined),
+    ),
+    requeueMessage: vi.fn().mockReturnValue(
+      opts.requeueResult === 'error'
+        ? throwError(() => ({ error: { error: 'Failed to requeue' } }))
+        : of(undefined),
     ),
   }) as unknown as QueueService;
 
@@ -133,10 +151,21 @@ describe('Messages', () => {
       });
     });
 
+    describe('when status is "failed"', () => {
+      it('should return a string containing bg-red-100', () => {
+        expect(component.statusClasses('failed')).toContain('bg-red-100');
+      });
+    });
+
+    describe('when status is "expired"', () => {
+      it('should return a string containing bg-orange-100', () => {
+        expect(component.statusClasses('expired')).toContain('bg-orange-100');
+      });
+    });
+
     describe('when status is an unknown value', () => {
       it('should return a string containing bg-gray-100', () => {
         expect(component.statusClasses('completed')).toContain('bg-gray-100');
-        expect(component.statusClasses('failed')).toContain('bg-gray-100');
         expect(component.statusClasses('other')).toContain('bg-gray-100');
       });
     });
@@ -225,6 +254,47 @@ describe('Messages', () => {
       fixture.detectChanges();
 
       expect(el.textContent).toContain('Failed to enqueue message');
+    });
+  });
+
+  describe('when a DLQ message is displayed (topic ends with .dlq)', () => {
+    it('should show a Requeue button for the DLQ message', async () => {
+      const dlqMsg = makeMessage({ topic: 'orders.dlq', status: 'failed', original_topic: 'orders' });
+      const { fixture } = await setup({ messages: [dlqMsg] });
+
+      const el: HTMLElement = fixture.nativeElement;
+      const requeueButton = Array.from(el.querySelectorAll('button')).find((b) =>
+        b.textContent?.trim().includes('Requeue'),
+      );
+      expect(requeueButton).not.toBeUndefined();
+    });
+
+    it('should NOT show a Requeue button for a regular message', async () => {
+      const regularMsg = makeMessage({ topic: 'orders', status: 'pending' });
+      const { fixture } = await setup({ messages: [regularMsg] });
+
+      const el: HTMLElement = fixture.nativeElement;
+      const requeueButton = Array.from(el.querySelectorAll('button')).find((b) =>
+        b.textContent?.trim().includes('Requeue'),
+      );
+      expect(requeueButton).toBeUndefined();
+    });
+
+    it('should call queue.requeueMessage and refresh when Requeue is clicked', async () => {
+      const dlqMsg = makeMessage({ topic: 'orders.dlq', status: 'failed', original_topic: 'orders' });
+      const { fixture, queueService } = await setup({ messages: [dlqMsg] });
+
+      const el: HTMLElement = fixture.nativeElement;
+      const requeueButton = Array.from(el.querySelectorAll('button')).find((b) =>
+        b.textContent?.trim().includes('Requeue'),
+      ) as HTMLButtonElement;
+
+      requeueButton.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(queueService.requeueMessage).toHaveBeenCalledWith(dlqMsg.id);
+      expect(queueService.listMessages).toHaveBeenCalledTimes(2);
     });
   });
 });
