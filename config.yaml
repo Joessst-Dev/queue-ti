@@ -17,4 +17,5 @@ auth:
   enabled: false
   username: admin
   password: secret
+  jwt_secret: dev-only-secret-change-for-production
 

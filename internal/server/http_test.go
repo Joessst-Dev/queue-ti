@@ -23,6 +23,7 @@ import (
 	"github.com/Joessst-Dev/queue-ti/internal/metrics"
 	"github.com/Joessst-Dev/queue-ti/internal/queue"
 	"github.com/Joessst-Dev/queue-ti/internal/server"
+	"github.com/Joessst-Dev/queue-ti/internal/users"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -76,14 +77,25 @@ var _ = AfterSuite(func() {
 	}
 })
 
+// testJWTSecret is a fixed secret used across all JWT-related HTTP tests.
+const testJWTSecret = "http-test-jwt-secret"
+
 var _ = Describe("HTTP Server", func() {
-	var queueService *queue.Service
+	var (
+		queueService *queue.Service
+		userStore    *users.Store
+	)
 
 	BeforeEach(func() {
-		_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM messages")
+		_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM user_grants")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = httpTestPool.Exec(httpTestCtx, "DELETE FROM users")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = httpTestPool.Exec(httpTestCtx, "DELETE FROM messages")
 		Expect(err).NotTo(HaveOccurred())
 
 		queueService = queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
+		userStore = users.NewStore(httpTestPool)
 	})
 
 	// ---------------------------------------------------------------------------
@@ -94,7 +106,7 @@ var _ = Describe("HTTP Server", func() {
 		Context("Given the server is running", func() {
 			It("should return HTTP 200", func() {
 				// Given the HTTP server with auth disabled
-				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 
 				// When we call the health endpoint
 				req := httptest.NewRequest("GET", "/healthz", nil)
@@ -115,7 +127,7 @@ var _ = Describe("HTTP Server", func() {
 		Context("Given auth is disabled", func() {
 			It("should return auth_required: false", func() {
 				// Given the HTTP server with auth disabled
-				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 
 				// When we call the auth status endpoint
 				req := httptest.NewRequest("GET", "/api/auth/status", nil)
@@ -135,10 +147,9 @@ var _ = Describe("HTTP Server", func() {
 			It("should return auth_required: true", func() {
 				// Given the HTTP server with auth enabled
 				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{
-					Enabled:  true,
-					Username: "admin",
-					Password: "secret",
-				}, prometheus.NewRegistry())
+					Enabled:   true,
+					JWTSecret: testJWTSecret,
+				}, prometheus.NewRegistry(), userStore)
 
 				// When we call the auth status endpoint
 				req := httptest.NewRequest("GET", "/api/auth/status", nil)
@@ -156,25 +167,23 @@ var _ = Describe("HTTP Server", func() {
 	})
 
 	// ---------------------------------------------------------------------------
-	// withAuth middleware
+	// JWT middleware (replaces old Basic-auth withAuth tests)
 	// ---------------------------------------------------------------------------
 
-	Describe("withAuth middleware", func() {
+	Describe("JWT middleware", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			// Given the HTTP server with auth enabled
 			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{
-				Enabled:  true,
-				Username: "admin",
-				Password: "secret",
-			}, prometheus.NewRegistry())
+				Enabled:   true,
+				JWTSecret: testJWTSecret,
+			}, prometheus.NewRegistry(), userStore)
 		})
 
 		Context("Given auth is disabled", func() {
 			It("should pass the request through without an Authorization header", func() {
 				// Given the HTTP server with auth disabled
-				noAuthServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+				noAuthServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 
 				// When we call a protected endpoint without credentials
 				req := httptest.NewRequest("GET", "/api/messages", nil)
@@ -199,11 +208,11 @@ var _ = Describe("HTTP Server", func() {
 			})
 		})
 
-		Context("Given the Authorization header uses a non-Basic scheme", func() {
+		Context("Given the Authorization header uses a non-Bearer scheme", func() {
 			It("should return 401 with an unsupported scheme error", func() {
-				// When we send a Bearer token instead of Basic credentials
+				// When we send a Basic header instead of Bearer
 				req := httptest.NewRequest("GET", "/api/messages", nil)
-				req.Header.Set("Authorization", "Bearer sometoken")
+				req.Header.Set("Authorization", basicAuthHeader("admin", "secret"))
 				resp, err := httpServer.App.Test(req)
 
 				// Then a 401 with the unsupported scheme error is returned
@@ -213,44 +222,281 @@ var _ = Describe("HTTP Server", func() {
 			})
 		})
 
-		Context("Given the Basic Authorization header contains malformed base64", func() {
-			It("should return 401 with an invalid format error", func() {
-				// When we send a corrupt base64 credential
+		Context("Given the Bearer token is invalid", func() {
+			It("should return 401 with an invalid token error", func() {
+				// When we send a garbage Bearer token
 				req := httptest.NewRequest("GET", "/api/messages", nil)
-				req.Header.Set("Authorization", "Basic not!valid!base64!!!")
+				req.Header.Set("Authorization", "Bearer not.a.real.token")
 				resp, err := httpServer.App.Test(req)
 
-				// Then a 401 with the invalid format error is returned
+				// Then a 401 with the invalid token error is returned
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(401))
-				Expect(decodeErrorBody(resp.Body)).To(Equal("invalid authorization format"))
+				Expect(decodeErrorBody(resp.Body)).To(Equal("invalid or expired token"))
 			})
 		})
 
-		Context("Given the credentials are incorrect", func() {
-			It("should return 401 with an invalid credentials error", func() {
-				// When we send valid base64 but wrong username/password
+		Context("Given a valid Bearer token is provided", func() {
+			It("should pass the request through to the handler", func() {
+				// Seed an admin user and get a valid token.
+				admin, err := userStore.Create(httpTestCtx, "admin", "secret", true)
+				Expect(err).NotTo(HaveOccurred())
+
+				token, err := users.IssueToken([]byte(testJWTSecret), admin.ID, admin.Username, admin.IsAdmin)
+				Expect(err).NotTo(HaveOccurred())
+
+				// When we send the valid Bearer token
 				req := httptest.NewRequest("GET", "/api/messages", nil)
-				req.Header.Set("Authorization", basicAuthHeader("admin", "wrongpassword"))
+				req.Header.Set("Authorization", "Bearer "+token)
 				resp, err := httpServer.App.Test(req)
 
-				// Then a 401 with the invalid credentials error is returned
+				// Then the request passes through and is not rejected with 401
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).NotTo(Equal(401))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
+	// POST /api/auth/login
+	// ---------------------------------------------------------------------------
+
+	Describe("POST /api/auth/login", func() {
+		var httpServer *server.HTTPServer
+
+		BeforeEach(func() {
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{
+				Enabled:   true,
+				JWTSecret: testJWTSecret,
+			}, prometheus.NewRegistry(), userStore)
+		})
+
+		Context("when valid credentials are provided", func() {
+			It("should return 200 with a non-empty token", func() {
+				_, err := userStore.Create(httpTestCtx, "loginuser", "correctpass", false)
+				Expect(err).NotTo(HaveOccurred())
+
+				body := `{"username":"loginuser","password":"correctpass"}`
+				req := httptest.NewRequest("POST", "/api/auth/login", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var result map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result["token"]).NotTo(BeEmpty())
+			})
+		})
+
+		Context("when the password is wrong", func() {
+			It("should return 401", func() {
+				_, err := userStore.Create(httpTestCtx, "loginuser2", "realpass", false)
+				Expect(err).NotTo(HaveOccurred())
+
+				body := `{"username":"loginuser2","password":"wrongpass"}`
+				req := httptest.NewRequest("POST", "/api/auth/login", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := httpServer.App.Test(req)
+
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(401))
 				Expect(decodeErrorBody(resp.Body)).To(Equal("invalid credentials"))
 			})
 		})
 
-		Context("Given the correct credentials are provided", func() {
-			It("should pass the request through to the handler", func() {
-				// When we send the correct username and password
-				req := httptest.NewRequest("GET", "/api/messages", nil)
-				req.Header.Set("Authorization", basicAuthHeader("admin", "secret"))
+		Context("when the username is unknown", func() {
+			It("should return 401", func() {
+				body := `{"username":"nobody","password":"pass"}`
+				req := httptest.NewRequest("POST", "/api/auth/login", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
 				resp, err := httpServer.App.Test(req)
 
-				// Then the request passes through and is not rejected with 401
 				Expect(err).NotTo(HaveOccurred())
-				Expect(resp.StatusCode).NotTo(Equal(401))
+				Expect(resp.StatusCode).To(Equal(401))
+				Expect(decodeErrorBody(resp.Body)).To(Equal("invalid credentials"))
+			})
+		})
+
+		Context("when required fields are missing", func() {
+			It("should return 400 when the body is empty", func() {
+				req := httptest.NewRequest("POST", "/api/auth/login", strings.NewReader(`{}`))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(400))
+				Expect(decodeErrorBody(resp.Body)).To(Equal("username and password are required"))
+			})
+
+			It("should return 400 when only username is provided", func() {
+				req := httptest.NewRequest("POST", "/api/auth/login", strings.NewReader(`{"username":"u"}`))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(400))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
+	// POST /api/auth/refresh
+	// ---------------------------------------------------------------------------
+
+	Describe("POST /api/auth/refresh", func() {
+		var httpServer *server.HTTPServer
+
+		BeforeEach(func() {
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{
+				Enabled:   true,
+				JWTSecret: testJWTSecret,
+			}, prometheus.NewRegistry(), userStore)
+		})
+
+		Context("when a valid token is provided", func() {
+			It("should return 200 with a new token", func() {
+				u, err := userStore.Create(httpTestCtx, "refresh-user", "pass", false)
+				Expect(err).NotTo(HaveOccurred())
+
+				token, err := users.IssueToken([]byte(testJWTSecret), u.ID, u.Username, u.IsAdmin)
+				Expect(err).NotTo(HaveOccurred())
+
+				req := httptest.NewRequest("POST", "/api/auth/refresh", nil)
+				req.Header.Set("Authorization", "Bearer "+token)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var result map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result["token"]).NotTo(BeEmpty())
+			})
+		})
+
+		Context("when no token is provided", func() {
+			It("should return 401", func() {
+				req := httptest.NewRequest("POST", "/api/auth/refresh", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(401))
+			})
+		})
+
+		Context("when an invalid token is provided", func() {
+			It("should return 401", func() {
+				req := httptest.NewRequest("POST", "/api/auth/refresh", nil)
+				req.Header.Set("Authorization", "Bearer invalid.token.here")
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(401))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
+	// Permission enforcement
+	// ---------------------------------------------------------------------------
+
+	Describe("Permission enforcement", func() {
+		var httpServer *server.HTTPServer
+		authCfg := config.AuthConfig{
+			Enabled:   true,
+			JWTSecret: testJWTSecret,
+		}
+
+		BeforeEach(func() {
+			httpServer = server.NewHTTPServer(queueService, authCfg, prometheus.NewRegistry(), userStore)
+		})
+
+		Context("when an admin user makes requests", func() {
+			It("should be able to access all protected routes", func() {
+				admin, err := userStore.Create(httpTestCtx, "superadmin", "pass", true)
+				Expect(err).NotTo(HaveOccurred())
+
+				token, err := users.IssueToken([]byte(testJWTSecret), admin.ID, admin.Username, admin.IsAdmin)
+				Expect(err).NotTo(HaveOccurred())
+
+				// GET /api/stats — admin-only
+				req := httptest.NewRequest("GET", "/api/stats", nil)
+				req.Header.Set("Authorization", "Bearer "+token)
+				resp, err := httpServer.App.Test(req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				// GET /api/messages (any topic)
+				req = httptest.NewRequest("GET", "/api/messages?topic=orders", nil)
+				req.Header.Set("Authorization", "Bearer "+token)
+				resp, err = httpServer.App.Test(req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+			})
+		})
+
+		Context("when a user has a read grant on orders.*", func() {
+			It("should allow GET /api/messages for orders.x but deny for payments", func() {
+				u, err := userStore.Create(httpTestCtx, "reader", "pass", false)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = userStore.AddGrant(httpTestCtx, u.ID, "read", "orders.*")
+				Expect(err).NotTo(HaveOccurred())
+
+				token, err := users.IssueToken([]byte(testJWTSecret), u.ID, u.Username, u.IsAdmin)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Should be allowed for orders.new (matches orders.*)
+				req := httptest.NewRequest("GET", "/api/messages?topic=orders.new", nil)
+				req.Header.Set("Authorization", "Bearer "+token)
+				resp, err := httpServer.App.Test(req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				// Should be denied for payments (does not match orders.*)
+				req = httptest.NewRequest("GET", "/api/messages?topic=payments", nil)
+				req.Header.Set("Authorization", "Bearer "+token)
+				resp, err = httpServer.App.Test(req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(403))
+				Expect(decodeErrorBody(resp.Body)).To(Equal("insufficient permissions"))
+			})
+		})
+
+		Context("when a user has no grants", func() {
+			It("should receive 403 on all protected routes", func() {
+				u, err := userStore.Create(httpTestCtx, "no-grants-user", "pass", false)
+				Expect(err).NotTo(HaveOccurred())
+
+				token, err := users.IssueToken([]byte(testJWTSecret), u.ID, u.Username, u.IsAdmin)
+				Expect(err).NotTo(HaveOccurred())
+
+				authHeader := "Bearer " + token
+
+				// GET /api/messages
+				req := httptest.NewRequest("GET", "/api/messages?topic=orders", nil)
+				req.Header.Set("Authorization", authHeader)
+				resp, err := httpServer.App.Test(req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(403))
+
+				// POST /api/messages
+				req = httptest.NewRequest("POST", "/api/messages",
+					strings.NewReader(`{"topic":"orders","payload":"hi"}`))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", authHeader)
+				resp, err = httpServer.App.Test(req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(403))
+
+				// GET /api/stats (admin-only)
+				req = httptest.NewRequest("GET", "/api/stats", nil)
+				req.Header.Set("Authorization", authHeader)
+				resp, err = httpServer.App.Test(req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(403))
 			})
 		})
 	})
@@ -263,7 +509,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 		})
 
 		Context("Given no messages exist", func() {
@@ -353,20 +599,26 @@ var _ = Describe("HTTP Server", func() {
 			})
 		})
 
-		Context("Given auth is enabled and correct credentials are provided", func() {
-			It("should return messages for authenticated requests", func() {
-				// Given auth is enabled and a message has been enqueued
-				authServer := server.NewHTTPServer(queueService, config.AuthConfig{
-					Enabled:  true,
-					Username: "admin",
-					Password: "secret",
-				}, prometheus.NewRegistry())
-				_, err := queueService.Enqueue(httpTestCtx, "auth-topic", []byte("secure-msg"), nil)
+		Context("Given auth is enabled and a valid Bearer token is provided", func() {
+			It("should return messages for authenticated admin requests", func() {
+				// Given auth is enabled, an admin user, and a seeded message
+				us := users.NewStore(httpTestPool)
+				admin, err := us.Create(httpTestCtx, "msg-admin", "secret", true)
 				Expect(err).NotTo(HaveOccurred())
 
-				// When we call the list endpoint with valid credentials
+				authServer := server.NewHTTPServer(queueService, config.AuthConfig{
+					Enabled:   true,
+					JWTSecret: testJWTSecret,
+				}, prometheus.NewRegistry(), us)
+				_, err = queueService.Enqueue(httpTestCtx, "auth-topic", []byte("secure-msg"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				token, err := users.IssueToken([]byte(testJWTSecret), admin.ID, admin.Username, admin.IsAdmin)
+				Expect(err).NotTo(HaveOccurred())
+
+				// When we call the list endpoint with a valid JWT
 				req := httptest.NewRequest("GET", "/api/messages?topic=auth-topic", nil)
-				req.Header.Set("Authorization", basicAuthHeader("admin", "secret"))
+				req.Header.Set("Authorization", "Bearer "+token)
 				resp, err := authServer.App.Test(req)
 
 				// Then the messages are returned successfully
@@ -388,7 +640,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 		})
 
 		Context("Given the request body is not valid JSON", func() {
@@ -503,21 +755,28 @@ var _ = Describe("HTTP Server", func() {
 
 		Context("Given auth is enabled", func() {
 			var authServer *server.HTTPServer
+			var adminToken string
 
 			BeforeEach(func() {
+				us := users.NewStore(httpTestPool)
+				admin, err := us.Create(httpTestCtx, "post-admin", "secret", true)
+				Expect(err).NotTo(HaveOccurred())
+
+				adminToken, err = users.IssueToken([]byte(testJWTSecret), admin.ID, admin.Username, admin.IsAdmin)
+				Expect(err).NotTo(HaveOccurred())
+
 				authServer = server.NewHTTPServer(queueService, config.AuthConfig{
-					Enabled:  true,
-					Username: "admin",
-					Password: "secret",
-				}, prometheus.NewRegistry())
+					Enabled:   true,
+					JWTSecret: testJWTSecret,
+				}, prometheus.NewRegistry(), us)
 			})
 
-			It("should enqueue successfully when correct credentials are provided", func() {
-				// When we POST with valid Basic credentials
+			It("should enqueue successfully when a valid admin token is provided", func() {
+				// When we POST with a valid Bearer token
 				req := httptest.NewRequest("POST", "/api/messages",
 					strings.NewReader(`{"topic":"auth-post-topic","payload":"secure"}`))
 				req.Header.Set("Content-Type", "application/json")
-				req.Header.Set("Authorization", basicAuthHeader("admin", "secret"))
+				req.Header.Set("Authorization", "Bearer "+adminToken)
 				resp, err := authServer.App.Test(req)
 
 				// Then the message is created successfully
@@ -552,7 +811,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 		})
 
 		Context("Given a message that has been promoted to the DLQ", func() {
@@ -561,7 +820,7 @@ var _ = Describe("HTTP Server", func() {
 			BeforeEach(func() {
 				// Use dlqThreshold = 1 so a single nack promotes the message.
 				dlqService := queue.NewService(httpTestPool, 30*time.Second, 5, 0, 1, queue.NoopRecorder{})
-				httpServer = server.NewHTTPServer(dlqService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+				httpServer = server.NewHTTPServer(dlqService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 
 				var err error
 				dlqMessageID, err = dlqService.Enqueue(httpTestCtx, "payments", []byte("charge"), nil)
@@ -616,7 +875,10 @@ var _ = Describe("HTTP Server", func() {
 			reg = prometheus.NewRegistry()
 			rec := metrics.New(httpTestPool, reg)
 			svc := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, rec)
-			httpServer = server.NewHTTPServer(svc, config.AuthConfig{Enabled: true, Username: "admin", Password: "secret"}, reg)
+			httpServer = server.NewHTTPServer(svc, config.AuthConfig{
+				Enabled:   true,
+				JWTSecret: testJWTSecret,
+			}, reg, userStore)
 		})
 
 		Context("when called without an Authorization header and auth is enabled", func() {
@@ -631,16 +893,13 @@ var _ = Describe("HTTP Server", func() {
 
 		Context("after a message has been enqueued", func() {
 			BeforeEach(func() {
-				_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM messages")
-				Expect(err).NotTo(HaveOccurred())
-
 				// Enqueue via the service that shares the same recorder.
 				reg2 := prometheus.NewRegistry()
 				rec2 := metrics.New(httpTestPool, reg2)
 				svc2 := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, rec2)
-				httpServer = server.NewHTTPServer(svc2, config.AuthConfig{Enabled: false}, reg2)
+				httpServer = server.NewHTTPServer(svc2, config.AuthConfig{Enabled: false}, reg2, nil)
 
-				_, err = svc2.Enqueue(httpTestCtx, "metrics-topic", []byte("hello"), nil)
+				_, err := svc2.Enqueue(httpTestCtx, "metrics-topic", []byte("hello"), nil)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -679,10 +938,10 @@ var _ = Describe("HTTP Server", func() {
 		const paginationTopic = "pagination-topic"
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 
 			// Given 5 messages are enqueued on the same topic
-			for i := 0; i < 5; i++ {
+			for i := range 5 {
 				payload := fmt.Sprintf("msg-%d", i)
 				_, err := queueService.Enqueue(httpTestCtx, paginationTopic, []byte(payload), nil)
 				Expect(err).NotTo(HaveOccurred())
@@ -783,7 +1042,7 @@ var _ = Describe("HTTP Server", func() {
 		BeforeEach(func() {
 			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
 			Expect(err).NotTo(HaveOccurred())
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 		})
 
 		Context("when no topic configs exist", func() {
@@ -838,7 +1097,7 @@ var _ = Describe("HTTP Server", func() {
 		BeforeEach(func() {
 			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
 			Expect(err).NotTo(HaveOccurred())
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 		})
 
 		Context("when a valid body is provided", func() {
@@ -875,10 +1134,9 @@ var _ = Describe("HTTP Server", func() {
 		Context("when no Authorization header is provided and auth is enabled", func() {
 			It("should return 401", func() {
 				authServer := server.NewHTTPServer(queueService, config.AuthConfig{
-					Enabled:  true,
-					Username: "admin",
-					Password: "secret",
-				}, prometheus.NewRegistry())
+					Enabled:   true,
+					JWTSecret: testJWTSecret,
+				}, prometheus.NewRegistry(), userStore)
 
 				req := httptest.NewRequest("PUT", "/api/topic-configs/some-topic",
 					strings.NewReader(`{"max_retries":1}`))
@@ -901,7 +1159,7 @@ var _ = Describe("HTTP Server", func() {
 		BeforeEach(func() {
 			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
 			Expect(err).NotTo(HaveOccurred())
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 		})
 
 		Context("when the topic config exists", func() {
@@ -941,7 +1199,7 @@ var _ = Describe("HTTP Server", func() {
 		BeforeEach(func() {
 			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
 			Expect(err).NotTo(HaveOccurred())
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 		})
 
 		Context("when a topic config with max_depth=1 is set and one message is already enqueued", func() {
@@ -979,7 +1237,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 		})
 
 		Context("with no messages", func() {
@@ -1057,10 +1315,9 @@ var _ = Describe("HTTP Server", func() {
 		Context("when auth is enabled and no Authorization header is sent", func() {
 			It("should return 401", func() {
 				authServer := server.NewHTTPServer(queueService, config.AuthConfig{
-					Enabled:  true,
-					Username: "admin",
-					Password: "secret",
-				}, prometheus.NewRegistry())
+					Enabled:   true,
+					JWTSecret: testJWTSecret,
+				}, prometheus.NewRegistry(), userStore)
 
 				req := httptest.NewRequest("GET", "/api/stats", nil)
 				resp, err := authServer.App.Test(req)

@@ -38,9 +38,10 @@ type QueueConfig struct {
 }
 
 type AuthConfig struct {
-	Enabled  bool
-	Username string
-	Password string
+	Enabled   bool
+	Username  string
+	Password  string
+	JWTSecret string `mapstructure:"jwt_secret"`
 }
 
 func Load() (*Config, error) {
@@ -68,6 +69,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("auth.enabled", false)
 	viper.SetDefault("auth.username", "")
 	viper.SetDefault("auth.password", "")
+	viper.SetDefault("auth.jwt_secret", "")
 	viper.SetDefault("log_level", "info")
 
 	// Explicitly bind environment variables to config keys
@@ -86,6 +88,7 @@ func Load() (*Config, error) {
 	_ = viper.BindEnv("auth.enabled")
 	_ = viper.BindEnv("auth.username")
 	_ = viper.BindEnv("auth.password")
+	_ = viper.BindEnv("auth.jwt_secret")
 	_ = viper.BindEnv("log_level")
 
 	if err := viper.ReadInConfig(); err != nil {

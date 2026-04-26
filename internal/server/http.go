@@ -1,7 +1,7 @@
 package server
 
 import (
-	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -13,20 +13,25 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 
+	internalAuth "github.com/Joessst-Dev/queue-ti/internal/auth"
 	"github.com/Joessst-Dev/queue-ti/internal/config"
 	"github.com/Joessst-Dev/queue-ti/internal/queue"
+	"github.com/Joessst-Dev/queue-ti/internal/users"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type HTTPServer struct {
 	App          *fiber.App
 	queueService *queue.Service
 	authConfig   config.AuthConfig
+	userStore    *users.Store
 }
 
-func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer prometheus.Gatherer) *HTTPServer {
+func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer prometheus.Gatherer, userStore *users.Store) *HTTPServer {
 	s := &HTTPServer{
 		queueService: qs,
 		authConfig:   authCfg,
+		userStore:    userStore,
 	}
 
 	app := fiber.New(fiber.Config{
@@ -64,62 +69,357 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer promet
 		return nil
 	})
 
+	var jwtAuth fiber.Handler
+	if authCfg.Enabled {
+		jwtAuth = internalAuth.JWTMiddleware([]byte(authCfg.JWTSecret))
+	} else {
+		jwtAuth = func(c *fiber.Ctx) error { return c.Next() }
+	}
+
 	api := app.Group("/api")
 	api.Get("/auth/status", s.authStatus)
-	api.Get("/messages", s.withAuth(), s.listMessages)
-	api.Post("/messages", s.withAuth(), s.enqueueMessage)
-	api.Post("/messages/:id/nack", s.withAuth(), s.nackMessage)
-	api.Post("/messages/:id/requeue", s.withAuth(), s.requeueMessage)
-	api.Get("/stats", s.withAuth(), s.statsHandler)
-	api.Get("/topic-configs", s.withAuth(), s.listTopicConfigs)
-	api.Put("/topic-configs/:topic", s.withAuth(), s.upsertTopicConfig)
-	api.Delete("/topic-configs/:topic", s.withAuth(), s.deleteTopicConfig)
-	api.Get("/topic-schemas", s.withAuth(), s.listTopicSchemas)
-	api.Put("/topic-schemas/:topic", s.withAuth(), s.upsertTopicSchema)
-	api.Delete("/topic-schemas/:topic", s.withAuth(), s.deleteTopicSchema)
-	api.Get("/topic-schemas/:topic", s.withAuth(), s.getTopicSchema)
+	api.Post("/auth/login", s.handleLogin)
+	api.Post("/auth/refresh", jwtAuth, s.handleRefresh)
+
+	userRoutes := api.Group("/users", jwtAuth, s.requireAdmin())
+	userRoutes.Get("", s.listUsers)
+	userRoutes.Post("", s.createUser)
+	userRoutes.Put("/:id", s.updateUser)
+	userRoutes.Delete("/:id", s.deleteUser)
+	userRoutes.Get("/:id/grants", s.listUserGrants)
+	userRoutes.Post("/:id/grants", s.addUserGrant)
+	userRoutes.Delete("/:id/grants/:grantId", s.deleteUserGrant)
+
+	api.Get("/messages", jwtAuth, s.requireGrant("read", func(c *fiber.Ctx) string { return c.Query("topic") }), s.listMessages)
+	api.Post("/messages", jwtAuth, s.requireGrant("write", func(c *fiber.Ctx) string {
+		var peek struct {
+			Topic string `json:"topic"`
+		}
+		_ = json.Unmarshal(c.Body(), &peek)
+		return peek.Topic
+	}), s.enqueueMessage)
+	api.Post("/messages/:id/nack", jwtAuth, s.requireWriteOnMsgTopic(), s.nackMessage)
+	api.Post("/messages/:id/requeue", jwtAuth, s.requireWriteOnMsgTopic(), s.requeueMessage)
+	api.Get("/stats", jwtAuth, s.requireAdmin(), s.statsHandler)
+	api.Get("/topic-configs", jwtAuth, s.requireAdmin(), s.listTopicConfigs)
+	api.Put("/topic-configs/:topic", jwtAuth, s.requireAdmin(), s.upsertTopicConfig)
+	api.Delete("/topic-configs/:topic", jwtAuth, s.requireAdmin(), s.deleteTopicConfig)
+	api.Get("/topic-schemas", jwtAuth, s.requireAdmin(), s.listTopicSchemas)
+	api.Put("/topic-schemas/:topic", jwtAuth, s.requireAdmin(), s.upsertTopicSchema)
+	api.Delete("/topic-schemas/:topic", jwtAuth, s.requireAdmin(), s.deleteTopicSchema)
+	api.Get("/topic-schemas/:topic", jwtAuth, s.requireAdmin(), s.getTopicSchema)
 
 	s.App = app
 	return s
 }
 
-// withAuth returns a Fiber middleware that enforces basic auth when enabled.
-func (s *HTTPServer) withAuth() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		if !s.authConfig.Enabled {
-			return c.Next()
-		}
-
-		authHeader := c.Get("Authorization")
-		if authHeader == "" {
-			slog.Warn("auth failure: missing authorization header", "ip", c.IP(), "path", c.Path())
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing authorization header"})
-		}
-
-		if !strings.HasPrefix(authHeader, "Basic ") {
-			slog.Warn("auth failure: unsupported auth scheme", "ip", c.IP(), "path", c.Path())
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unsupported auth scheme"})
-		}
-
-		decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHeader, "Basic "))
-		if err != nil {
-			slog.Warn("auth failure: invalid authorization format", "ip", c.IP(), "path", c.Path())
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid authorization format"})
-		}
-
-		parts := strings.SplitN(string(decoded), ":", 2)
-		if len(parts) != 2 || parts[0] != s.authConfig.Username || parts[1] != s.authConfig.Password {
-			slog.Warn("auth failure: invalid credentials", "ip", c.IP(), "path", c.Path())
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid credentials"})
-		}
-
-		return c.Next()
-	}
-}
 
 func (s *HTTPServer) authStatus(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"auth_required": s.authConfig.Enabled})
 }
+
+// ---------------------------------------------------------------------------
+// Permission middleware
+// ---------------------------------------------------------------------------
+
+func (s *HTTPServer) requireAdmin() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		claims := internalAuth.ClaimsFromCtx(c)
+		if claims == nil {
+			return c.Next()
+		}
+		if claims.IsAdmin {
+			return c.Next()
+		}
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "admin access required"})
+	}
+}
+
+func (s *HTTPServer) requireGrant(action string, topicFn func(*fiber.Ctx) string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		claims := internalAuth.ClaimsFromCtx(c)
+		if claims == nil {
+			return c.Next()
+		}
+		if claims.IsAdmin {
+			return c.Next()
+		}
+		topic := topicFn(c)
+		grants, err := s.userStore.GetUserGrants(c.Context(), claims.UserID)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to check permissions"})
+		}
+		if !users.HasGrant(grants, action, topic) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "insufficient permissions"})
+		}
+		return c.Next()
+	}
+}
+
+func (s *HTTPServer) requireWriteOnMsgTopic() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		claims := internalAuth.ClaimsFromCtx(c)
+		if claims == nil {
+			return c.Next()
+		}
+		if claims.IsAdmin {
+			return c.Next()
+		}
+		id := c.Params("id")
+		topic, err := s.queueService.TopicForMessage(c.Context(), id)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "message not found"})
+		}
+		grants, err := s.userStore.GetUserGrants(c.Context(), claims.UserID)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to check permissions"})
+		}
+		if !users.HasGrant(grants, "write", topic) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "insufficient permissions"})
+		}
+		return c.Next()
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Auth handlers
+// ---------------------------------------------------------------------------
+
+type loginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type tokenResponse struct {
+	Token string `json:"token"`
+}
+
+func (s *HTTPServer) handleLogin(c *fiber.Ctx) error {
+	var req loginRequest
+	if err := c.BodyParser(&req); err != nil || req.Username == "" || req.Password == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "username and password are required"})
+	}
+	user, hash, err := s.userStore.GetByUsername(c.Context(), req.Username)
+	if errors.Is(err, users.ErrNotFound) {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid credentials"})
+	}
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal error"})
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)) != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid credentials"})
+	}
+	token, err := users.IssueToken([]byte(s.authConfig.JWTSecret), user.ID, user.Username, user.IsAdmin)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to issue token"})
+	}
+	return c.JSON(tokenResponse{Token: token})
+}
+
+func (s *HTTPServer) handleRefresh(c *fiber.Ctx) error {
+	claims := internalAuth.ClaimsFromCtx(c)
+	if claims == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "not authenticated"})
+	}
+	user, err := s.userStore.GetByID(c.Context(), claims.UserID)
+	if errors.Is(err, users.ErrNotFound) {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "user no longer exists"})
+	}
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal error"})
+	}
+	token, err := users.IssueToken([]byte(s.authConfig.JWTSecret), user.ID, user.Username, user.IsAdmin)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to issue token"})
+	}
+	return c.JSON(tokenResponse{Token: token})
+}
+
+// ---------------------------------------------------------------------------
+// User management response types
+// ---------------------------------------------------------------------------
+
+type userResponse struct {
+	ID        string `json:"id"`
+	Username  string `json:"username"`
+	IsAdmin   bool   `json:"is_admin"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type grantResponse struct {
+	ID           string `json:"id"`
+	UserID       string `json:"user_id"`
+	Action       string `json:"action"`
+	TopicPattern string `json:"topic_pattern"`
+	CreatedAt    string `json:"created_at"`
+}
+
+type createUserRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	IsAdmin  bool   `json:"is_admin"`
+}
+
+type updateUserRequest struct {
+	Username *string `json:"username"`
+	Password *string `json:"password"`
+	IsAdmin  *bool   `json:"is_admin"`
+}
+
+type addGrantRequest struct {
+	Action       string `json:"action"`
+	TopicPattern string `json:"topic_pattern"`
+}
+
+func toUserResponse(u *users.User) userResponse {
+	return userResponse{
+		ID:        u.ID,
+		Username:  u.Username,
+		IsAdmin:   u.IsAdmin,
+		CreatedAt: u.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt: u.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+}
+
+func toGrantResponse(g *users.Grant) grantResponse {
+	return grantResponse{
+		ID:           g.ID,
+		UserID:       g.UserID,
+		Action:       g.Action,
+		TopicPattern: g.TopicPattern,
+		CreatedAt:    g.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+}
+
+// ---------------------------------------------------------------------------
+// User management handlers
+// ---------------------------------------------------------------------------
+
+func (s *HTTPServer) listUsers(c *fiber.Ctx) error {
+	list, err := s.userStore.List(c.Context())
+	if err != nil {
+		slog.Error("list users failed", "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	items := make([]userResponse, len(list))
+	for i, u := range list {
+		items[i] = toUserResponse(&u)
+	}
+	return c.JSON(fiber.Map{"items": items})
+}
+
+func (s *HTTPServer) createUser(c *fiber.Ctx) error {
+	var req createUserRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+	if req.Username == "" || req.Password == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "username and password are required"})
+	}
+	u, err := s.userStore.Create(c.Context(), req.Username, req.Password, req.IsAdmin)
+	if errors.Is(err, users.ErrDuplicate) {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
+	}
+	if err != nil {
+		slog.Error("create user failed", "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.Status(fiber.StatusCreated).JSON(toUserResponse(u))
+}
+
+func (s *HTTPServer) updateUser(c *fiber.Ctx) error {
+	id := c.Params("id")
+	var req updateUserRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+	u, err := s.userStore.Update(c.Context(), id, req.Username, req.Password, req.IsAdmin)
+	if errors.Is(err, users.ErrNotFound) {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+	}
+	if errors.Is(err, users.ErrDuplicate) {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
+	}
+	if err != nil {
+		slog.Error("update user failed", "id", id, "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(toUserResponse(u))
+}
+
+func (s *HTTPServer) deleteUser(c *fiber.Ctx) error {
+	id := c.Params("id")
+	var callerID string
+	if claims := internalAuth.ClaimsFromCtx(c); claims != nil {
+		callerID = claims.UserID
+	}
+	err := s.userStore.Delete(c.Context(), id, callerID)
+	if errors.Is(err, users.ErrCannotDeleteSelf) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+	if errors.Is(err, users.ErrNotFound) {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+	}
+	if err != nil {
+		slog.Error("delete user failed", "id", id, "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (s *HTTPServer) listUserGrants(c *fiber.Ctx) error {
+	userID := c.Params("id")
+	grants, err := s.userStore.ListGrants(c.Context(), userID)
+	if err != nil {
+		slog.Error("list user grants failed", "user_id", userID, "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	items := make([]grantResponse, len(grants))
+	for i, g := range grants {
+		items[i] = toGrantResponse(&g)
+	}
+	return c.JSON(fiber.Map{"items": items})
+}
+
+func (s *HTTPServer) addUserGrant(c *fiber.Ctx) error {
+	userID := c.Params("id")
+	var req addGrantRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+	if req.Action != "read" && req.Action != "write" && req.Action != "admin" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "action must be one of: read, write, admin"})
+	}
+	topicPattern := req.TopicPattern
+	if topicPattern == "" {
+		topicPattern = "*"
+	}
+	g, err := s.userStore.AddGrant(c.Context(), userID, req.Action, topicPattern)
+	if err != nil {
+		slog.Error("add user grant failed", "user_id", userID, "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.Status(fiber.StatusCreated).JSON(toGrantResponse(g))
+}
+
+func (s *HTTPServer) deleteUserGrant(c *fiber.Ctx) error {
+	userID := c.Params("id")
+	grantID := c.Params("grantId")
+	err := s.userStore.DeleteGrant(c.Context(), grantID, userID)
+	if errors.Is(err, users.ErrNotFound) {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+	}
+	if err != nil {
+		slog.Error("delete user grant failed", "user_id", userID, "grant_id", grantID, "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// ---------------------------------------------------------------------------
+// Queue message types and handlers
+// ---------------------------------------------------------------------------
 
 type enqueueRequest struct {
 	Topic    string            `json:"topic"`
@@ -163,10 +463,7 @@ func (s *HTTPServer) listMessages(c *fiber.Ctx) error {
 		limit = 200
 	}
 
-	offset := c.QueryInt("offset", 0)
-	if offset < 0 {
-		offset = 0
-	}
+	offset := max(c.QueryInt("offset", 0), 0)
 
 	messages, total, err := s.queueService.List(c.Context(), topic, limit, offset)
 	if err != nil {

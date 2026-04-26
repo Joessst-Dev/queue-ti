@@ -41,9 +41,10 @@ const makeMessage = (overrides: Partial<QueueMessage> = {}): QueueMessage => ({
   ...overrides,
 });
 
-const makeAuthService = (authenticated = false) =>
+const makeAuthService = (authenticated = false, isAdmin = false) =>
   ({
     isAuthenticated: vi.fn().mockReturnValue(authenticated),
+    isAdmin: vi.fn().mockReturnValue(isAdmin),
     logout: vi.fn(),
     getAuthHeader: () => null,
   }) as unknown as AuthService;

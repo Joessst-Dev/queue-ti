@@ -15,6 +15,7 @@ import { EnqueueSection } from './enqueue-section';
 import { QueueStatsChart } from './queue-stats-chart';
 import { TopicConfigSection } from './topic-config-section';
 import { TopicSchemaSection } from './topic-schema-section';
+import { UsersSection } from './users-section';
 
 interface EnqueueState {
   id: string;
@@ -24,7 +25,7 @@ interface EnqueueState {
 
 @Component({
   selector: 'app-messages',
-  imports: [MessagesHeader, MessagesTable, EnqueueSection, QueueStatsChart, TopicConfigSection, TopicSchemaSection],
+  imports: [MessagesHeader, MessagesTable, EnqueueSection, QueueStatsChart, TopicConfigSection, TopicSchemaSection, UsersSection],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -33,7 +34,7 @@ interface EnqueueState {
       <div class="bg-white border-b border-gray-200">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav class="-mb-px flex gap-6" aria-label="Main navigation">
-            @for (tab of tabs; track tab.id) {
+            @for (tab of tabs(); track tab.id) {
               <button
                 (click)="activeTab.set(tab.id)"
                 [class]="activeTab() === tab.id
@@ -77,6 +78,9 @@ interface EnqueueState {
         @if (activeTab() === 'schemas') {
           <app-topic-schema-section />
         }
+        @if (activeTab() === 'users') {
+          <app-users-section />
+        }
       </main>
     </div>
   `,
@@ -86,14 +90,21 @@ export class Messages {
   private readonly queue = inject(QueueService);
   private readonly router = inject(Router);
 
-  readonly activeTab = signal<'messages' | 'enqueue' | 'stats' | 'config' | 'schemas'>('messages');
-  readonly tabs = [
-    { id: 'messages' as const, label: 'Messages' },
-    { id: 'enqueue' as const, label: 'Enqueue' },
-    { id: 'stats'   as const, label: 'Stats'   },
-    { id: 'config'  as const, label: 'Config'  },
-    { id: 'schemas' as const, label: 'Schemas' },
-  ];
+  readonly activeTab = signal<'messages' | 'enqueue' | 'stats' | 'config' | 'schemas' | 'users'>('messages');
+
+  readonly tabs = computed(() => {
+    const base = [
+      { id: 'messages' as const, label: 'Messages' },
+      { id: 'enqueue'  as const, label: 'Enqueue'  },
+      { id: 'stats'    as const, label: 'Stats'    },
+      { id: 'config'   as const, label: 'Config'   },
+      { id: 'schemas'  as const, label: 'Schemas'  },
+    ];
+    if (this.auth.isAdmin()) {
+      return [...base, { id: 'users' as const, label: 'Users' }];
+    }
+    return base;
+  });
 
   private readonly requeueTrigger$ = new Subject<string>();
   private readonly nackTrigger$ = new Subject<{ id: string; error: string }>();

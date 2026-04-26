@@ -491,6 +491,17 @@ func (s *Service) Stats(ctx context.Context) ([]TopicStat, error) {
 	return stats, nil
 }
 
+// TopicForMessage returns the topic of the message with the given ID.
+// It returns ErrNotFound if no such message exists.
+func (s *Service) TopicForMessage(ctx context.Context, id string) (string, error) {
+	var topic string
+	err := s.pool.QueryRow(ctx, `SELECT topic FROM messages WHERE id = $1`, id).Scan(&topic)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return topic, err
+}
+
 // StartExpiryReaper launches a background goroutine that periodically marks
 // expired messages (expires_at < now()) as 'expired'. It runs until ctx is
 // cancelled. The first tick fires immediately (after interval).

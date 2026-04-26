@@ -12,7 +12,7 @@ A distributed message queue service built with Go gRPC and PostgreSQL, with an A
 - **Dead-letter queue (DLQ)** — Messages that exhaust their retry limit are automatically promoted to a `<topic>.dlq` topic; can be manually requeued back to the original topic
 - **Message TTL** — Messages can expire after a configurable duration (default 24 hours); an automatic reaper marks expired messages
 - **Contention-free dequeue** — Uses `FOR UPDATE SKIP LOCKED` for lock-free concurrent message consumption
-- **Basic authentication** — Optional basic auth for both gRPC and HTTP endpoints
+- **JWT authentication** — Optional JWT-based authentication (HS256) with user accounts, role management, and per-topic grants
 - **Avro schema validation** — Optional per-topic Avro schema registration; payloads are validated at enqueue time with compiled schemas cached in memory
 - **Admin UI** — Angular-based web interface to list messages with detailed status, retry counts, and expiry information; filter by topic; manually enqueue test messages; inspect dead-letter queue messages; requeue or inline-nack processing messages; configure per-topic settings
 - **Configuration** — YAML-based global configuration with environment variable overrides via `QUEUETI_` prefix; per-topic overrides for retry count, TTL, and queue depth limits via HTTP API or admin UI
@@ -133,9 +133,10 @@ Any configuration key can be overridden with an environment variable. Use the ke
 | `QUEUETI_QUEUE_MAX_RETRIES` | Max retry count per message | `3` |
 | `QUEUETI_QUEUE_MESSAGE_TTL` | Message time-to-live (0 = no expiry) | `24h` |
 | `QUEUETI_QUEUE_DLQ_THRESHOLD` | Retry count for DLQ promotion (0 = disabled) | `3` |
-| `QUEUETI_AUTH_ENABLED` | Enable authentication | `true` |
-| `QUEUETI_AUTH_USERNAME` | Basic auth username | `admin` |
-| `QUEUETI_AUTH_PASSWORD` | Basic auth password | `secret` |
+| `QUEUETI_AUTH_ENABLED` | Enable JWT authentication | `true` |
+| `QUEUETI_AUTH_JWT_SECRET` | JWT signing secret (required if auth enabled) | (any string) |
+| `QUEUETI_AUTH_USERNAME` | Default admin username | `admin` |
+| `QUEUETI_AUTH_PASSWORD` | Default admin password | `secret` |
 | `QUEUETI_LOG_LEVEL` | Log level (debug, info, warn, error) | `info` |
 
 ### Log Levels
@@ -210,6 +211,487 @@ curl -u admin:secret -X PUT http://localhost:8080/api/topic-configs/orders \
 ```
 
 The admin UI includes a **Config** tab where operators can view and edit all topic configurations interactively without restarting the server.
+
+## Authentication & User Management
+
+queue-ti supports JWT-based authentication with per-user grants to enforce granular access control across queue operations and topics. User accounts and role assignments are managed via the admin UI or REST API.
+
+### Enabling Authentication
+
+Authentication is disabled by default. To enable it, set:
+
+```yaml
+auth:
+  enabled: true
+  jwt_secret: "your-secret-key-here"
+```
+
+Or use environment variables:
+```bash
+QUEUETI_AUTH_ENABLED=true
+QUEUETI_AUTH_JWT_SECRET="your-secret-key-here"
+```
+
+The server will fail to start if `auth.enabled=true` and `jwt_secret` is empty.
+
+### Default Admin User
+
+On first startup, the server automatically seeds a default admin user from the configuration:
+
+```yaml
+auth:
+  enabled: true
+  jwt_secret: "your-secret-key-here"
+  username: admin          # Becomes the first admin account username
+  password: secret         # Becomes the first admin account password
+```
+
+Or via environment variables:
+```bash
+QUEUETI_AUTH_ENABLED=true
+QUEUETI_AUTH_JWT_SECRET="your-secret-key-here"
+QUEUETI_AUTH_USERNAME=admin
+QUEUETI_AUTH_PASSWORD=secret
+```
+
+After the server starts, the default user is created (if it doesn't already exist) with `is_admin=true`. You can change the password and create additional users via the admin UI **Users** tab.
+
+### User Roles and Permissions
+
+queue-ti uses two mechanisms to control user access:
+
+#### 1. Admin Flag
+
+The `is_admin` flag grants a user unrestricted access:
+- **Admin users** (`is_admin=true`) bypass all per-topic grant checks and can access all queue operations and admin endpoints
+- **Regular users** (`is_admin=false`) are subject to per-topic grants
+
+#### 2. Per-Topic Grants
+
+Regular users require explicit grants for each action and topic. A grant specifies:
+- **Action**: one of `read`, `write`, or `admin`
+- **Topic Pattern**: one of the following:
+  - `*` — All topics (wildcard grant)
+  - `orders.*` — Prefix glob (e.g., matches `orders`, `orders.dlq`, `orders.v1`, etc.)
+  - `orders` — Exact topic name
+
+**Grant semantics:**
+- `read` — Allows `GET /api/messages` and `GET /api/stats` for this topic
+- `write` — Allows `POST /api/messages`, `POST /api/messages/:id/ack`, `POST /api/messages/:id/nack`, `POST /api/messages/:id/requeue` for this topic; also required for gRPC `Dequeue` calls
+- `admin` — Allows topic configuration and schema management (`GET/PUT/DELETE /api/topic-configs/:topic`, `GET/PUT/DELETE /api/topic-schemas/:topic`) for this topic
+
+**Example grants:**
+
+| Username | Grant | Topic Pattern | Interpretation |
+|----------|-------|---------------|-----------------|
+| `alice` | `write` | `orders` | Can enqueue, dequeue, ack, and nack messages only in the `orders` topic |
+| `bob` | `read` | `*` | Can list and inspect all messages across all topics, but cannot modify any |
+| `charlie` | `admin` | `payments.*` | Can manage configuration and schema for all topics matching `payments.*` pattern (e.g., `payments`, `payments.dlq`, `payments.v1`) |
+
+### JWT Token Details
+
+- **Token lifetime**: 15 minutes
+- **Algorithm**: HS256 (HMAC with SHA-256)
+- **Claims**:
+  - `uid` — User UUID
+  - `sub` — Username
+  - `adm` — Boolean indicating if user is admin
+  - `iat` — Issued at (standard)
+  - `exp` — Expiration time (standard)
+
+### Authentication Endpoints
+
+#### POST /api/auth/login
+
+Authenticates a user and returns a JWT token.
+
+**Request body:**
+```json
+{
+  "username": "admin",
+  "password": "secret"
+}
+```
+
+**Response:** HTTP 200 OK with JWT token.
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Error responses:**
+- HTTP 401 if username or password is incorrect
+
+**Example:**
+```bash
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "admin",
+    "password": "secret"
+  }'
+```
+
+#### POST /api/auth/refresh
+
+Refreshes an existing JWT token.
+
+**Headers:**
+- `Authorization: Bearer <token>` — Current valid token
+
+**Request body:** Empty (no body required)
+
+**Response:** HTTP 200 OK with a new JWT token.
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8080/api/auth/refresh \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+#### GET /api/auth/status
+
+Returns the current authentication status and the authenticated user (if a token is provided).
+
+**Headers:**
+- `Authorization: Bearer <token>` (optional)
+
+**Response:** HTTP 200 OK.
+
+```json
+{
+  "auth_required": true,
+  "user": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "admin",
+    "is_admin": true
+  }
+}
+```
+
+When unauthenticated (no token provided):
+```json
+{
+  "auth_required": true,
+  "user": null
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8080/api/auth/status
+```
+
+### User Management Endpoints (Admin-Only)
+
+All user and grant management endpoints are restricted to users with `is_admin=true`.
+
+#### GET /api/users
+
+Lists all user accounts.
+
+**Response:** HTTP 200 OK with array of users.
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:8080/api/users
+```
+
+**Response body:**
+```json
+{
+  "users": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "username": "admin",
+      "is_admin": true,
+      "created_at": "2025-04-25T12:00:00Z"
+    },
+    {
+      "id": "660e8400-e29b-41d4-a716-446655440001",
+      "username": "alice",
+      "is_admin": false,
+      "created_at": "2025-04-25T12:05:00Z"
+    }
+  ]
+}
+```
+
+#### POST /api/users
+
+Creates a new user account.
+
+**Request body:**
+```json
+{
+  "username": "bob",
+  "password": "secure-password",
+  "is_admin": false
+}
+```
+
+**Response:** HTTP 201 Created with the new user.
+
+```json
+{
+  "id": "770e8400-e29b-41d4-a716-446655440002",
+  "username": "bob",
+  "is_admin": false,
+  "created_at": "2025-04-25T12:10:00Z"
+}
+```
+
+**Error responses:**
+- HTTP 400 if username already exists
+
+**Example:**
+```bash
+curl -X POST -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "bob", "password": "secure-password", "is_admin": false}' \
+  http://localhost:8080/api/users
+```
+
+#### PUT /api/users/:id
+
+Updates a user account (username, password, and/or admin flag).
+
+**Path Parameters:**
+- `:id` — User UUID
+
+**Request body:** (all fields optional; omitted fields are unchanged)
+```json
+{
+  "username": "bob-renamed",
+  "password": "new-password",
+  "is_admin": true
+}
+```
+
+**Response:** HTTP 200 OK with the updated user.
+
+```json
+{
+  "id": "770e8400-e29b-41d4-a716-446655440002",
+  "username": "bob-renamed",
+  "is_admin": true,
+  "created_at": "2025-04-25T12:10:00Z"
+}
+```
+
+**Error responses:**
+- HTTP 404 if user not found
+
+**Example:**
+```bash
+curl -X PUT -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"is_admin": true}' \
+  http://localhost:8080/api/users/770e8400-e29b-41d4-a716-446655440002
+```
+
+#### DELETE /api/users/:id
+
+Deletes a user account.
+
+**Path Parameters:**
+- `:id` — User UUID
+
+**Response:** HTTP 204 No Content on success.
+
+**Error responses:**
+- HTTP 404 if user not found
+
+**Example:**
+```bash
+curl -X DELETE -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/users/770e8400-e29b-41d4-a716-446655440002
+```
+
+### Grant Management Endpoints (Admin-Only)
+
+#### GET /api/users/:id/grants
+
+Lists all grants for a specific user.
+
+**Path Parameters:**
+- `:id` — User UUID
+
+**Response:** HTTP 200 OK with array of grants.
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/users/550e8400-e29b-41d4-a716-446655440000/grants
+```
+
+**Response body:**
+```json
+{
+  "grants": [
+    {
+      "id": "880e8400-e29b-41d4-a716-446655440003",
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "action": "write",
+      "topic_pattern": "orders",
+      "created_at": "2025-04-25T12:00:00Z"
+    },
+    {
+      "id": "990e8400-e29b-41d4-a716-446655440004",
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "action": "read",
+      "topic_pattern": "*",
+      "created_at": "2025-04-25T12:01:00Z"
+    }
+  ]
+}
+```
+
+#### POST /api/users/:id/grants
+
+Creates a new grant for a user.
+
+**Path Parameters:**
+- `:id` — User UUID
+
+**Request body:**
+```json
+{
+  "action": "write",
+  "topic_pattern": "payments.*"
+}
+```
+
+Valid values for `action`: `read`, `write`, `admin`
+
+**Response:** HTTP 201 Created with the new grant.
+
+```json
+{
+  "id": "aa0e8400-e29b-41d4-a716-446655440005",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "action": "write",
+  "topic_pattern": "payments.*",
+  "created_at": "2025-04-25T12:15:00Z"
+}
+```
+
+**Error responses:**
+- HTTP 400 if `action` is invalid or `user_id` not found
+
+**Example:**
+```bash
+curl -X POST -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"action": "write", "topic_pattern": "orders"}' \
+  http://localhost:8080/api/users/550e8400-e29b-41d4-a716-446655440000/grants
+```
+
+#### DELETE /api/users/:id/grants/:grant_id
+
+Deletes a specific grant.
+
+**Path Parameters:**
+- `:id` — User UUID
+- `:grant_id` — Grant UUID
+
+**Response:** HTTP 204 No Content on success.
+
+**Error responses:**
+- HTTP 404 if grant not found
+
+**Example:**
+```bash
+curl -X DELETE -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/users/550e8400-e29b-41d4-a716-446655440000/grants/880e8400-e29b-41d4-a716-446655440003
+```
+
+### Using JWT Tokens in HTTP Requests
+
+After logging in, include the JWT token in the `Authorization: Bearer` header for authenticated requests:
+
+```bash
+# Login to get token
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "secret"}' | jq -r '.token')
+
+# Use token for authenticated requests
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/messages
+```
+
+### Using JWT Tokens in gRPC Requests
+
+For gRPC clients, include the JWT token in the `authorization` metadata header:
+
+```go
+import "google.golang.org/grpc/metadata"
+
+// After login via HTTP to get the token
+md := metadata.Pairs("authorization", "Bearer "+token)
+ctx := metadata.NewOutgoingContext(context.Background(), md)
+
+// Use ctx in gRPC calls
+response, err := client.Enqueue(ctx, &pb.EnqueueRequest{...})
+```
+
+### Admin UI Authentication
+
+The admin UI stores JWT tokens in `sessionStorage` after successful login. Tokens are automatically included in all HTTP requests via the auth interceptor.
+
+**Login flow:**
+1. User navigates to the login page
+2. Enters username and password
+3. Calls `POST /api/auth/login` with credentials
+4. Token is stored in `sessionStorage`
+5. User is redirected to the messages dashboard
+6. Auth interceptor automatically adds `Authorization: Bearer <token>` to all subsequent requests
+
+**Token expiration:**
+- When a token expires (15 minutes), the next API request returns HTTP 401
+- The admin UI prompts the user to log in again
+- The user can manually refresh the token via `POST /api/auth/refresh`
+
+### Configuration Reference
+
+**config.yaml:**
+```yaml
+auth:
+  enabled: false              # Enable/disable JWT authentication
+  jwt_secret: ""              # Secret key for HS256 signing (required if enabled=true)
+  username: admin             # Default admin username
+  password: secret            # Default admin password
+```
+
+**Environment variables:**
+```bash
+QUEUETI_AUTH_ENABLED=true              # true/false
+QUEUETI_AUTH_JWT_SECRET="my-secret"    # At least 32 characters recommended
+QUEUETI_AUTH_USERNAME=admin            # Username
+QUEUETI_AUTH_PASSWORD=secret           # Password
+```
+
+### Docker Compose Configuration
+
+Update the `docker-compose.yaml` to set the JWT secret:
+
+```yaml
+services:
+  backend:
+    environment:
+      QUEUETI_AUTH_ENABLED: "true"
+      QUEUETI_AUTH_JWT_SECRET: "your-secure-secret-key-here"
+      QUEUETI_AUTH_USERNAME: "admin"
+      QUEUETI_AUTH_PASSWORD: "secret"
+```
+
+> **⚠️ Security Note**: Never commit the JWT secret to version control. Use a `.env` file or a secrets management system (e.g., Docker secrets, Kubernetes secrets) in production.
 
 ## Avro Schema Validation
 
@@ -385,6 +867,8 @@ cmd/server/main.go
 │
 └── HTTP Server (port 8080)
     ├── /healthz                             GET    Health check
+    ├── /api/auth/login                      POST   Authenticate user, return JWT token
+    ├── /api/auth/refresh                    POST   Refresh JWT token
     ├── /api/auth/status                     GET    Authentication status
     ├── /api/messages                        GET    List messages (with optional topic filter)
     ├── /api/messages                        POST   Enqueue a message
@@ -398,8 +882,15 @@ cmd/server/main.go
     ├── /api/topic-schemas/:topic            PUT    Register or update a schema
     ├── /api/topic-schemas/:topic            DELETE Delete a registered schema
     ├── /api/topic-schemas/:topic            GET    Fetch a single schema
+    ├── /api/users                           GET    List all users (admin-only)
+    ├── /api/users                           POST   Create new user (admin-only)
+    ├── /api/users/:id                       PUT    Update user (admin-only)
+    ├── /api/users/:id                       DELETE Delete user (admin-only)
+    ├── /api/users/:id/grants                GET    List user grants (admin-only)
+    ├── /api/users/:id/grants                POST   Create grant for user (admin-only)
+    ├── /api/users/:id/grants/:grant_id      DELETE Delete user grant (admin-only)
     ├── /metrics                             GET    Prometheus metrics (unauthenticated)
-    └── All /api/* endpoints require basic auth if enabled
+    └── /api/* endpoints require JWT auth if enabled; /metrics is unauthenticated
 ```
 
 Both servers connect to the same `queue.Service` instance, which manages all message operations against PostgreSQL.
@@ -1107,6 +1598,7 @@ environment:
   QUEUETI_SERVER_PORT: "50051"
   QUEUETI_SERVER_HTTP_PORT: "8080"
   QUEUETI_AUTH_ENABLED: "true"
+  QUEUETI_AUTH_JWT_SECRET: "your-secret-key-here"
   QUEUETI_AUTH_USERNAME: "admin"
   QUEUETI_AUTH_PASSWORD: "secret"
 ```

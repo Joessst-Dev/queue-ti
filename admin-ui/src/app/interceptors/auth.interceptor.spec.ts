@@ -49,31 +49,31 @@ describe('authInterceptor', () => {
     httpController.verify();
   });
 
-  describe('when getAuthHeader() returns a token and request has no Authorization header', () => {
+  describe('when getAuthHeader() returns a Bearer token and request has no Authorization header', () => {
     it('should clone the request and add the Authorization header', () => {
-      setup({ authHeader: 'Basic dXNlcjpwYXNz', isAuthenticated: true });
+      setup({ authHeader: 'Bearer test.jwt.token', isAuthenticated: true });
 
       http.get('/api/messages').subscribe();
 
       const req = httpController.expectOne('/api/messages');
-      expect(req.request.headers.get('Authorization')).toBe('Basic dXNlcjpwYXNz');
+      expect(req.request.headers.get('Authorization')).toBe('Bearer test.jwt.token');
       req.flush([]);
     });
   });
 
   describe('when the request already has an Authorization header', () => {
     it('should not overwrite the existing header', () => {
-      setup({ authHeader: 'Basic dXNlcjpwYXNz', isAuthenticated: true });
+      setup({ authHeader: 'Bearer test.jwt.token', isAuthenticated: true });
 
       http
         .get('/api/messages', {
-          headers: { Authorization: 'Basic ZXhpc3Rpbmc6aGVhZGVy' },
+          headers: { Authorization: 'Bearer other.existing.token' },
         })
         .subscribe();
 
       const req = httpController.expectOne('/api/messages');
       expect(req.request.headers.get('Authorization')).toBe(
-        'Basic ZXhpc3Rpbmc6aGVhZGVy',
+        'Bearer other.existing.token',
       );
       req.flush([]);
     });
@@ -94,7 +94,7 @@ describe('authInterceptor', () => {
   describe('on HTTP 401 response', () => {
     describe('when user is authenticated', () => {
       it('should call auth.logout()', () => {
-        setup({ authHeader: 'Basic dXNlcjpwYXNz', isAuthenticated: true });
+        setup({ authHeader: 'Bearer test.jwt.token', isAuthenticated: true });
 
         http.get('/api/messages').subscribe({ error: vi.fn() });
         httpController
@@ -105,7 +105,7 @@ describe('authInterceptor', () => {
       });
 
       it('should navigate to /login', () => {
-        setup({ authHeader: 'Basic dXNlcjpwYXNz', isAuthenticated: true });
+        setup({ authHeader: 'Bearer test.jwt.token', isAuthenticated: true });
 
         http.get('/api/messages').subscribe({ error: vi.fn() });
         httpController

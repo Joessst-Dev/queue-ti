@@ -4,7 +4,11 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
+import { provideZonelessChangeDetection } from '@angular/core';
 import { AuthService } from './auth.service';
+
+const makeJwt = (payload: object): string =>
+  `header.${btoa(JSON.stringify(payload))}.sig`;
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -13,7 +17,11 @@ describe('AuthService', () => {
   beforeEach(() => {
     sessionStorage.clear();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideZonelessChangeDetection(),
+      ],
     });
     service = TestBed.inject(AuthService);
     httpController = TestBed.inject(HttpTestingController);
@@ -24,42 +32,166 @@ describe('AuthService', () => {
     sessionStorage.clear();
   });
 
-  describe('isAuthenticated', () => {
-    describe('when no credentials are stored', () => {
-      it('should return false', () => {
-        expect(service.isAuthenticated()).toBe(false);
+  describe('login()', () => {
+    describe('when the server responds with a token', () => {
+      const jwt = makeJwt({ sub: 'admin', adm: true });
+
+      it('should POST to /api/auth/login with username and password', () => {
+        service.login('admin', 'secret').subscribe();
+
+        const req = httpController.expectOne('/api/auth/login');
+        expect(req.request.method).toBe('POST');
+        expect(req.request.body).toEqual({ username: 'admin', password: 'secret' });
+        req.flush({ token: jwt });
+      });
+
+      it('should store the token in sessionStorage', () => {
+        service.login('admin', 'secret').subscribe();
+        httpController.expectOne('/api/auth/login').flush({ token: jwt });
+
+        expect(sessionStorage.getItem('queueti_jwt')).toBe(jwt);
+      });
+
+      it('should set isAuthenticated to true', () => {
+        service.login('admin', 'secret').subscribe();
+        httpController.expectOne('/api/auth/login').flush({ token: jwt });
+
+        expect(service.isAuthenticated()).toBe(true);
+      });
+
+      it('should return true', () => {
+        let result: boolean | undefined;
+        service.login('admin', 'secret').subscribe((v) => (result = v));
+        httpController.expectOne('/api/auth/login').flush({ token: jwt });
+
+        expect(result).toBe(true);
       });
     });
 
-    describe('when credentials are stored in sessionStorage', () => {
-      it('should return true on initial load', () => {
-        sessionStorage.setItem('queueti_auth', 'dXNlcjpwYXNz');
-        // Re-create service so it picks up the sessionStorage value
-        TestBed.resetTestingModule();
-        TestBed.configureTestingModule({
-          providers: [provideHttpClient(), provideHttpClientTesting()],
-        });
-        const freshService = TestBed.inject(AuthService);
-        expect(freshService.isAuthenticated()).toBe(true);
-        TestBed.inject(HttpTestingController).verify();
+    describe('when the server responds with 401', () => {
+      it('should return false', () => {
+        let result: boolean | undefined;
+        service.login('admin', 'wrong').subscribe((v) => (result = v));
+        httpController
+          .expectOne('/api/auth/login')
+          .flush('Unauthorized', { status: 401, statusText: 'Unauthorized' });
+
+        expect(result).toBe(false);
+      });
+
+      it('should not touch sessionStorage', () => {
+        service.login('admin', 'wrong').subscribe();
+        httpController
+          .expectOne('/api/auth/login')
+          .flush('Unauthorized', { status: 401, statusText: 'Unauthorized' });
+
+        expect(sessionStorage.getItem('queueti_jwt')).toBeNull();
+      });
+
+      it('should leave isAuthenticated false', () => {
+        service.login('admin', 'wrong').subscribe();
+        httpController
+          .expectOne('/api/auth/login')
+          .flush('Unauthorized', { status: 401, statusText: 'Unauthorized' });
+
+        expect(service.isAuthenticated()).toBe(false);
+      });
+    });
+  });
+
+  describe('logout()', () => {
+    beforeEach(() => {
+      const jwt = makeJwt({ sub: 'admin', adm: false });
+      service.login('admin', 'secret').subscribe();
+      httpController.expectOne('/api/auth/login').flush({ token: jwt });
+    });
+
+    it('should remove queueti_jwt from sessionStorage', () => {
+      service.logout();
+      expect(sessionStorage.getItem('queueti_jwt')).toBeNull();
+    });
+
+    it('should set isAuthenticated to false', () => {
+      service.logout();
+      expect(service.isAuthenticated()).toBe(false);
+    });
+  });
+
+  describe('isAdmin()', () => {
+    describe('when token has adm: true', () => {
+      it('should return true', () => {
+        const jwt = makeJwt({ sub: 'admin', adm: true });
+        service.login('admin', 'secret').subscribe();
+        httpController.expectOne('/api/auth/login').flush({ token: jwt });
+
+        expect(service.isAdmin()).toBe(true);
+      });
+    });
+
+    describe('when token has adm: false', () => {
+      it('should return false', () => {
+        const jwt = makeJwt({ sub: 'user', adm: false });
+        service.login('user', 'pass').subscribe();
+        httpController.expectOne('/api/auth/login').flush({ token: jwt });
+
+        expect(service.isAdmin()).toBe(false);
+      });
+    });
+
+    describe('when not authenticated', () => {
+      it('should return false', () => {
+        expect(service.isAdmin()).toBe(false);
+      });
+    });
+  });
+
+  describe('currentUsername()', () => {
+    describe('when authenticated', () => {
+      it('should return the sub field from the token payload', () => {
+        const jwt = makeJwt({ sub: 'alice', adm: false });
+        service.login('alice', 'pass').subscribe();
+        httpController.expectOne('/api/auth/login').flush({ token: jwt });
+
+        expect(service.currentUsername()).toBe('alice');
+      });
+    });
+
+    describe('when not authenticated', () => {
+      it('should return null', () => {
+        expect(service.currentUsername()).toBeNull();
+      });
+    });
+  });
+
+  describe('getAuthHeader()', () => {
+    describe('when not authenticated', () => {
+      it('should return null', () => {
+        expect(service.getAuthHeader()).toBeNull();
+      });
+    });
+
+    describe('when authenticated', () => {
+      it('should return "Bearer <token>"', () => {
+        const jwt = makeJwt({ sub: 'admin', adm: true });
+        service.login('admin', 'secret').subscribe();
+        httpController.expectOne('/api/auth/login').flush({ token: jwt });
+
+        expect(service.getAuthHeader()).toBe(`Bearer ${jwt}`);
       });
     });
   });
 
   describe('checkAuthStatus()', () => {
-    describe('when cache is null (first call)', () => {
-      it('should hit GET /api/auth/status', () => {
+    describe('when server responds with auth_required: true', () => {
+      it('should return true', () => {
         let result: boolean | undefined;
         service.checkAuthStatus().subscribe((v) => (result = v));
-
-        const req = httpController.expectOne('/api/auth/status');
-        expect(req.request.method).toBe('GET');
-        req.flush({ auth_required: true });
+        httpController.expectOne('/api/auth/status').flush({ auth_required: true });
 
         expect(result).toBe(true);
       });
 
-      it('should set _authRequired signal to the returned value', () => {
+      it('should set authRequired signal to true', () => {
         service.checkAuthStatus().subscribe();
         httpController.expectOne('/api/auth/status').flush({ auth_required: true });
 
@@ -78,126 +210,44 @@ describe('AuthService', () => {
       });
     });
 
-    describe('when cache is already populated (second call)', () => {
-      it('should return the cached value without making a new HTTP request', () => {
-        // First call — populate cache
-        service.checkAuthStatus().subscribe();
-        httpController.expectOne('/api/auth/status').flush({ auth_required: true });
-
-        // Second call — should use cache
+    describe('when the request errors', () => {
+      it('should return false and set authRequired to false', () => {
         let result: boolean | undefined;
         service.checkAuthStatus().subscribe((v) => (result = v));
-        httpController.expectNone('/api/auth/status');
-        expect(result).toBe(true);
-      });
-    });
-  });
-
-  describe('login()', () => {
-    const username = 'admin';
-    const password = 'secret';
-    const expectedToken = btoa(`${username}:${password}`);
-
-    describe('when the server responds with 2xx', () => {
-      it('should make GET /api/messages with an Authorization: Basic header', () => {
-        service.login(username, password).subscribe();
-
-        const req = httpController.expectOne('/api/messages');
-        expect(req.request.method).toBe('GET');
-        expect(req.request.headers.get('Authorization')).toBe(
-          `Basic ${expectedToken}`,
-        );
-        req.flush([]);
-      });
-
-      it('should persist the token to sessionStorage', () => {
-        service.login(username, password).subscribe();
-        httpController.expectOne('/api/messages').flush([]);
-
-        expect(sessionStorage.getItem('queueti_auth')).toBe(expectedToken);
-      });
-
-      it('should set the credentials signal', () => {
-        service.login(username, password).subscribe();
-        httpController.expectOne('/api/messages').flush([]);
-
-        expect(service.isAuthenticated()).toBe(true);
-        expect(service.getAuthHeader()).toBe(`Basic ${expectedToken}`);
-      });
-
-      it('should return true', () => {
-        let result: boolean | undefined;
-        service.login(username, password).subscribe((v) => (result = v));
-        httpController.expectOne('/api/messages').flush([]);
-
-        expect(result).toBe(true);
-      });
-    });
-
-    describe('when the server responds with an error', () => {
-      it('should return false', () => {
-        let result: boolean | undefined;
-        service.login(username, password).subscribe((v) => (result = v));
         httpController
-          .expectOne('/api/messages')
-          .flush('Unauthorized', { status: 401, statusText: 'Unauthorized' });
+          .expectOne('/api/auth/status')
+          .flush('Server Error', { status: 500, statusText: 'Internal Server Error' });
 
         expect(result).toBe(false);
-      });
-
-      it('should not touch sessionStorage', () => {
-        service.login(username, password).subscribe();
-        httpController
-          .expectOne('/api/messages')
-          .flush('Unauthorized', { status: 401, statusText: 'Unauthorized' });
-
-        expect(sessionStorage.getItem('queueti_auth')).toBeNull();
-      });
-
-      it('should not set credentials', () => {
-        service.login(username, password).subscribe();
-        httpController
-          .expectOne('/api/messages')
-          .flush('Unauthorized', { status: 401, statusText: 'Unauthorized' });
-
-        expect(service.isAuthenticated()).toBe(false);
+        expect(service.authRequired()).toBe(false);
       });
     });
   });
 
-  describe('logout()', () => {
-    beforeEach(() => {
-      // Simulate an authenticated state
-      sessionStorage.setItem('queueti_auth', 'dXNlcjpwYXNz');
-      service.login('user', 'pass').subscribe();
-      httpController.expectOne('/api/messages').flush([]);
-    });
+  describe('refreshToken()', () => {
+    describe('when the server responds with a new token', () => {
+      it('should POST to /api/auth/refresh', () => {
+        service.refreshToken().subscribe();
 
-    it('should remove queueti_auth from sessionStorage', () => {
-      service.logout();
-      expect(sessionStorage.getItem('queueti_auth')).toBeNull();
-    });
-
-    it('should set credentials signal to null', () => {
-      service.logout();
-      expect(service.isAuthenticated()).toBe(false);
-    });
-  });
-
-  describe('getAuthHeader()', () => {
-    describe('when not authenticated', () => {
-      it('should return null', () => {
-        expect(service.getAuthHeader()).toBeNull();
+        const req = httpController.expectOne('/api/auth/refresh');
+        expect(req.request.method).toBe('POST');
+        req.flush({ token: makeJwt({ sub: 'admin', adm: true }) });
       });
-    });
 
-    describe('when authenticated', () => {
-      it('should return "Basic <token>"', () => {
-        service.login('user', 'pass').subscribe();
-        const token = btoa('user:pass');
-        httpController.expectOne('/api/messages').flush([]);
+      it('should update the stored token in sessionStorage', () => {
+        const newJwt = makeJwt({ sub: 'admin', adm: true });
+        service.refreshToken().subscribe();
+        httpController.expectOne('/api/auth/refresh').flush({ token: newJwt });
 
-        expect(service.getAuthHeader()).toBe(`Basic ${token}`);
+        expect(sessionStorage.getItem('queueti_jwt')).toBe(newJwt);
+      });
+
+      it('should update the token signal so isAuthenticated remains true', () => {
+        const newJwt = makeJwt({ sub: 'admin', adm: true });
+        service.refreshToken().subscribe();
+        httpController.expectOne('/api/auth/refresh').flush({ token: newJwt });
+
+        expect(service.isAuthenticated()).toBe(true);
       });
     });
   });

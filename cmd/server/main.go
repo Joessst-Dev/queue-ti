@@ -20,6 +20,7 @@ import (
 	"github.com/Joessst-Dev/queue-ti/internal/metrics"
 	"github.com/Joessst-Dev/queue-ti/internal/queue"
 	"github.com/Joessst-Dev/queue-ti/internal/server"
+	"github.com/Joessst-Dev/queue-ti/internal/users"
 	pb "github.com/Joessst-Dev/queue-ti/pb"
 )
 
@@ -66,6 +67,18 @@ func main() {
 	}
 	slog.Info("database migrations applied")
 
+	userStore := users.NewStore(pool)
+	if cfg.Auth.Enabled {
+		if cfg.Auth.JWTSecret == "" {
+			slog.Error("auth.enabled is true but auth.jwt_secret is not set")
+			os.Exit(1)
+		}
+		if err := users.SeedAdminUser(ctx, userStore, cfg.Auth.Username, cfg.Auth.Password); err != nil {
+			slog.Error("failed to seed admin user", "error", err)
+			os.Exit(1)
+		}
+	}
+
 	if cfg.Queue.DLQThreshold > cfg.Queue.MaxRetries {
 		slog.Warn("dlq_threshold exceeds max_retries: messages will be DLQ-promoted before exhausting all retries",
 			"dlq_threshold", cfg.Queue.DLQThreshold,
@@ -103,7 +116,7 @@ func main() {
 		}
 	}()
 
-	httpServer := server.NewHTTPServer(queueService, cfg.Auth, reg)
+	httpServer := server.NewHTTPServer(queueService, cfg.Auth, reg, userStore)
 	httpAddr := fmt.Sprintf(":%d", cfg.Server.HTTPPort)
 	go func() {
 		slog.Info("HTTP server listening", "addr", httpAddr)
