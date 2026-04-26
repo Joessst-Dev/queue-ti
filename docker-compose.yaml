@@ -32,6 +32,7 @@ services:
       QUEUETI_AUTH_ENABLED: "true"
       QUEUETI_AUTH_USERNAME: "admin"
       QUEUETI_AUTH_PASSWORD: "secret"
+      QUEUETI_LOG_LEVEL: debug
     healthcheck:
       test: ["CMD", "/healthcheck"]
       interval: 5s

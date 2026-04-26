@@ -3,7 +3,9 @@ package server
 import (
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -34,6 +36,19 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig) *HTTPServer {
 		AllowHeaders: "Content-Type,Authorization",
 	}))
 
+	app.Use(func(c *fiber.Ctx) error {
+		start := time.Now()
+		err := c.Next()
+		slog.Debug("http request",
+			"method", c.Method(),
+			"path", c.Path(),
+			"status", c.Response().StatusCode(),
+			"duration_ms", time.Since(start).Milliseconds(),
+			"ip", c.IP(),
+		)
+		return err
+	})
+
 	app.Get("/healthz", func(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	})
@@ -58,20 +73,24 @@ func (s *HTTPServer) withAuth() fiber.Handler {
 
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
+			slog.Warn("auth failure: missing authorization header", "ip", c.IP(), "path", c.Path())
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing authorization header"})
 		}
 
 		if !strings.HasPrefix(authHeader, "Basic ") {
+			slog.Warn("auth failure: unsupported auth scheme", "ip", c.IP(), "path", c.Path())
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unsupported auth scheme"})
 		}
 
 		decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHeader, "Basic "))
 		if err != nil {
+			slog.Warn("auth failure: invalid authorization format", "ip", c.IP(), "path", c.Path())
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid authorization format"})
 		}
 
 		parts := strings.SplitN(string(decoded), ":", 2)
 		if len(parts) != 2 || parts[0] != s.authConfig.Username || parts[1] != s.authConfig.Password {
+			slog.Warn("auth failure: invalid credentials", "ip", c.IP(), "path", c.Path())
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid credentials"})
 		}
 
@@ -113,6 +132,7 @@ func (s *HTTPServer) listMessages(c *fiber.Ctx) error {
 
 	messages, err := s.queueService.List(c.Context(), topic)
 	if err != nil {
+		slog.Error("list messages failed", "topic", topic, "error", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
@@ -156,6 +176,7 @@ func (s *HTTPServer) enqueueMessage(c *fiber.Ctx) error {
 
 	id, err := s.queueService.Enqueue(c.Context(), req.Topic, []byte(req.Payload), req.Metadata)
 	if err != nil {
+		slog.Error("enqueue failed", "topic", req.Topic, "error", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
@@ -173,6 +194,7 @@ func (s *HTTPServer) nackMessage(c *fiber.Ctx) error {
 		if errors.Is(err, queue.ErrNotFound) || errors.Is(err, queue.ErrNotProcessing) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 		}
+		slog.Error("nack failed", "id", id, "error", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
@@ -186,6 +208,7 @@ func (s *HTTPServer) requeueMessage(c *fiber.Ctx) error {
 		if errors.Is(err, queue.ErrNotFound) || errors.Is(err, queue.ErrNotDLQ) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 		}
+		slog.Error("requeue failed", "id", id, "error", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 

@@ -9,10 +9,11 @@ import (
 )
 
 type Config struct {
-	Server ServerConfig
-	DB     DBConfig
-	Queue  QueueConfig
-	Auth   AuthConfig
+	Server   ServerConfig
+	DB       DBConfig
+	Queue    QueueConfig
+	Auth     AuthConfig
+	LogLevel string `mapstructure:"log_level"`
 }
 
 type ServerConfig struct {
@@ -67,6 +68,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("auth.enabled", false)
 	viper.SetDefault("auth.username", "")
 	viper.SetDefault("auth.password", "")
+	viper.SetDefault("log_level", "info")
 
 	// Explicitly bind environment variables to config keys
 	_ = viper.BindEnv("server.port")
@@ -84,6 +86,7 @@ func Load() (*Config, error) {
 	_ = viper.BindEnv("auth.enabled")
 	_ = viper.BindEnv("auth.username")
 	_ = viper.BindEnv("auth.password")
+	_ = viper.BindEnv("log_level")
 
 	if err := viper.ReadInConfig(); err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError

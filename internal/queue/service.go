@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -82,6 +83,7 @@ func (s *Service) Enqueue(ctx context.Context, topic string, payload []byte, met
 		return "", fmt.Errorf("enqueue: %w", err)
 	}
 
+	slog.Debug("message enqueued", "id", id, "topic", topic)
 	return id, nil
 }
 
@@ -136,6 +138,7 @@ func (s *Service) Dequeue(ctx context.Context, topic string) (*Message, error) {
 		}
 	}
 
+	slog.Debug("message dequeued", "id", msg.ID, "topic", msg.Topic, "retry_count", msg.RetryCount)
 	return &msg, nil
 }
 
@@ -148,6 +151,7 @@ func (s *Service) Ack(ctx context.Context, id string) error {
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("ack: message not found or not in processing state")
 	}
+	slog.Debug("message acked", "id", id)
 	return nil
 }
 
@@ -207,7 +211,17 @@ func (s *Service) Nack(ctx context.Context, id string, processingError string) e
 		if err != nil {
 			return fmt.Errorf("nack dlq promotion: %w", err)
 		}
-		return tx.Commit(ctx)
+		if err := tx.Commit(ctx); err != nil {
+			return err
+		}
+		slog.Warn("message promoted to DLQ",
+			"id", id,
+			"original_topic", topic,
+			"dlq_topic", dlqTopic,
+			"retry_count", nextRetryCount,
+			"error", processingError,
+		)
+		return nil
 	}
 
 	// Standard retry / fail path.
@@ -231,7 +245,26 @@ func (s *Service) Nack(ctx context.Context, id string, processingError string) e
 		return fmt.Errorf("nack update: %w", err)
 	}
 
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	if newStatus == "failed" {
+		slog.Info("message failed: retries exhausted",
+			"id", id,
+			"topic", topic,
+			"retry_count", nextRetryCount,
+			"max_retries", maxRetries,
+		)
+	} else {
+		slog.Debug("message nacked, will retry",
+			"id", id,
+			"topic", topic,
+			"retry_count", nextRetryCount,
+			"max_retries", maxRetries,
+		)
+	}
+	return nil
 }
 
 // Requeue moves a dead-letter message back to its original topic so it can be
@@ -274,7 +307,12 @@ func (s *Service) Requeue(ctx context.Context, id string) error {
 		return fmt.Errorf("requeue update: %w", err)
 	}
 
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	slog.Info("message requeued from DLQ", "id", id, "original_topic", *originalTopic)
+	return nil
 }
 
 // List returns all messages, optionally filtered by topic.
@@ -339,7 +377,7 @@ func (s *Service) StartExpiryReaper(ctx context.Context, interval time.Duration)
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				_, _ = s.pool.Exec(ctx, `
+				tag, err := s.pool.Exec(ctx, `
 					UPDATE messages
 					SET    status     = 'expired',
 					       updated_at = now()
@@ -347,6 +385,13 @@ func (s *Service) StartExpiryReaper(ctx context.Context, interval time.Duration)
 					  AND  expires_at < now()
 					  AND  status IN ('pending', 'processing')
 				`)
+				if err != nil {
+					slog.Error("expiry reaper failed", "error", err)
+					continue
+				}
+				if n := tag.RowsAffected(); n > 0 {
+					slog.Info("expiry reaper expired messages", "count", n)
+				}
 			}
 		}
 	}()

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -31,9 +32,11 @@ func (s *GRPCServer) Enqueue(ctx context.Context, req *pb.EnqueueRequest) (*pb.E
 
 	id, err := s.queueService.Enqueue(ctx, req.Topic, req.Payload, req.Metadata)
 	if err != nil {
+		slog.Error("grpc enqueue failed", "topic", req.Topic, "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to enqueue: %v", err)
 	}
 
+	slog.Debug("grpc enqueue", "topic", req.Topic, "id", id)
 	return &pb.EnqueueResponse{Id: id}, nil
 }
 
@@ -45,10 +48,13 @@ func (s *GRPCServer) Dequeue(ctx context.Context, req *pb.DequeueRequest) (*pb.D
 	msg, err := s.queueService.Dequeue(ctx, req.Topic)
 	if err != nil {
 		if errors.Is(err, queue.ErrNoMessage) {
+			slog.Debug("grpc dequeue: no messages", "topic", req.Topic)
 			return nil, status.Error(codes.NotFound, "no messages available")
 		}
+		slog.Error("grpc dequeue failed", "topic", req.Topic, "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to dequeue: %v", err)
 	}
+	slog.Debug("grpc dequeue", "topic", req.Topic, "id", msg.ID)
 
 	return &pb.DequeueResponse{
 		Id:         msg.ID,
@@ -67,9 +73,11 @@ func (s *GRPCServer) Ack(ctx context.Context, req *pb.AckRequest) (*pb.AckRespon
 	}
 
 	if err := s.queueService.Ack(ctx, req.Id); err != nil {
+		slog.Error("grpc ack failed", "id", req.Id, "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to ack: %v", err)
 	}
 
+	slog.Debug("grpc ack", "id", req.Id)
 	return &pb.AckResponse{}, nil
 }
 
@@ -82,8 +90,10 @@ func (s *GRPCServer) Nack(ctx context.Context, req *pb.NackRequest) (*pb.NackRes
 		if errors.Is(err, queue.ErrNotFound) || errors.Is(err, queue.ErrNotProcessing) {
 			return nil, status.Errorf(codes.NotFound, "message not found or not in processing state: %v", err)
 		}
+		slog.Error("grpc nack failed", "id", req.Id, "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to nack: %v", err)
 	}
 
+	slog.Debug("grpc nack", "id", req.Id)
 	return &pb.NackResponse{}, nil
 }
