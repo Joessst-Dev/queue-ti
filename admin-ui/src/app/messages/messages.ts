@@ -170,6 +170,16 @@ interface MetadataRowModel {
                   <th
                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
                   >
+                    Retries
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                  >
+                    Expires
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                  >
                     Metadata
                   </th>
                   <th
@@ -177,18 +187,28 @@ interface MetadataRowModel {
                   >
                     Created
                   </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                  >
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-200">
                 @for (msg of messages(); track msg.id) {
-                  <tr class="hover:bg-gray-50">
+                  <tr [class]="rowClasses(msg)">
                     <td class="px-6 py-4 text-sm font-mono text-gray-600">
                       <span [title]="msg.id"
                         >{{ msg.id | slice: 0 : 8 }}&hellip;</span
                       >
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-900">
-                      {{ msg.topic }}
+                      <div>{{ msg.topic }}</div>
+                      @if (msg.original_topic) {
+                        <div class="text-xs text-gray-400 mt-0.5">
+                          from: {{ msg.original_topic }}
+                        </div>
+                      }
                     </td>
                     <td
                       class="px-6 py-4 text-sm text-gray-600 max-w-xs truncate font-mono"
@@ -202,6 +222,21 @@ interface MetadataRowModel {
                       >
                         {{ msg.status }}
                       </span>
+                    </td>
+                    <td class="px-6 py-4 text-sm">
+                      <span
+                        [title]="msg.last_error || ''"
+                        [class]="retriesExhausted(msg) ? 'text-red-600 font-medium' : 'text-gray-500'"
+                      >
+                        {{ msg.retry_count }} / {{ msg.max_retries }}
+                      </span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
+                      @if (msg.expires_at) {
+                        {{ msg.expires_at | date: 'short' }}
+                      } @else {
+                        <span class="text-gray-400">&mdash;</span>
+                      }
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">
                       @if (
@@ -223,11 +258,52 @@ interface MetadataRowModel {
                     >
                       {{ msg.created_at | date: 'short' }}
                     </td>
+                    <td class="px-6 py-4 text-sm whitespace-nowrap">
+                      @if (isDlq(msg)) {
+                        <button
+                          (click)="onRequeue(msg.id)"
+                          class="px-3 py-1 text-xs font-medium bg-amber-100 text-amber-800 rounded hover:bg-amber-200 cursor-pointer"
+                        >
+                          Requeue
+                        </button>
+                      } @else if (msg.status === 'processing') {
+                        @if (nackOpenId() === msg.id) {
+                          <div class="flex items-center gap-1">
+                            <input
+                              type="text"
+                              [value]="nackError()"
+                              (input)="nackError.set($any($event.target).value)"
+                              placeholder="Error reason (optional)"
+                              class="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-red-400 w-40"
+                            />
+                            <button
+                              (click)="onNackConfirm(msg.id)"
+                              class="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              (click)="nackOpenId.set(null)"
+                              class="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        } @else {
+                          <button
+                            (click)="nackOpenId.set(msg.id); nackError.set('')"
+                            class="px-3 py-1 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer"
+                          >
+                            Nack
+                          </button>
+                        }
+                      }
+                    </td>
                   </tr>
                 } @empty {
                   <tr>
                     <td
-                      colspan="7"
+                      colspan="9"
                       class="px-6 py-12 text-center text-sm text-gray-500"
                     >
                       @if (loadingMessages()) {
@@ -430,7 +506,12 @@ export class Messages {
 
   ackEnabled = signal(false);
 
+  nackOpenId = signal<string | null>(null);
+  nackError = signal('');
+
   private refreshTrigger$ = new Subject<string | undefined>();
+  private requeueTrigger$ = new Subject<string>();
+  private nackTrigger$ = new Subject<{ id: string; error: string }>();
 
   private messagesState = toSignal(
     this.refreshTrigger$.pipe(
@@ -505,6 +586,42 @@ export class Messages {
   enqueueError = computed(() => this.enqueueState().error);
   enqueueLoading = computed(() => this.enqueueState().loading);
 
+  private requeueState = toSignal(
+    this.requeueTrigger$.pipe(
+      switchMap((id) =>
+        this.queue.requeueMessage(id).pipe(
+          tap(() => this.loadMessages()),
+          map(() => ({ loading: false, error: '' })),
+          catchError((err) =>
+            of({ loading: false, error: err.error?.error || 'Failed to requeue' }),
+          ),
+          startWith({ loading: true, error: '' }),
+        ),
+      ),
+    ),
+    { initialValue: { loading: false, error: '' } },
+  );
+
+  private nackState = toSignal(
+    this.nackTrigger$.pipe(
+      switchMap(({ id, error }) =>
+        this.queue.nackMessage(id, error).pipe(
+          tap(() => {
+            this.nackOpenId.set(null);
+            this.nackError.set('');
+            this.loadMessages();
+          }),
+          map(() => ({ loading: false, error: '' })),
+          catchError((err) =>
+            of({ loading: false, error: err.error?.error || 'Failed to nack' }),
+          ),
+          startWith({ loading: true, error: '' }),
+        ),
+      ),
+    ),
+    { initialValue: { loading: false, error: '' } },
+  );
+
   private filterModel = signal('');
   filterForm = form(this.filterModel);
 
@@ -525,7 +642,31 @@ export class Messages {
     const base = 'inline-flex px-2 py-0.5 text-xs font-medium rounded-full';
     if (status === 'pending') return `${base} bg-yellow-100 text-yellow-800`;
     if (status === 'processing') return `${base} bg-blue-100 text-blue-800`;
+    if (status === 'failed') return `${base} bg-red-100 text-red-800`;
+    if (status === 'expired') return `${base} bg-orange-100 text-orange-800`;
     return `${base} bg-gray-100 text-gray-800`;
+  }
+
+  isDlq(msg: QueueMessage): boolean {
+    return msg.topic.endsWith('.dlq');
+  }
+
+  retriesExhausted(msg: QueueMessage): boolean {
+    return msg.retry_count >= msg.max_retries && msg.max_retries > 0;
+  }
+
+  rowClasses(msg: QueueMessage): string {
+    const base = 'hover:bg-gray-50';
+    if (this.isDlq(msg)) return `${base} bg-amber-50`;
+    return base;
+  }
+
+  onRequeue(id: string) {
+    this.requeueTrigger$.next(id);
+  }
+
+  onNackConfirm(id: string) {
+    this.nackTrigger$.next({ id, error: this.nackError() });
   }
 
   loadMessages() {
