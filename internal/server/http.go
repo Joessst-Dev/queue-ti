@@ -70,6 +70,7 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer promet
 	api.Post("/messages", s.withAuth(), s.enqueueMessage)
 	api.Post("/messages/:id/nack", s.withAuth(), s.nackMessage)
 	api.Post("/messages/:id/requeue", s.withAuth(), s.requeueMessage)
+	api.Get("/stats", s.withAuth(), s.statsHandler)
 
 	s.App = app
 	return s
@@ -234,6 +235,29 @@ func (s *HTTPServer) nackMessage(c *fiber.Ctx) error {
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+type topicStatResponse struct {
+	Topic  string `json:"topic"`
+	Status string `json:"status"`
+	Count  int    `json:"count"`
+}
+
+type statsResponse struct {
+	Topics []topicStatResponse `json:"topics"`
+}
+
+func (s *HTTPServer) statsHandler(c *fiber.Ctx) error {
+	stats, err := s.queueService.Stats(c.Context())
+	if err != nil {
+		slog.Error("stats failed", "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	items := make([]topicStatResponse, len(stats))
+	for i, st := range stats {
+		items[i] = topicStatResponse{Topic: st.Topic, Status: st.Status, Count: st.Count}
+	}
+	return c.JSON(statsResponse{Topics: items})
 }
 
 func (s *HTTPServer) requeueMessage(c *fiber.Ctx) error {

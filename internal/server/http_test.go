@@ -773,6 +773,107 @@ var _ = Describe("HTTP Server", func() {
 		})
 	})
 
+	// ---------------------------------------------------------------------------
+	// GET /api/stats
+	// ---------------------------------------------------------------------------
+
+	Describe("GET /api/stats", func() {
+		var httpServer *server.HTTPServer
+
+		BeforeEach(func() {
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+		})
+
+		Context("with no messages", func() {
+			It("should return status 200 with an empty topics array", func() {
+				req := httptest.NewRequest("GET", "/api/stats", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var body map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&body)).To(Succeed())
+				topics, ok := body["topics"].([]any)
+				Expect(ok).To(BeTrue())
+				Expect(topics).To(BeEmpty())
+			})
+		})
+
+		Context("with messages across two topics", func() {
+			BeforeEach(func() {
+				// Enqueue 2 pending on "orders"
+				_, err := queueService.Enqueue(httpTestCtx, "orders", []byte("order-1"), nil)
+				Expect(err).NotTo(HaveOccurred())
+				_, err = queueService.Enqueue(httpTestCtx, "orders", []byte("order-2"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Dequeue 1 from "orders" to put it into processing state
+				_, err = queueService.Dequeue(httpTestCtx, "orders")
+				Expect(err).NotTo(HaveOccurred())
+
+				// Enqueue 1 pending on "payments"
+				_, err = queueService.Enqueue(httpTestCtx, "payments", []byte("payment-1"), nil)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the correct count entries for each topic/status pair", func() {
+				req := httptest.NewRequest("GET", "/api/stats", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var body map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&body)).To(Succeed())
+
+				topics, ok := body["topics"].([]any)
+				Expect(ok).To(BeTrue())
+				Expect(topics).To(HaveLen(3))
+
+				toStatMap := func(v any) map[string]any {
+					m, _ := v.(map[string]any)
+					return m
+				}
+
+				Expect(topics).To(ContainElements(
+					WithTransform(toStatMap, And(
+						HaveKeyWithValue("topic", "orders"),
+						HaveKeyWithValue("status", "pending"),
+						HaveKeyWithValue("count", float64(1)),
+					)),
+					WithTransform(toStatMap, And(
+						HaveKeyWithValue("topic", "orders"),
+						HaveKeyWithValue("status", "processing"),
+						HaveKeyWithValue("count", float64(1)),
+					)),
+					WithTransform(toStatMap, And(
+						HaveKeyWithValue("topic", "payments"),
+						HaveKeyWithValue("status", "pending"),
+						HaveKeyWithValue("count", float64(1)),
+					)),
+				))
+			})
+		})
+
+		Context("when auth is enabled and no Authorization header is sent", func() {
+			It("should return 401", func() {
+				authServer := server.NewHTTPServer(queueService, config.AuthConfig{
+					Enabled:  true,
+					Username: "admin",
+					Password: "secret",
+				}, prometheus.NewRegistry())
+
+				req := httptest.NewRequest("GET", "/api/stats", nil)
+				resp, err := authServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(401))
+				Expect(decodeErrorBody(resp.Body)).To(Equal("missing authorization header"))
+			})
+		})
+	})
+
 })
 
 func basicAuthHeader(username, password string) string {

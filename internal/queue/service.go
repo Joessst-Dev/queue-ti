@@ -392,6 +392,35 @@ func (s *Service) List(ctx context.Context, topic string, limit, offset int) ([]
 	return messages, total, nil
 }
 
+// TopicStat holds the message count for a single (topic, status) pair.
+type TopicStat struct {
+	Topic  string
+	Status string
+	Count  int
+}
+
+// Stats returns the message count grouped by topic and status, ordered by
+// topic ASC, status ASC. It returns an empty (non-nil) slice when no messages
+// exist.
+func (s *Service) Stats(ctx context.Context) ([]TopicStat, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT topic, status, COUNT(*) FROM messages GROUP BY topic, status ORDER BY topic, status`)
+	if err != nil {
+		return nil, fmt.Errorf("stats: %w", err)
+	}
+	defer rows.Close()
+
+	stats := []TopicStat{}
+	for rows.Next() {
+		var ts TopicStat
+		if err := rows.Scan(&ts.Topic, &ts.Status, &ts.Count); err != nil {
+			return nil, fmt.Errorf("stats scan: %w", err)
+		}
+		stats = append(stats, ts)
+	}
+	return stats, nil
+}
+
 // StartExpiryReaper launches a background goroutine that periodically marks
 // expired messages (expires_at < now()) as 'expired'. It runs until ctx is
 // cancelled. The first tick fires immediately (after interval).

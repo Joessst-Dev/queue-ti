@@ -23,6 +23,16 @@ export interface EnqueueRequest {
   metadata: Record<string, string>;
 }
 
+export interface TopicStat {
+  topic: string;
+  status: string;
+  count: number;
+}
+
+export interface StatsResponse {
+  topics: TopicStat[];
+}
+
 export interface PagedMessages {
   items: QueueMessage[];
   total: number;
@@ -54,5 +64,9 @@ export class QueueService {
 
   requeueMessage(id: string) {
     return this.http.post<void>(`/api/messages/${id}/requeue`, {});
+  }
+
+  getStats(): Observable<StatsResponse> {
+    return this.http.get<StatsResponse>('/api/stats');
   }
 }

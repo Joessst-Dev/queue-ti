@@ -1,3 +1,20 @@
+import { vi } from 'vitest';
+
+vi.mock('chart.js', () => ({
+  Chart: class {
+    static register() {}
+    constructor() {}
+    update() {}
+    destroy() {}
+  },
+  BarController: {},
+  BarElement: {},
+  CategoryScale: {},
+  LinearScale: {},
+  Tooltip: {},
+  Legend: {},
+}));
+
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
@@ -7,7 +24,7 @@ import { of, throwError } from 'rxjs';
 import { CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Messages } from './messages';
 import { AuthService } from '../services/auth.service';
-import { QueueService, QueueMessage } from '../services/queue.service';
+import { QueueService, QueueMessage, StatsResponse } from '../services/queue.service';
 
 const makeMessage = (overrides: Partial<QueueMessage> = {}): QueueMessage => ({
   id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
@@ -31,6 +48,8 @@ const makeAuthService = (authenticated = false) =>
     logout: vi.fn(),
     getAuthHeader: () => null,
   }) as unknown as AuthService;
+
+const emptyStats: StatsResponse = { topics: [] };
 
 const makeQueueService = (opts: {
   listResult: QueueMessage[] | 'error';
@@ -64,6 +83,7 @@ const makeQueueService = (opts: {
         ? throwError(() => ({ error: { error: 'Failed to requeue' } }))
         : of(undefined),
     ),
+    getStats: vi.fn().mockReturnValue(of(emptyStats)),
   }) as unknown as QueueService;
 
 const setup = async (opts: {
@@ -178,12 +198,17 @@ describe('Messages', () => {
   describe('on enqueue success', () => {
     it('should show a success banner with the returned ID', async () => {
       const { fixture } = await setup();
-
       const el: HTMLElement = fixture.nativeElement;
-      // The enqueue form is the last form on the page
-      const forms = el.querySelectorAll('form');
-      const enqueueForm = forms[forms.length - 1];
-      enqueueForm.dispatchEvent(new Event('submit'));
+
+      // Switch to the Enqueue tab first
+      const enqueueTab = Array.from(el.querySelectorAll('nav button')).find((b) =>
+        b.textContent?.trim() === 'Enqueue',
+      ) as HTMLButtonElement;
+      enqueueTab.click();
+      fixture.detectChanges();
+
+      const form = el.querySelector('form') as HTMLFormElement;
+      form.dispatchEvent(new Event('submit'));
       await fixture.whenStable();
       fixture.detectChanges();
 
@@ -194,11 +219,16 @@ describe('Messages', () => {
   describe('on enqueue error', () => {
     it('should show an error banner', async () => {
       const { fixture } = await setup({ enqueueError: true });
-
       const el: HTMLElement = fixture.nativeElement;
-      const forms = el.querySelectorAll('form');
-      const enqueueForm = forms[forms.length - 1];
-      enqueueForm.dispatchEvent(new Event('submit'));
+
+      const enqueueTab = Array.from(el.querySelectorAll('nav button')).find((b) =>
+        b.textContent?.trim() === 'Enqueue',
+      ) as HTMLButtonElement;
+      enqueueTab.click();
+      fixture.detectChanges();
+
+      const form = el.querySelector('form') as HTMLFormElement;
+      form.dispatchEvent(new Event('submit'));
       await fixture.whenStable();
       fixture.detectChanges();
 

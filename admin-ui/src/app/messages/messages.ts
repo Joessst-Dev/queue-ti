@@ -12,6 +12,7 @@ import {
 import { MessagesHeader } from './messages-header';
 import { MessagesTable } from './messages-table';
 import { EnqueueSection } from './enqueue-section';
+import { QueueStatsChart } from './queue-stats-chart';
 
 interface EnqueueState {
   id: string;
@@ -21,27 +22,53 @@ interface EnqueueState {
 
 @Component({
   selector: 'app-messages',
-  imports: [MessagesHeader, MessagesTable, EnqueueSection],
+  imports: [MessagesHeader, MessagesTable, EnqueueSection, QueueStatsChart],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="min-h-screen bg-gray-50">
       <app-messages-header [isAuthenticated]="auth.isAuthenticated()" (signOut)="onLogout()" />
-      <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        <app-messages-table
-          [messages]="allMessages()"
-          [loading]="loadingMessages()"
-          [error]="messagesError()"
-          (topicSearch)="onTopicSearch($event)"
-          (scrollIndexChange)="onScrollIndexChange($event)"
-          (requeue)="onRequeue($event)"
-          (nackConfirm)="onNackConfirm($event)"
-        />
-        <app-enqueue-section
-          [success]="enqueueSuccess()"
-          [error]="enqueueError()"
-          [loading]="enqueueLoading()"
-          (enqueue)="onEnqueueRequest($event)"
-        />
+
+      <div class="bg-white border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav class="-mb-px flex gap-6" aria-label="Main navigation">
+            @for (tab of tabs; track tab.id) {
+              <button
+                (click)="activeTab.set(tab.id)"
+                [class]="activeTab() === tab.id
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                class="border-b-2 py-3 px-1 text-sm font-medium whitespace-nowrap cursor-pointer transition-colors"
+              >
+                {{ tab.label }}
+              </button>
+            }
+          </nav>
+        </div>
+      </div>
+
+      <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        @if (activeTab() === 'messages') {
+          <app-messages-table
+            [messages]="allMessages()"
+            [loading]="loadingMessages()"
+            [error]="messagesError()"
+            (topicSearch)="onTopicSearch($event)"
+            (scrollIndexChange)="onScrollIndexChange($event)"
+            (requeue)="onRequeue($event)"
+            (nackConfirm)="onNackConfirm($event)"
+          />
+        }
+        @if (activeTab() === 'enqueue') {
+          <app-enqueue-section
+            [success]="enqueueSuccess()"
+            [error]="enqueueError()"
+            [loading]="enqueueLoading()"
+            (enqueue)="onEnqueueRequest($event)"
+          />
+        }
+        @if (activeTab() === 'stats') {
+          <app-queue-stats-chart />
+        }
       </main>
     </div>
   `,
@@ -50,6 +77,13 @@ export class Messages {
   protected readonly auth = inject(AuthService);
   private readonly queue = inject(QueueService);
   private readonly router = inject(Router);
+
+  readonly activeTab = signal<'messages' | 'enqueue' | 'stats'>('messages');
+  readonly tabs = [
+    { id: 'messages' as const, label: 'Messages' },
+    { id: 'enqueue' as const, label: 'Enqueue' },
+    { id: 'stats'    as const, label: 'Stats'    },
+  ];
 
   private readonly requeueTrigger$ = new Subject<string>();
   private readonly nackTrigger$ = new Subject<{ id: string; error: string }>();

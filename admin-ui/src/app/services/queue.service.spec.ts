@@ -4,7 +4,7 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { QueueService, QueueMessage, PagedMessages, EnqueueRequest } from './queue.service';
+import { QueueService, QueueMessage, PagedMessages, EnqueueRequest, StatsResponse } from './queue.service';
 
 const makeMessage = (overrides: Partial<QueueMessage> = {}): QueueMessage => ({
   id: 'msg-1',
@@ -148,6 +148,32 @@ describe('QueueService', () => {
         expect(req.request.body).toEqual({});
         req.flush(null);
       });
+    });
+  });
+
+  describe('getStats()', () => {
+    it('should make GET /api/stats', () => {
+      service.getStats().subscribe();
+
+      const req = httpController.expectOne('/api/stats');
+      expect(req.request.method).toBe('GET');
+      req.flush({ topics: [] });
+    });
+
+    it('should return the response from the server', () => {
+      const response: StatsResponse = {
+        topics: [
+          { topic: 'orders', status: 'pending', count: 42 },
+          { topic: 'orders', status: 'processing', count: 3 },
+          { topic: 'orders.dlq', status: 'pending', count: 1 },
+        ],
+      };
+      let result: StatsResponse | undefined;
+
+      service.getStats().subscribe((v) => (result = v));
+      httpController.expectOne('/api/stats').flush(response);
+
+      expect(result).toEqual(response);
     });
   });
 });
