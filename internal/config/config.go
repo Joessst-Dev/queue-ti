@@ -33,6 +33,7 @@ type QueueConfig struct {
 	VisibilityTimeout time.Duration `mapstructure:"visibility_timeout"`
 	MaxRetries        int           `mapstructure:"max_retries"`
 	MessageTTL        time.Duration `mapstructure:"message_ttl"`
+	DLQThreshold      int           `mapstructure:"dlq_threshold"`
 }
 
 type AuthConfig struct {
@@ -62,6 +63,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("queue.visibility_timeout", "30s")
 	viper.SetDefault("queue.max_retries", 3)
 	viper.SetDefault("queue.message_ttl", "24h")
+	viper.SetDefault("queue.dlq_threshold", 3)
 	viper.SetDefault("auth.enabled", false)
 	viper.SetDefault("auth.username", "")
 	viper.SetDefault("auth.password", "")
@@ -78,6 +80,7 @@ func Load() (*Config, error) {
 	_ = viper.BindEnv("queue.visibility_timeout")
 	_ = viper.BindEnv("queue.max_retries")
 	_ = viper.BindEnv("queue.message_ttl")
+	_ = viper.BindEnv("queue.dlq_threshold")
 	_ = viper.BindEnv("auth.enabled")
 	_ = viper.BindEnv("auth.username")
 	_ = viper.BindEnv("auth.password")

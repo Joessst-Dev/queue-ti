@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -12,22 +13,26 @@ import (
 )
 
 var (
-	ErrNoMessage    = errors.New("no message available")
-	ErrNotFound     = errors.New("message not found")
+	ErrNoMessage     = errors.New("no message available")
+	ErrNotFound      = errors.New("message not found")
 	ErrNotProcessing = errors.New("message is not in processing state")
+	ErrNotDLQ        = errors.New("message is not a dead-letter message")
+	ErrReservedTopic = errors.New("topic name is reserved: topics may not end with .dlq")
 )
 
 type Message struct {
-	ID         string
-	Topic      string
-	Payload    []byte
-	Metadata   map[string]string
-	Status     string
-	RetryCount int
-	MaxRetries int
-	LastError  string
-	ExpiresAt  *time.Time
-	CreatedAt  time.Time
+	ID            string
+	Topic         string
+	Payload       []byte
+	Metadata      map[string]string
+	Status        string
+	RetryCount    int
+	MaxRetries    int
+	LastError     string
+	ExpiresAt     *time.Time
+	CreatedAt     time.Time
+	OriginalTopic string
+	DLQMovedAt    *time.Time
 }
 
 type Service struct {
@@ -35,18 +40,26 @@ type Service struct {
 	visibilityTimeout time.Duration
 	maxRetries        int
 	messageTTL        time.Duration
+	dlqThreshold      int
 }
 
-func NewService(pool *pgxpool.Pool, visibilityTimeout time.Duration, maxRetries int, messageTTL time.Duration) *Service {
+func NewService(pool *pgxpool.Pool, visibilityTimeout time.Duration, maxRetries int, messageTTL time.Duration, dlqThreshold int) *Service {
 	return &Service{
 		pool:              pool,
 		visibilityTimeout: visibilityTimeout,
 		maxRetries:        maxRetries,
 		messageTTL:        messageTTL,
+		dlqThreshold:      dlqThreshold,
 	}
 }
 
+// Enqueue inserts a new message onto the given topic. Topics ending in ".dlq"
+// are reserved for the dead-letter mechanism and are rejected with ErrReservedTopic.
 func (s *Service) Enqueue(ctx context.Context, topic string, payload []byte, metadata map[string]string) (string, error) {
+	if strings.HasSuffix(topic, ".dlq") {
+		return "", fmt.Errorf("enqueue: %w", ErrReservedTopic)
+	}
+
 	metaJSON, err := json.Marshal(metadata)
 	if err != nil {
 		return "", fmt.Errorf("marshal metadata: %w", err)
@@ -84,12 +97,13 @@ func (s *Service) Dequeue(ctx context.Context, topic string) (*Message, error) {
 			  AND status = 'pending'
 			  AND (visibility_timeout IS NULL OR visibility_timeout < now())
 			  AND (expires_at IS NULL OR expires_at > now())
-			  AND retry_count < max_retries
+			  AND (max_retries = 0 OR retry_count < max_retries)
 			ORDER BY created_at
 			LIMIT 1
 			FOR UPDATE SKIP LOCKED
 		)
-		RETURNING id, topic, payload, metadata, retry_count, max_retries, last_error, expires_at, created_at
+		RETURNING id, topic, payload, metadata, retry_count, max_retries, last_error, expires_at, created_at,
+		          COALESCE(original_topic, ''), dlq_moved_at
 	`
 
 	var msg Message
@@ -98,7 +112,12 @@ func (s *Service) Dequeue(ctx context.Context, topic string) (*Message, error) {
 	err := s.pool.QueryRow(ctx, query,
 		fmt.Sprintf("%d seconds", int(s.visibilityTimeout.Seconds())),
 		topic,
-	).Scan(&msg.ID, &msg.Topic, &msg.Payload, &metaJSON, &msg.RetryCount, &msg.MaxRetries, &lastError, &msg.ExpiresAt, &msg.CreatedAt)
+	).Scan(
+		&msg.ID, &msg.Topic, &msg.Payload, &metaJSON,
+		&msg.RetryCount, &msg.MaxRetries, &lastError,
+		&msg.ExpiresAt, &msg.CreatedAt,
+		&msg.OriginalTopic, &msg.DLQMovedAt,
+	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNoMessage
@@ -132,46 +151,130 @@ func (s *Service) Ack(ctx context.Context, id string) error {
 	return nil
 }
 
-// Nack marks a processing message as failed or retryable. If the message has
-// exhausted its retry allowance (retry_count + 1 >= max_retries) its status
-// becomes 'failed'; otherwise it is reset to 'pending' so it can be dequeued
-// again. In both cases retry_count is incremented and last_error is recorded.
+// Nack marks a processing message as failed or retryable. When retry_count + 1
+// reaches dlqThreshold the message is promoted to the dead-letter topic
+// (<original-topic>.dlq) within the same transaction: its topic is changed,
+// original_topic is recorded, status resets to 'pending', retry_count resets to
+// 0, and max_retries is set to 0 so the DLQ copy cannot be auto-retried.
+//
+// When retry_count + 1 is below dlqThreshold (or dlqThreshold is 0) the
+// existing retry logic applies: status becomes 'pending' if retries remain,
+// 'failed' when max_retries is exhausted.
 func (s *Service) Nack(ctx context.Context, id string, processingError string) error {
-	query := `
-		UPDATE messages
-		SET retry_count        = retry_count + 1,
-		    last_error         = $2,
-		    visibility_timeout = NULL,
-		    updated_at         = now(),
-		    status             = CASE
-		                           WHEN retry_count + 1 < max_retries THEN 'pending'
-		                           ELSE 'failed'
-		                         END
-		WHERE id = $1
-		  AND status = 'processing'
-	`
-
-	result, err := s.pool.Exec(ctx, query, id, processingError)
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("nack: %w", err)
+		return fmt.Errorf("nack begin tx: %w", err)
 	}
+	defer tx.Rollback(ctx) //nolint:errcheck
 
-	if result.RowsAffected() == 0 {
-		// Distinguish between "not found at all" and "wrong state".
-		var exists bool
-		err = s.pool.QueryRow(ctx,
-			`SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1)`, id,
-		).Scan(&exists)
-		if err != nil {
-			return fmt.Errorf("nack existence check: %w", err)
-		}
-		if !exists {
-			return fmt.Errorf("nack: %w", ErrNotFound)
-		}
+	// Fetch the current message state inside the transaction so we can
+	// decide the promotion path atomically.
+	var retryCount, maxRetries int
+	var topic string
+	var currentStatus string
+	err = tx.QueryRow(ctx,
+		`SELECT retry_count, max_retries, topic, status FROM messages WHERE id = $1 FOR UPDATE`,
+		id,
+	).Scan(&retryCount, &maxRetries, &topic, &currentStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("nack: %w", ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("nack fetch: %w", err)
+	}
+	if currentStatus != "processing" {
 		return fmt.Errorf("nack: %w", ErrNotProcessing)
 	}
 
-	return nil
+	nextRetryCount := retryCount + 1
+
+	// Promote to DLQ when the threshold is configured and reached.
+	if s.dlqThreshold > 0 && nextRetryCount >= s.dlqThreshold {
+		dlqTopic := topic + ".dlq"
+		_, err = tx.Exec(ctx, `
+			UPDATE messages
+			SET topic          = $2,
+			    original_topic = $3,
+			    status         = 'pending',
+			    retry_count    = 0,
+			    max_retries    = 0,
+			    last_error     = $4,
+			    dlq_moved_at   = now(),
+			    visibility_timeout = NULL,
+			    updated_at     = now()
+			WHERE id = $1
+		`, id, dlqTopic, topic, processingError)
+		if err != nil {
+			return fmt.Errorf("nack dlq promotion: %w", err)
+		}
+		return tx.Commit(ctx)
+	}
+
+	// Standard retry / fail path.
+	var newStatus string
+	if nextRetryCount < maxRetries {
+		newStatus = "pending"
+	} else {
+		newStatus = "failed"
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE messages
+		SET retry_count        = $2,
+		    last_error         = $3,
+		    visibility_timeout = NULL,
+		    updated_at         = now(),
+		    status             = $4
+		WHERE id = $1
+	`, id, nextRetryCount, processingError, newStatus)
+	if err != nil {
+		return fmt.Errorf("nack update: %w", err)
+	}
+
+	return tx.Commit(ctx)
+}
+
+// Requeue moves a dead-letter message back to its original topic so it can be
+// processed again. It returns ErrNotDLQ when the message has no original_topic
+// set (i.e. it was never promoted to a DLQ).
+func (s *Service) Requeue(ctx context.Context, id string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("requeue begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var originalTopic *string
+	err = tx.QueryRow(ctx,
+		`SELECT original_topic FROM messages WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&originalTopic)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("requeue: %w", ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("requeue fetch: %w", err)
+	}
+	if originalTopic == nil || *originalTopic == "" {
+		return fmt.Errorf("requeue: %w", ErrNotDLQ)
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE messages
+		SET topic          = $2,
+		    original_topic = NULL,
+		    dlq_moved_at   = NULL,
+		    status         = 'pending',
+		    retry_count    = 0,
+		    max_retries    = $3,
+		    visibility_timeout = NULL,
+		    updated_at     = now()
+		WHERE id = $1
+	`, id, *originalTopic, s.dlqThreshold)
+	if err != nil {
+		return fmt.Errorf("requeue update: %w", err)
+	}
+
+	return tx.Commit(ctx)
 }
 
 // List returns all messages, optionally filtered by topic.
@@ -180,11 +283,13 @@ func (s *Service) List(ctx context.Context, topic string) ([]Message, error) {
 	var args []any
 
 	if topic != "" {
-		query = `SELECT id, topic, payload, metadata, status, retry_count, max_retries, last_error, expires_at, created_at
+		query = `SELECT id, topic, payload, metadata, status, retry_count, max_retries, last_error,
+		               expires_at, created_at, COALESCE(original_topic, ''), dlq_moved_at
 		         FROM messages WHERE topic = $1 ORDER BY created_at DESC`
 		args = append(args, topic)
 	} else {
-		query = `SELECT id, topic, payload, metadata, status, retry_count, max_retries, last_error, expires_at, created_at
+		query = `SELECT id, topic, payload, metadata, status, retry_count, max_retries, last_error,
+		               expires_at, created_at, COALESCE(original_topic, ''), dlq_moved_at
 		         FROM messages ORDER BY created_at DESC`
 	}
 
@@ -199,8 +304,12 @@ func (s *Service) List(ctx context.Context, topic string) ([]Message, error) {
 		var msg Message
 		var metaJSON []byte
 		var lastError *string
-		if err := rows.Scan(&msg.ID, &msg.Topic, &msg.Payload, &metaJSON, &msg.Status,
-			&msg.RetryCount, &msg.MaxRetries, &lastError, &msg.ExpiresAt, &msg.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&msg.ID, &msg.Topic, &msg.Payload, &metaJSON, &msg.Status,
+			&msg.RetryCount, &msg.MaxRetries, &lastError,
+			&msg.ExpiresAt, &msg.CreatedAt,
+			&msg.OriginalTopic, &msg.DLQMovedAt,
+		); err != nil {
 			return nil, fmt.Errorf("list scan: %w", err)
 		}
 		if lastError != nil {

@@ -33,7 +33,7 @@ var _ = Describe("Queue Service", func() {
 		_, err = pool.Exec(ctx, "DELETE FROM messages")
 		Expect(err).NotTo(HaveOccurred())
 
-		service = queue.NewService(pool, 30*time.Second, 3, 0)
+		service = queue.NewService(pool, 30*time.Second, 3, 0, 3)
 	})
 
 	AfterEach(func() {
@@ -57,7 +57,7 @@ var _ = Describe("Queue Service", func() {
 
 		Context("Given a service configured with max_retries = 5", func() {
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 5, 0)
+				service = queue.NewService(pool, 30*time.Second, 5, 0, 3)
 			})
 
 			It("should store the message with retry_count = 0 and max_retries = 5", func() {
@@ -76,7 +76,7 @@ var _ = Describe("Queue Service", func() {
 
 		Context("Given a service with a TTL of 1 hour", func() {
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 3, time.Hour)
+				service = queue.NewService(pool, 30*time.Second, 3, time.Hour, 3)
 			})
 
 			It("should set expires_at to approximately now + TTL", func() {
@@ -98,7 +98,7 @@ var _ = Describe("Queue Service", func() {
 
 		Context("Given a service with TTL = 0 (no expiry)", func() {
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 3, 0)
+				service = queue.NewService(pool, 30*time.Second, 3, 0, 3)
 			})
 
 			It("should store the message with expires_at = NULL", func() {
@@ -295,7 +295,7 @@ var _ = Describe("Queue Service", func() {
 			var messageID string
 
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 3, 0)
+				service = queue.NewService(pool, 30*time.Second, 3, 0, 3)
 				var err error
 				messageID, err = service.Enqueue(ctx, "retry-nack-topic", []byte("retry"), nil)
 				Expect(err).NotTo(HaveOccurred())
@@ -326,7 +326,7 @@ var _ = Describe("Queue Service", func() {
 			var messageID string
 
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 1, 0)
+				service = queue.NewService(pool, 30*time.Second, 1, 0, 0)
 				var err error
 				messageID, err = service.Enqueue(ctx, "final-nack-topic", []byte("one-shot"), nil)
 				Expect(err).NotTo(HaveOccurred())
@@ -394,6 +394,195 @@ var _ = Describe("Queue Service", func() {
 
 				// Then the metadata is identical to what was enqueued
 				Expect(msg.Metadata).To(Equal(meta))
+			})
+		})
+	})
+
+	// Tests for the dead-letter queue feature
+	Describe("DLQ", func() {
+
+		// --- Enqueue guard ---
+
+		Describe("Enqueue", func() {
+			Context("when the topic ends with .dlq", func() {
+				It("should return ErrReservedTopic", func() {
+					_, err := service.Enqueue(ctx, "payments.dlq", []byte("payload"), nil)
+
+					Expect(err).To(HaveOccurred())
+					Expect(err).To(MatchError(ContainSubstring(queue.ErrReservedTopic.Error())))
+				})
+			})
+		})
+
+		// --- Nack → DLQ promotion ---
+
+		Describe("Nack", func() {
+			Context("when a service is configured with dlqThreshold = 2 and a message has been nacked enough times to exhaust the threshold", func() {
+				var messageID string
+
+				BeforeEach(func() {
+					// dlqThreshold = 2, maxRetries = 5 so normal retries would
+					// still be available — but DLQ fires first at count 2.
+					service = queue.NewService(pool, 30*time.Second, 5, 0, 2)
+
+					var err error
+					messageID, err = service.Enqueue(ctx, "orders", []byte("process me"), nil)
+					Expect(err).NotTo(HaveOccurred())
+
+					// First nack: retry_count becomes 1, still below threshold (2).
+					_, err = service.Dequeue(ctx, "orders")
+					Expect(err).NotTo(HaveOccurred())
+					err = service.Nack(ctx, messageID, "transient")
+					Expect(err).NotTo(HaveOccurred())
+
+					// Second nack: retry_count becomes 2, equals threshold → DLQ promotion.
+					_, err = service.Dequeue(ctx, "orders")
+					Expect(err).NotTo(HaveOccurred())
+					err = service.Nack(ctx, messageID, "still failing")
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should move the message to <topic>.dlq with status pending and retry_count 0", func() {
+					var topic, status, originalTopic string
+					var retryCount, maxRetries int
+					var dlqMovedAt *time.Time
+
+					err := pool.QueryRow(ctx, `
+						SELECT topic, status, retry_count, max_retries,
+						       COALESCE(original_topic, ''), dlq_moved_at
+						FROM messages WHERE id = $1
+					`, messageID).Scan(&topic, &status, &retryCount, &maxRetries, &originalTopic, &dlqMovedAt)
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(topic).To(Equal("orders.dlq"))
+					Expect(originalTopic).To(Equal("orders"))
+					Expect(status).To(Equal("pending"))
+					Expect(retryCount).To(Equal(0))
+					Expect(maxRetries).To(Equal(0))
+					Expect(dlqMovedAt).NotTo(BeNil())
+				})
+
+				It("should make the message dequeue-able on the DLQ topic", func() {
+					msg, err := service.Dequeue(ctx, "orders.dlq")
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(msg.ID).To(Equal(messageID))
+					Expect(msg.Topic).To(Equal("orders.dlq"))
+					Expect(msg.OriginalTopic).To(Equal("orders"))
+				})
+
+				It("should remove the message from the original topic", func() {
+					_, err := service.Dequeue(ctx, "orders")
+
+					Expect(err).To(Equal(queue.ErrNoMessage))
+				})
+			})
+
+			Context("when retry_count + 1 is still below dlqThreshold", func() {
+				var messageID string
+
+				BeforeEach(func() {
+					// dlqThreshold = 3; after one nack retry_count = 1 < 3, no promotion.
+					service = queue.NewService(pool, 30*time.Second, 5, 0, 3)
+
+					var err error
+					messageID, err = service.Enqueue(ctx, "invoices", []byte("work"), nil)
+					Expect(err).NotTo(HaveOccurred())
+
+					_, err = service.Dequeue(ctx, "invoices")
+					Expect(err).NotTo(HaveOccurred())
+
+					err = service.Nack(ctx, messageID, "one failure")
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should keep the message on the original topic and not promote it to the DLQ", func() {
+					var topic, originalTopic string
+					err := pool.QueryRow(ctx,
+						`SELECT topic, COALESCE(original_topic, '') FROM messages WHERE id = $1`, messageID,
+					).Scan(&topic, &originalTopic)
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(topic).To(Equal("invoices"))
+					Expect(originalTopic).To(BeEmpty())
+				})
+			})
+		})
+
+		// --- Requeue ---
+
+		Describe("Requeue", func() {
+			Context("when a DLQ message exists with an original_topic", func() {
+				var messageID string
+
+				BeforeEach(func() {
+					// Promote a message to DLQ by exhausting the threshold.
+					service = queue.NewService(pool, 30*time.Second, 5, 0, 1)
+
+					var err error
+					messageID, err = service.Enqueue(ctx, "shipments", []byte("ship it"), nil)
+					Expect(err).NotTo(HaveOccurred())
+
+					_, err = service.Dequeue(ctx, "shipments")
+					Expect(err).NotTo(HaveOccurred())
+
+					err = service.Nack(ctx, messageID, "carrier down")
+					Expect(err).NotTo(HaveOccurred())
+
+					// Confirm it landed in the DLQ.
+					var topic string
+					err = pool.QueryRow(ctx, `SELECT topic FROM messages WHERE id = $1`, messageID).Scan(&topic)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(topic).To(Equal("shipments.dlq"))
+				})
+
+				It("should move the message back to its original topic with status pending and cleared DLQ fields", func() {
+					err := service.Requeue(ctx, messageID)
+					Expect(err).NotTo(HaveOccurred())
+
+					var topic, status string
+					var originalTopic *string
+					var dlqMovedAt *time.Time
+					var retryCount int
+
+					err = pool.QueryRow(ctx, `
+						SELECT topic, status, original_topic, dlq_moved_at, retry_count
+						FROM messages WHERE id = $1
+					`, messageID).Scan(&topic, &status, &originalTopic, &dlqMovedAt, &retryCount)
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(topic).To(Equal("shipments"))
+					Expect(status).To(Equal("pending"))
+					Expect(originalTopic).To(BeNil())
+					Expect(dlqMovedAt).To(BeNil())
+					Expect(retryCount).To(Equal(0))
+				})
+
+				It("should make the requeued message dequeue-able on the original topic", func() {
+					err := service.Requeue(ctx, messageID)
+					Expect(err).NotTo(HaveOccurred())
+
+					msg, err := service.Dequeue(ctx, "shipments")
+					Expect(err).NotTo(HaveOccurred())
+					Expect(msg.ID).To(Equal(messageID))
+				})
+			})
+
+			Context("when called on a message that has no original_topic (not a DLQ message)", func() {
+				var messageID string
+
+				BeforeEach(func() {
+					var err error
+					messageID, err = service.Enqueue(ctx, "regular-topic", []byte("normal"), nil)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should return ErrNotDLQ", func() {
+					err := service.Requeue(ctx, messageID)
+
+					Expect(err).To(HaveOccurred())
+					Expect(err).To(MatchError(ContainSubstring(queue.ErrNotDLQ.Error())))
+				})
 			})
 		})
 	})

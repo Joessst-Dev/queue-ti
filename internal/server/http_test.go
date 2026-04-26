@@ -73,7 +73,7 @@ var _ = Describe("HTTP Server", func() {
 		_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM messages")
 		Expect(err).NotTo(HaveOccurred())
 
-		queueService = queue.NewService(httpTestPool, 30*time.Second, 3, 0)
+		queueService = queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3)
 	})
 
 	// ---------------------------------------------------------------------------
@@ -532,6 +532,65 @@ var _ = Describe("HTTP Server", func() {
 			})
 		})
 	})
+
+	// ---------------------------------------------------------------------------
+	// POST /api/messages/:id/requeue
+	// ---------------------------------------------------------------------------
+
+	Describe("POST /api/messages/:id/requeue", func() {
+		var httpServer *server.HTTPServer
+
+		BeforeEach(func() {
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false})
+		})
+
+		Context("Given a message that has been promoted to the DLQ", func() {
+			var dlqMessageID string
+
+			BeforeEach(func() {
+				// Use dlqThreshold = 1 so a single nack promotes the message.
+				dlqService := queue.NewService(httpTestPool, 30*time.Second, 5, 0, 1)
+				httpServer = server.NewHTTPServer(dlqService, config.AuthConfig{Enabled: false})
+
+				var err error
+				dlqMessageID, err = dlqService.Enqueue(httpTestCtx, "payments", []byte("charge"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = dlqService.Dequeue(httpTestCtx, "payments")
+				Expect(err).NotTo(HaveOccurred())
+
+				err = dlqService.Nack(httpTestCtx, dlqMessageID, "gateway timeout")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return 204 and move the message back to its original topic", func() {
+				req := httptest.NewRequest("POST", "/api/messages/"+dlqMessageID+"/requeue", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(204))
+			})
+		})
+
+		Context("Given a message ID that is not a DLQ message", func() {
+			var regularMessageID string
+
+			BeforeEach(func() {
+				var err error
+				regularMessageID, err = queueService.Enqueue(httpTestCtx, "regular-http-topic", []byte("normal"), nil)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return 404", func() {
+				req := httptest.NewRequest("POST", "/api/messages/"+regularMessageID+"/requeue", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(404))
+			})
+		})
+	})
+
 })
 
 func basicAuthHeader(username, password string) string {
