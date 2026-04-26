@@ -1,0 +1,2 @@
+- [User Profile — Jost Weyers](user_profile.md) — primary owner, full-stack Go+Angular, prefers concrete actionable plans
+- [Q2 2026 Feature Roadmap](project_roadmap_2026.md) — four features planned: Retries, TTL, DLQ, Avro schema validation (in that order)
