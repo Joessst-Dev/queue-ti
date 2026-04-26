@@ -13,7 +13,7 @@ A distributed message queue service built with Go gRPC and PostgreSQL, with an A
 - **Message TTL** — Messages can expire after a configurable duration (default 24 hours); an automatic reaper marks expired messages
 - **Contention-free dequeue** — Uses `FOR UPDATE SKIP LOCKED` for lock-free concurrent message consumption
 - **Basic authentication** — Optional basic auth for both gRPC and HTTP endpoints
-- **Admin UI** — Angular-based web interface to list messages, filter by topic, and manually enqueue test messages
+- **Admin UI** — Angular-based web interface to list messages with detailed status, retry counts, and expiry information; filter by topic; manually enqueue test messages; inspect dead-letter queue messages; requeue or inline-nack processing messages
 - **Configuration** — YAML-based configuration with environment variable overrides via `QUEUETI_` prefix
 
 ## Quick Start
@@ -194,11 +194,11 @@ internal/
   4. Return the message to the consumer.
 
 - **Message statuses**:
-  - **pending** — Ready to be dequeued (initial state after enqueue, or reset after a nack with retries remaining, or after requeue from DLQ)
-  - **processing** — Currently held by a consumer (after dequeue, until ack or nack)
+  - **pending** (yellow badge) — Ready to be dequeued (initial state after enqueue, or reset after a nack with retries remaining, or after requeue from DLQ)
+  - **processing** (blue badge) — Currently held by a consumer (after dequeue, until ack or nack)
   - **deleted** — Acknowledged by consumer; permanently removed from the queue
-  - **failed** — Nacked with no retries remaining (only when DLQ threshold is disabled or message has not reached threshold)
-  - **expired** — Marked by the expiry reaper after TTL elapsed
+  - **failed** (red badge) — Nacked with no retries remaining (only when DLQ threshold is disabled or message has not reached threshold)
+  - **expired** (orange badge) — Marked by the expiry reaper after TTL elapsed
 
 - **Message lifecycle**:
   - **pending** → (dequeued) → **processing** → (acknowledged) → **deleted**
@@ -215,16 +215,26 @@ The admin UI is an Angular Single Page Application (Nx workspace) that communica
 ```
 admin-ui/src/app/
 ├── services/
-│   ├── queue.service.ts         HTTP client (GET /api/messages, POST /api/messages)
+│   ├── queue.service.ts         HTTP client (GET /api/messages, POST /api/messages, POST /api/messages/:id/nack, POST /api/messages/:id/requeue)
 │   └── auth.service.ts          Manages login state and credentials
 ├── interceptors/
 │   └── auth.interceptor.ts      Injects Authorization header on all requests
 ├── guards/
 │   └── auth.guard.ts            Protects routes; redirects to login if unauthorized
 ├── login/                        Authentication UI; stores credentials in localStorage
-├── messages/                     Message list and detail views
+├── messages/                     Message list with status badges, retry/expiry columns, DLQ highlighting, and inline Nack/Requeue actions
 └── services/                     Shared HTTP and auth services
 ```
+
+**Admin UI Features**:
+- **Message table** — Displays all messages with ID, topic, payload, status badge, retry count, expiry time, and metadata
+- **Status badges** — Color-coded visual indicators: `pending` (yellow), `processing` (blue), `failed` (red), `expired` (orange)
+- **Retry information** — Shows `retry_count / max_retries` with a tooltip displaying `last_error` when available
+- **DLQ highlighting** — Dead-letter queue messages (`<topic>.dlq`) are highlighted with an amber background and show the original topic as a sub-label
+- **Requeue action** — DLQ messages display a "Requeue" button to move them back to their original topic
+- **Inline Nack** — Processing messages display a "Nack" button that expands an inline text input for an optional error reason; confirmation triggers the nack operation
+- **Topic filtering** — Filter the message list by topic name
+- **Manual enqueue** — Form to enqueue test messages with topic, payload (JSON), and optional metadata key-value pairs
 
 **Note**: The gRPC server (port 50051) is for queue client applications only; the UI uses HTTP exclusively.
 
