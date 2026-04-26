@@ -140,83 +140,57 @@ interface MetadataRowModel {
           }
 
           <div class="overflow-x-auto">
-            <!-- Fixed header table -->
-            <table class="min-w-full" style="table-layout: fixed;">
-              <colgroup>
-                <col style="width: 140px;" />
-                <col style="width: 140px;" />
-                <col style="width: 200px;" />
-                <col style="width: 100px;" />
-                <col style="width: 90px;" />
-                <col style="width: 120px;" />
-                <col style="width: 180px;" />
-                <col style="width: 120px;" />
-                <col style="width: 140px;" />
-              </colgroup>
-              <thead class="bg-gray-50">
-                <tr>
-                  <th
-                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                  >
-                    ID
-                  </th>
-                  <th
-                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                  >
-                    Topic
-                  </th>
-                  <th
-                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                  >
-                    Payload
-                  </th>
-                  <th
-                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                  >
-                    Status
-                  </th>
-                  <th
-                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                  >
-                    Retries
-                  </th>
-                  <th
-                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                  >
-                    Expires
-                  </th>
-                  <th
-                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                  >
-                    Metadata
-                  </th>
-                  <th
-                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                  >
-                    Created
-                  </th>
-                  <th
-                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                  >
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-            </table>
-            <!-- Virtual scroll body -->
-            <cdk-virtual-scroll-viewport itemSize="73" class="overflow-x-hidden" style="height: 520px;">
-              <table class="min-w-full divide-y divide-gray-200" style="table-layout: fixed;">
-                <colgroup>
-                  <col style="width: 140px;" />
-                  <col style="width: 140px;" />
-                  <col style="width: 200px;" />
-                  <col style="width: 100px;" />
-                  <col style="width: 90px;" />
-                  <col style="width: 120px;" />
-                  <col style="width: 180px;" />
-                  <col style="width: 120px;" />
-                  <col style="width: 140px;" />
-                </colgroup>
+            <cdk-virtual-scroll-viewport [itemSize]="73" style="height: 520px;">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50 sticky top-0 z-10">
+                  <tr>
+                    <th
+                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                    >
+                      ID
+                    </th>
+                    <th
+                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                    >
+                      Topic
+                    </th>
+                    <th
+                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                    >
+                      Payload
+                    </th>
+                    <th
+                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                    >
+                      Status
+                    </th>
+                    <th
+                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                    >
+                      Retries
+                    </th>
+                    <th
+                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                    >
+                      Expires
+                    </th>
+                    <th
+                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                    >
+                      Metadata
+                    </th>
+                    <th
+                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                    >
+                      Created
+                    </th>
+                    <th
+                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                    >
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
                 <tbody class="divide-y divide-gray-200">
                   <tr *cdkVirtualFor="let msg of allMessages(); trackBy: trackByMsgId" [class]="rowClasses(msg)">
                     <td class="px-6 py-4 text-sm font-mono text-gray-600">
