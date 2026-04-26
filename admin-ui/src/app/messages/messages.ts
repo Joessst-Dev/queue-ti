@@ -13,6 +13,7 @@ import { MessagesHeader } from './messages-header';
 import { MessagesTable } from './messages-table';
 import { EnqueueSection } from './enqueue-section';
 import { QueueStatsChart } from './queue-stats-chart';
+import { TopicConfigSection } from './topic-config-section';
 
 interface EnqueueState {
   id: string;
@@ -22,7 +23,7 @@ interface EnqueueState {
 
 @Component({
   selector: 'app-messages',
-  imports: [MessagesHeader, MessagesTable, EnqueueSection, QueueStatsChart],
+  imports: [MessagesHeader, MessagesTable, EnqueueSection, QueueStatsChart, TopicConfigSection],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -69,6 +70,9 @@ interface EnqueueState {
         @if (activeTab() === 'stats') {
           <app-queue-stats-chart />
         }
+        @if (activeTab() === 'config') {
+          <app-topic-config-section />
+        }
       </main>
     </div>
   `,
@@ -78,11 +82,12 @@ export class Messages {
   private readonly queue = inject(QueueService);
   private readonly router = inject(Router);
 
-  readonly activeTab = signal<'messages' | 'enqueue' | 'stats'>('messages');
+  readonly activeTab = signal<'messages' | 'enqueue' | 'stats' | 'config'>('messages');
   readonly tabs = [
     { id: 'messages' as const, label: 'Messages' },
     { id: 'enqueue' as const, label: 'Enqueue' },
-    { id: 'stats'    as const, label: 'Stats'    },
+    { id: 'stats'   as const, label: 'Stats'   },
+    { id: 'config'  as const, label: 'Config'  },
   ];
 
   private readonly requeueTrigger$ = new Subject<string>();

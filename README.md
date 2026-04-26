@@ -13,8 +13,8 @@ A distributed message queue service built with Go gRPC and PostgreSQL, with an A
 - **Message TTL** — Messages can expire after a configurable duration (default 24 hours); an automatic reaper marks expired messages
 - **Contention-free dequeue** — Uses `FOR UPDATE SKIP LOCKED` for lock-free concurrent message consumption
 - **Basic authentication** — Optional basic auth for both gRPC and HTTP endpoints
-- **Admin UI** — Angular-based web interface to list messages with detailed status, retry counts, and expiry information; filter by topic; manually enqueue test messages; inspect dead-letter queue messages; requeue or inline-nack processing messages
-- **Configuration** — YAML-based configuration with environment variable overrides via `QUEUETI_` prefix
+- **Admin UI** — Angular-based web interface to list messages with detailed status, retry counts, and expiry information; filter by topic; manually enqueue test messages; inspect dead-letter queue messages; requeue or inline-nack processing messages; configure per-topic settings
+- **Configuration** — YAML-based global configuration with environment variable overrides via `QUEUETI_` prefix; per-topic overrides for retry count, TTL, and queue depth limits via HTTP API or admin UI
 
 ## Quick Start
 
@@ -160,6 +160,56 @@ log_level: debug
 
 The resolved log level is printed at server startup in the `"config loaded"` log line.
 
+### Topic-Level Configuration Overrides
+
+Individual topics can override the global queue settings via per-topic configuration. This is useful when certain topics require stricter retry limits, longer TTLs, or queue depth constraints.
+
+**Supported overrides:**
+- `max_retries` — Maximum retry count for messages on this topic (overrides `QUEUETI_QUEUE_MAX_RETRIES`)
+- `message_ttl_seconds` — Time-to-live for messages in seconds (overrides `QUEUETI_QUEUE_MESSAGE_TTL`); set to `0` to disable TTL for this topic regardless of the global setting
+- `max_depth` — Maximum number of pending+processing messages allowed on this topic; set to `null` or `0` for unlimited; `Enqueue` returns HTTP 429 when the topic reaches capacity
+
+**Precedence:** Per-topic overrides take priority over global defaults. Omitting a field (or sending `null` in the PUT body) reverts that setting to the global default.
+
+**Example:** Set per-topic configuration for an `orders` topic:
+
+```bash
+curl -u admin:secret -X PUT http://localhost:8080/api/topic-configs/orders \
+  -H "Content-Type: application/json" \
+  -d '{
+    "max_retries": 5,
+    "message_ttl_seconds": 3600,
+    "max_depth": 1000
+  }'
+```
+
+Response:
+```json
+{
+  "topic": "orders",
+  "max_retries": 5,
+  "message_ttl_seconds": 3600,
+  "max_depth": 1000
+}
+```
+
+If a topic has no row in `topic_config`, all settings default to the global configuration. To clear an override and return to the global default, send `null` for that field:
+
+```bash
+curl -u admin:secret -X PUT http://localhost:8080/api/topic-configs/orders \
+  -H "Content-Type: application/json" \
+  -d '{"max_retries": null}'
+```
+
+**Reserved topic names:** Topics ending in `.dlq` (dead-letter queue topics) cannot have configurations set; the API returns HTTP 400 if you attempt to configure a DLQ topic.
+
+**Queue depth limit:** When `max_depth` is set and a topic has `pending + processing` messages equal to `max_depth`, further `Enqueue` calls return HTTP 429 with:
+```json
+{"error": "queue is at maximum depth for this topic"}
+```
+
+The admin UI includes a **Config** tab where operators can view and edit all topic configurations interactively without restarting the server.
+
 ## Architecture
 
 ### Backend
@@ -173,11 +223,18 @@ cmd/server/main.go
 │       └── Requires basic auth if enabled
 │
 └── HTTP Server (port 8080)
-    ├── /healthz                     GET    Health check
-    ├── /api/auth/status             GET    Authentication status
-    ├── /api/messages                GET    List messages (with optional topic filter)
-    └── /api/messages                POST   Enqueue a message
-        └── Requires basic auth if enabled
+    ├── /healthz                             GET    Health check
+    ├── /api/auth/status                     GET    Authentication status
+    ├── /api/messages                        GET    List messages (with optional topic filter)
+    ├── /api/messages                        POST   Enqueue a message
+    ├── /api/messages/:id/nack               POST   Nack a processing message
+    ├── /api/messages/:id/requeue            POST   Requeue a DLQ message
+    ├── /api/stats                           GET    Queue depth statistics
+    ├── /api/topic-configs                   GET    List all topic configurations
+    ├── /api/topic-configs/:topic            PUT    Create/update topic configuration
+    ├── /api/topic-configs/:topic            DELETE Delete topic configuration
+    ├── /metrics                             GET    Prometheus metrics (unauthenticated)
+    └── All /api/* endpoints require basic auth if enabled
 ```
 
 Both servers connect to the same `queue.Service` instance, which manages all message operations against PostgreSQL.
@@ -263,6 +320,7 @@ admin-ui/src/app/
 - **Inline Nack** — Processing messages display a "Nack" button that expands an inline text input for an optional error reason; confirmation triggers the nack operation
 - **Topic filtering** — Filter the message list by topic name
 - **Manual enqueue** — Form to enqueue test messages with topic, payload (JSON), and optional metadata key-value pairs
+- **Config tab** — Interactive editor for per-topic configuration overrides (max retries, TTL, queue depth limits) without server restart
 
 **Note**: The gRPC server (port 50051) is for queue client applications only; the UI uses HTTP exclusively.
 
@@ -479,6 +537,83 @@ Moves a dead-letter queue message back to its original topic for reprocessing.
 **Behavior**: Restores the message to its original topic (retrieved from `original_topic`), resets `retry_count` to 0, restores `max_retries` to the configured default, and sets status to `'pending'`. The message can then be dequeued and processed again.
 
 Returns HTTP 404 if the message is not found or is not a dead-letter message (i.e., does not have `original_topic` set).
+
+#### GET /api/topic-configs
+
+Lists all topic-level configuration overrides.
+
+**Query Parameters:** None
+
+**Response:** Array of topic configurations.
+
+```bash
+curl -u admin:secret http://localhost:8080/api/topic-configs
+```
+
+**Response body:**
+```json
+{
+  "items": [
+    {
+      "topic": "orders",
+      "max_retries": 5,
+      "message_ttl_seconds": 3600,
+      "max_depth": 1000
+    },
+    {
+      "topic": "payments",
+      "max_retries": 10
+    }
+  ]
+}
+```
+
+#### PUT /api/topic-configs/:topic
+
+Creates or updates a topic-level configuration. Omitting a field or sending `null` reverts that setting to the global default.
+
+**Path Parameters:**
+- `:topic` — Topic name (must not end in `.dlq`)
+
+**Request body:**
+```json
+{
+  "max_retries": 5,
+  "message_ttl_seconds": 3600,
+  "max_depth": 1000
+}
+```
+
+All fields are optional. Any omitted field is unaffected; to clear an override, explicitly send `null`.
+
+**Response:** HTTP 200 OK with the created/updated configuration.
+
+```json
+{
+  "topic": "orders",
+  "max_retries": 5,
+  "message_ttl_seconds": 3600,
+  "max_depth": 1000
+}
+```
+
+**Error responses:**
+- HTTP 400 if the topic name ends in `.dlq`
+- HTTP 400 if the request body is invalid
+
+#### DELETE /api/topic-configs/:topic
+
+Deletes a topic-level configuration, reverting all settings to global defaults.
+
+**Path Parameters:**
+- `:topic` — Topic name
+
+**Request body:** Empty (no body required)
+
+**Response:** HTTP 204 No Content on success.
+
+**Error responses:**
+- HTTP 404 if the topic configuration does not exist
 
 ### Authentication
 

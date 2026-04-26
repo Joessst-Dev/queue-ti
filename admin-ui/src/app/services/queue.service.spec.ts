@@ -4,7 +4,7 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { QueueService, QueueMessage, PagedMessages, EnqueueRequest, StatsResponse } from './queue.service';
+import { QueueService, QueueMessage, PagedMessages, EnqueueRequest, StatsResponse, TopicConfig, TopicConfigsResponse } from './queue.service';
 
 const makeMessage = (overrides: Partial<QueueMessage> = {}): QueueMessage => ({
   id: 'msg-1',
@@ -174,6 +174,64 @@ describe('QueueService', () => {
       httpController.expectOne('/api/stats').flush(response);
 
       expect(result).toEqual(response);
+    });
+  });
+
+  describe('getTopicConfigs()', () => {
+    it('should make GET /api/topic-configs', () => {
+      service.getTopicConfigs().subscribe();
+
+      const req = httpController.expectOne('/api/topic-configs');
+      expect(req.request.method).toBe('GET');
+      req.flush({ items: [] });
+    });
+
+    it('should return the response from the server', () => {
+      const response: TopicConfigsResponse = {
+        items: [
+          { topic: 'orders', max_retries: 5, message_ttl_seconds: 3600, max_depth: null },
+          { topic: 'events', max_retries: null, message_ttl_seconds: null, max_depth: 100 },
+        ],
+      };
+      let result: TopicConfigsResponse | undefined;
+
+      service.getTopicConfigs().subscribe((v) => (result = v));
+      httpController.expectOne('/api/topic-configs').flush(response);
+
+      expect(result).toEqual(response);
+    });
+  });
+
+  describe('upsertTopicConfig()', () => {
+    const cfg: Omit<TopicConfig, 'topic'> = { max_retries: 3, message_ttl_seconds: 1800, max_depth: null };
+
+    it('should make PUT /api/topic-configs/:topic with the body', () => {
+      service.upsertTopicConfig('orders', cfg).subscribe();
+
+      const req = httpController.expectOne('/api/topic-configs/orders');
+      expect(req.request.method).toBe('PUT');
+      expect(req.request.body).toEqual(cfg);
+      req.flush({ topic: 'orders', ...cfg });
+    });
+
+    it('should return the updated TopicConfig from the server', () => {
+      const serverResponse: TopicConfig = { topic: 'orders', ...cfg };
+      let result: TopicConfig | undefined;
+
+      service.upsertTopicConfig('orders', cfg).subscribe((v) => (result = v));
+      httpController.expectOne('/api/topic-configs/orders').flush(serverResponse);
+
+      expect(result).toEqual(serverResponse);
+    });
+  });
+
+  describe('deleteTopicConfig()', () => {
+    it('should make DELETE /api/topic-configs/:topic', () => {
+      service.deleteTopicConfig('orders').subscribe();
+
+      const req = httpController.expectOne('/api/topic-configs/orders');
+      expect(req.request.method).toBe('DELETE');
+      req.flush(null, { status: 204, statusText: 'No Content' });
     });
   });
 });

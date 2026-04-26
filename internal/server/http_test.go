@@ -774,6 +774,204 @@ var _ = Describe("HTTP Server", func() {
 	})
 
 	// ---------------------------------------------------------------------------
+	// GET /api/topic-configs
+	// ---------------------------------------------------------------------------
+
+	Describe("GET /api/topic-configs", func() {
+		var httpServer *server.HTTPServer
+
+		BeforeEach(func() {
+			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
+			Expect(err).NotTo(HaveOccurred())
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+		})
+
+		Context("when no topic configs exist", func() {
+			It("should return 200 with an empty items array", func() {
+				req := httptest.NewRequest("GET", "/api/topic-configs", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var body map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&body)).To(Succeed())
+				items, ok := body["items"].([]any)
+				Expect(ok).To(BeTrue())
+				Expect(items).To(BeEmpty())
+			})
+		})
+
+		Context("after a topic config has been upserted", func() {
+			It("should return the config in the items list", func() {
+				maxRetries := 7
+				Expect(queueService.UpsertTopicConfig(httpTestCtx, queue.TopicConfig{
+					Topic:      "listed-topic",
+					MaxRetries: &maxRetries,
+				})).To(Succeed())
+
+				req := httptest.NewRequest("GET", "/api/topic-configs", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var body map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&body)).To(Succeed())
+				items, ok := body["items"].([]any)
+				Expect(ok).To(BeTrue())
+				Expect(items).To(HaveLen(1))
+				item := items[0].(map[string]any)
+				Expect(item["topic"]).To(Equal("listed-topic"))
+				Expect(item["max_retries"]).To(BeEquivalentTo(7))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
+	// PUT /api/topic-configs/:topic
+	// ---------------------------------------------------------------------------
+
+	Describe("PUT /api/topic-configs/:topic", func() {
+		var httpServer *server.HTTPServer
+
+		BeforeEach(func() {
+			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
+			Expect(err).NotTo(HaveOccurred())
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+		})
+
+		Context("when a valid body is provided", func() {
+			It("should return 200 with the stored config", func() {
+				body := `{"max_retries":5,"max_depth":100}`
+				req := httptest.NewRequest("PUT", "/api/topic-configs/my-topic", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var result map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result["topic"]).To(Equal("my-topic"))
+				Expect(result["max_retries"]).To(BeEquivalentTo(5))
+				Expect(result["max_depth"]).To(BeEquivalentTo(100))
+			})
+		})
+
+		Context("when the topic name ends with .dlq", func() {
+			It("should return 400", func() {
+				req := httptest.NewRequest("PUT", "/api/topic-configs/payments.dlq",
+					strings.NewReader(`{"max_retries":1}`))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(400))
+				Expect(decodeErrorBody(resp.Body)).To(Equal("topic name may not end in .dlq"))
+			})
+		})
+
+		Context("when no Authorization header is provided and auth is enabled", func() {
+			It("should return 401", func() {
+				authServer := server.NewHTTPServer(queueService, config.AuthConfig{
+					Enabled:  true,
+					Username: "admin",
+					Password: "secret",
+				}, prometheus.NewRegistry())
+
+				req := httptest.NewRequest("PUT", "/api/topic-configs/some-topic",
+					strings.NewReader(`{"max_retries":1}`))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := authServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(401))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
+	// DELETE /api/topic-configs/:topic
+	// ---------------------------------------------------------------------------
+
+	Describe("DELETE /api/topic-configs/:topic", func() {
+		var httpServer *server.HTTPServer
+
+		BeforeEach(func() {
+			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
+			Expect(err).NotTo(HaveOccurred())
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+		})
+
+		Context("when the topic config exists", func() {
+			It("should return 204", func() {
+				maxRetries := 3
+				Expect(queueService.UpsertTopicConfig(httpTestCtx, queue.TopicConfig{
+					Topic:      "delete-http-topic",
+					MaxRetries: &maxRetries,
+				})).To(Succeed())
+
+				req := httptest.NewRequest("DELETE", "/api/topic-configs/delete-http-topic", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(204))
+			})
+		})
+
+		Context("when the topic config does not exist", func() {
+			It("should return 404", func() {
+				req := httptest.NewRequest("DELETE", "/api/topic-configs/ghost-topic", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(404))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
+	// POST /api/messages with max_depth enforced
+	// ---------------------------------------------------------------------------
+
+	Describe("POST /api/messages with max_depth enforced", func() {
+		var httpServer *server.HTTPServer
+
+		BeforeEach(func() {
+			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
+			Expect(err).NotTo(HaveOccurred())
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
+		})
+
+		Context("when a topic config with max_depth=1 is set and one message is already enqueued", func() {
+			It("should return 429 on the second enqueue attempt", func() {
+				maxDepth := 1
+				Expect(queueService.UpsertTopicConfig(httpTestCtx, queue.TopicConfig{
+					Topic:    "depth-http-topic",
+					MaxDepth: &maxDepth,
+				})).To(Succeed())
+
+				// First enqueue — must succeed.
+				req1 := httptest.NewRequest("POST", "/api/messages",
+					strings.NewReader(`{"topic":"depth-http-topic","payload":"first"}`))
+				req1.Header.Set("Content-Type", "application/json")
+				resp1, err := httpServer.App.Test(req1)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp1.StatusCode).To(Equal(201))
+
+				// Second enqueue — must be rejected with 429.
+				req2 := httptest.NewRequest("POST", "/api/messages",
+					strings.NewReader(`{"topic":"depth-http-topic","payload":"second"}`))
+				req2.Header.Set("Content-Type", "application/json")
+				resp2, err := httpServer.App.Test(req2)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp2.StatusCode).To(Equal(429))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
 	// GET /api/stats
 	// ---------------------------------------------------------------------------
 

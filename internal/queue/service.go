@@ -19,6 +19,7 @@ var (
 	ErrNotProcessing = errors.New("message is not in processing state")
 	ErrNotDLQ        = errors.New("message is not a dead-letter message")
 	ErrReservedTopic = errors.New("topic name is reserved: topics may not end with .dlq")
+	ErrQueueFull     = errors.New("queue is at maximum depth for this topic")
 )
 
 type Message struct {
@@ -59,11 +60,70 @@ func NewService(pool *pgxpool.Pool, visibilityTimeout time.Duration, maxRetries 
 	}
 }
 
+// resolveEnqueueParams merges global service defaults with per-topic overrides
+// from topic_config. It returns the effective maxRetries, expiresAt, and
+// maxDepth (0 = unlimited) to use when inserting a new message.
+func (s *Service) resolveEnqueueParams(ctx context.Context, topic string) (maxRetries int, expiresAt *time.Time, maxDepth int, err error) {
+	maxRetries = s.maxRetries
+	maxDepth = 0 // 0 = unlimited
+
+	if s.messageTTL > 0 {
+		t := time.Now().Add(s.messageTTL)
+		expiresAt = &t
+	}
+
+	cfg, err := s.GetTopicConfig(ctx, topic)
+	if err != nil {
+		return 0, nil, 0, err
+	}
+	if cfg == nil {
+		return maxRetries, expiresAt, maxDepth, nil
+	}
+
+	if cfg.MaxRetries != nil {
+		maxRetries = *cfg.MaxRetries
+	}
+	if cfg.MessageTTLSeconds != nil {
+		if *cfg.MessageTTLSeconds == 0 {
+			expiresAt = nil // explicitly no TTL
+		} else {
+			t := time.Now().Add(time.Duration(*cfg.MessageTTLSeconds) * time.Second)
+			expiresAt = &t
+		}
+	}
+	if cfg.MaxDepth != nil {
+		maxDepth = *cfg.MaxDepth
+	}
+	return maxRetries, expiresAt, maxDepth, nil
+}
+
 // Enqueue inserts a new message onto the given topic. Topics ending in ".dlq"
 // are reserved for the dead-letter mechanism and are rejected with ErrReservedTopic.
+// Per-topic configuration (max_retries, TTL, max_depth) overrides global defaults
+// when a topic_config row exists for the topic.
 func (s *Service) Enqueue(ctx context.Context, topic string, payload []byte, metadata map[string]string) (string, error) {
 	if strings.HasSuffix(topic, ".dlq") {
 		return "", fmt.Errorf("enqueue: %w", ErrReservedTopic)
+	}
+
+	maxRetries, expiresAt, maxDepth, err := s.resolveEnqueueParams(ctx, topic)
+	if err != nil {
+		return "", fmt.Errorf("enqueue resolve params: %w", err)
+	}
+
+	// Depth guard — soft check, race is acceptable for a circuit-breaker use case.
+	if maxDepth > 0 {
+		var depth int
+		err := s.pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM messages WHERE topic = $1 AND status IN ('pending', 'processing')`,
+			topic,
+		).Scan(&depth)
+		if err != nil {
+			return "", fmt.Errorf("enqueue depth check: %w", err)
+		}
+		if depth >= maxDepth {
+			return "", fmt.Errorf("enqueue: %w", ErrQueueFull)
+		}
 	}
 
 	metaJSON, err := json.Marshal(metadata)
@@ -71,18 +131,12 @@ func (s *Service) Enqueue(ctx context.Context, topic string, payload []byte, met
 		return "", fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	var expiresAt *time.Time
-	if s.messageTTL > 0 {
-		t := time.Now().Add(s.messageTTL)
-		expiresAt = &t
-	}
-
 	var id string
 	err = s.pool.QueryRow(ctx,
 		`INSERT INTO messages (topic, payload, metadata, max_retries, expires_at)
 		 VALUES ($1, $2, $3, $4, $5)
 		 RETURNING id`,
-		topic, payload, metaJSON, s.maxRetries, expiresAt,
+		topic, payload, metaJSON, maxRetries, expiresAt,
 	).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("enqueue: %w", err)

@@ -4,3 +4,4 @@
 - [Log Level Configuration Documentation](log_level_feature.md) — Top-level log_level config key with debug/info/warn/error levels and QUEUETI_LOG_LEVEL env var
 - [Prometheus Metrics & Observability](observability_metrics.md) — /metrics endpoint, all counter/gauge definitions, nack outcomes, stats API integration
 - [Per-Dequeue Visibility Timeout Override](per_dequeue_visibility_timeout.md) — Optional visibility_timeout_seconds in DequeueRequest overrides server default per-call
+- [Topic-Level Configuration Feature Documentation](topic_config_feature.md) — Per-topic max_retries/TTL/max_depth overrides, HTTP API (GET/PUT/DELETE), admin UI Config tab

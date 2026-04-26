@@ -2,6 +2,7 @@ package queue_test
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -31,6 +32,8 @@ var _ = Describe("Queue Service", func() {
 
 		// Ensure a clean state before each test
 		_, err = pool.Exec(ctx, "DELETE FROM messages")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = pool.Exec(ctx, "DELETE FROM topic_config")
 		Expect(err).NotTo(HaveOccurred())
 
 		service = queue.NewService(pool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
@@ -663,6 +666,248 @@ var _ = Describe("Queue Service", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(vt).To(BeTemporally(">=", before.Add(30*time.Second-time.Second)))
 				Expect(vt).To(BeTemporally("<=", after.Add(30*time.Second+time.Second)))
+			})
+		})
+	})
+
+	// Tests for per-topic configuration CRUD
+	Describe("TopicConfig CRUD", func() {
+		BeforeEach(func() {
+			_, err := pool.Exec(ctx, "DELETE FROM topic_config")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when no row exists for a topic", func() {
+			It("should return nil, nil from GetTopicConfig", func() {
+				cfg, err := service.GetTopicConfig(ctx, "nonexistent-topic")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cfg).To(BeNil())
+			})
+		})
+
+		Context("when a config is upserted", func() {
+			It("should be retrievable via GetTopicConfig with the stored values", func() {
+				maxRetries := 7
+				ttl := 120
+				depth := 50
+				err := service.UpsertTopicConfig(ctx, queue.TopicConfig{
+					Topic:             "cfg-topic",
+					MaxRetries:        &maxRetries,
+					MessageTTLSeconds: &ttl,
+					MaxDepth:          &depth,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				cfg, err := service.GetTopicConfig(ctx, "cfg-topic")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cfg).NotTo(BeNil())
+				Expect(cfg.Topic).To(Equal("cfg-topic"))
+				Expect(*cfg.MaxRetries).To(Equal(7))
+				Expect(*cfg.MessageTTLSeconds).To(Equal(120))
+				Expect(*cfg.MaxDepth).To(Equal(50))
+			})
+		})
+
+		Context("when UpsertTopicConfig is called twice for the same topic", func() {
+			It("should overwrite the first values with the second", func() {
+				first := 3
+				second := 9
+				Expect(service.UpsertTopicConfig(ctx, queue.TopicConfig{
+					Topic:      "overwrite-topic",
+					MaxRetries: &first,
+				})).To(Succeed())
+
+				Expect(service.UpsertTopicConfig(ctx, queue.TopicConfig{
+					Topic:      "overwrite-topic",
+					MaxRetries: &second,
+				})).To(Succeed())
+
+				cfg, err := service.GetTopicConfig(ctx, "overwrite-topic")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(*cfg.MaxRetries).To(Equal(9))
+			})
+		})
+
+		Context("when DeleteTopicConfig is called on an existing topic", func() {
+			It("should return nil and a subsequent Get should return nil", func() {
+				maxRetries := 1
+				Expect(service.UpsertTopicConfig(ctx, queue.TopicConfig{
+					Topic:      "delete-topic",
+					MaxRetries: &maxRetries,
+				})).To(Succeed())
+
+				Expect(service.DeleteTopicConfig(ctx, "delete-topic")).To(Succeed())
+
+				cfg, err := service.GetTopicConfig(ctx, "delete-topic")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cfg).To(BeNil())
+			})
+		})
+
+		Context("when DeleteTopicConfig is called for a topic that does not exist", func() {
+			It("should return ErrNotFound", func() {
+				err := service.DeleteTopicConfig(ctx, "ghost-topic")
+				Expect(err).To(HaveOccurred())
+				Expect(errors.Is(err, queue.ErrNotFound)).To(BeTrue())
+			})
+		})
+
+		Context("when multiple configs exist", func() {
+			It("should return all rows ordered by topic ASC from ListTopicConfigs", func() {
+				r1 := 1
+				r2 := 2
+				Expect(service.UpsertTopicConfig(ctx, queue.TopicConfig{Topic: "zebra", MaxRetries: &r2})).To(Succeed())
+				Expect(service.UpsertTopicConfig(ctx, queue.TopicConfig{Topic: "alpha", MaxRetries: &r1})).To(Succeed())
+
+				configs, err := service.ListTopicConfigs(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(configs).To(HaveLen(2))
+				Expect(configs[0].Topic).To(Equal("alpha"))
+				Expect(configs[1].Topic).To(Equal("zebra"))
+			})
+
+			It("should return an empty slice (not nil) when no configs exist", func() {
+				configs, err := service.ListTopicConfigs(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(configs).NotTo(BeNil())
+				Expect(configs).To(BeEmpty())
+			})
+		})
+	})
+
+	// Tests for Enqueue respecting per-topic configuration
+	Describe("Enqueue respects topic config", func() {
+		BeforeEach(func() {
+			_, err := pool.Exec(ctx, "DELETE FROM topic_config")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when the topic has MaxRetries = 7 configured", func() {
+			It("should store the message with max_retries = 7", func() {
+				maxRetries := 7
+				Expect(service.UpsertTopicConfig(ctx, queue.TopicConfig{
+					Topic:      "topic-retries",
+					MaxRetries: &maxRetries,
+				})).To(Succeed())
+
+				id, err := service.Enqueue(ctx, "topic-retries", []byte("payload"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				var stored int
+				Expect(pool.QueryRow(ctx, `SELECT max_retries FROM messages WHERE id = $1`, id).Scan(&stored)).To(Succeed())
+				Expect(stored).To(Equal(7))
+			})
+		})
+
+		Context("when the topic has MessageTTLSeconds = 60 configured", func() {
+			It("should set expires_at to approximately now + 60s", func() {
+				ttl := 60
+				Expect(service.UpsertTopicConfig(ctx, queue.TopicConfig{
+					Topic:             "topic-ttl",
+					MessageTTLSeconds: &ttl,
+				})).To(Succeed())
+
+				before := time.Now()
+				id, err := service.Enqueue(ctx, "topic-ttl", []byte("payload"), nil)
+				Expect(err).NotTo(HaveOccurred())
+				after := time.Now()
+
+				var expiresAt *time.Time
+				Expect(pool.QueryRow(ctx, `SELECT expires_at FROM messages WHERE id = $1`, id).Scan(&expiresAt)).To(Succeed())
+				Expect(expiresAt).NotTo(BeNil())
+				Expect(*expiresAt).To(BeTemporally(">=", before.Add(59*time.Second)))
+				Expect(*expiresAt).To(BeTemporally("<=", after.Add(61*time.Second)))
+			})
+		})
+
+		Context("when the topic has MessageTTLSeconds = 0 configured and the service has a global TTL", func() {
+			It("should set expires_at = NULL overriding the global TTL", func() {
+				ttlService := queue.NewService(pool, 30*time.Second, 3, time.Hour, 3, queue.NoopRecorder{})
+				noTTL := 0
+				Expect(ttlService.UpsertTopicConfig(ctx, queue.TopicConfig{
+					Topic:             "topic-nottl",
+					MessageTTLSeconds: &noTTL,
+				})).To(Succeed())
+
+				id, err := ttlService.Enqueue(ctx, "topic-nottl", []byte("payload"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				var expiresAt *time.Time
+				Expect(pool.QueryRow(ctx, `SELECT expires_at FROM messages WHERE id = $1`, id).Scan(&expiresAt)).To(Succeed())
+				Expect(expiresAt).To(BeNil())
+			})
+		})
+
+		Context("when no topic_config row exists", func() {
+			It("should fall back to the global service defaults", func() {
+				globalService := queue.NewService(pool, 30*time.Second, 5, 0, 3, queue.NoopRecorder{})
+				id, err := globalService.Enqueue(ctx, "topic-defaults", []byte("payload"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				var maxRetries int
+				var expiresAt *time.Time
+				Expect(pool.QueryRow(ctx,
+					`SELECT max_retries, expires_at FROM messages WHERE id = $1`, id,
+				).Scan(&maxRetries, &expiresAt)).To(Succeed())
+				Expect(maxRetries).To(Equal(5))
+				Expect(expiresAt).To(BeNil())
+			})
+		})
+
+		Context("when MaxDepth = 2 is configured for a topic", func() {
+			var depthService *queue.Service
+
+			BeforeEach(func() {
+				depthService = queue.NewService(pool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
+				maxDepth := 2
+				Expect(depthService.UpsertTopicConfig(ctx, queue.TopicConfig{
+					Topic:    "topic-depth",
+					MaxDepth: &maxDepth,
+				})).To(Succeed())
+			})
+
+			It("should allow the first two enqueues but reject the third with ErrQueueFull", func() {
+				_, err := depthService.Enqueue(ctx, "topic-depth", []byte("one"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("two"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("three"), nil)
+				Expect(err).To(HaveOccurred())
+				Expect(errors.Is(err, queue.ErrQueueFull)).To(BeTrue())
+			})
+
+			It("should allow a new enqueue after an ack reduces the depth below max", func() {
+				id1, err := depthService.Enqueue(ctx, "topic-depth", []byte("one"), nil)
+				Expect(err).NotTo(HaveOccurred())
+				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("two"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Dequeue and ack the first message so depth drops to 1.
+				_, err = depthService.Dequeue(ctx, "topic-depth", 0)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(depthService.Ack(ctx, id1)).To(Succeed())
+
+				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("three"), nil)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should count both pending AND processing messages toward the depth limit", func() {
+				_, err := depthService.Enqueue(ctx, "topic-depth", []byte("one"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Dequeue to move the first message to 'processing' — it still counts.
+				_, err = depthService.Dequeue(ctx, "topic-depth", 0)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("two"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Depth is now 2 (1 processing + 1 pending); third enqueue must be rejected.
+				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("three"), nil)
+				Expect(err).To(HaveOccurred())
+				Expect(errors.Is(err, queue.ErrQueueFull)).To(BeTrue())
 			})
 		})
 	})

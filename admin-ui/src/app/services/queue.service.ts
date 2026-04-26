@@ -40,6 +40,17 @@ export interface PagedMessages {
   offset: number;
 }
 
+export interface TopicConfig {
+  topic: string;
+  max_retries?: number | null;
+  message_ttl_seconds?: number | null;
+  max_depth?: number | null;
+}
+
+export interface TopicConfigsResponse {
+  items: TopicConfig[];
+}
+
 export const PAGE_SIZE = 50;
 
 @Injectable({ providedIn: 'root' })
@@ -68,5 +79,17 @@ export class QueueService {
 
   getStats(): Observable<StatsResponse> {
     return this.http.get<StatsResponse>('/api/stats');
+  }
+
+  getTopicConfigs(): Observable<TopicConfigsResponse> {
+    return this.http.get<TopicConfigsResponse>('/api/topic-configs');
+  }
+
+  upsertTopicConfig(topic: string, cfg: Omit<TopicConfig, 'topic'>): Observable<TopicConfig> {
+    return this.http.put<TopicConfig>(`/api/topic-configs/${topic}`, cfg);
+  }
+
+  deleteTopicConfig(topic: string): Observable<void> {
+    return this.http.delete<void>(`/api/topic-configs/${topic}`);
   }
 }
