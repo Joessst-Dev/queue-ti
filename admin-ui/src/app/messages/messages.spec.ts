@@ -2,10 +2,9 @@ import { vi } from 'vitest';
 
 vi.mock('chart.js', () => ({
   Chart: class {
-    static register() {}
-    constructor() {}
-    update() {}
-    destroy() {}
+    static register = vi.fn();
+    update = vi.fn();
+    destroy = vi.fn();
   },
   BarController: {},
   BarElement: {},
