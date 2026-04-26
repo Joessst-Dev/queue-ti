@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -43,18 +44,20 @@ func (s *GRPCServer) Dequeue(ctx context.Context, req *pb.DequeueRequest) (*pb.D
 
 	msg, err := s.queueService.Dequeue(ctx, req.Topic)
 	if err != nil {
-		if err == queue.ErrNoMessage {
+		if errors.Is(err, queue.ErrNoMessage) {
 			return nil, status.Error(codes.NotFound, "no messages available")
 		}
 		return nil, status.Errorf(codes.Internal, "failed to dequeue: %v", err)
 	}
 
 	return &pb.DequeueResponse{
-		Id:        msg.ID,
-		Topic:     msg.Topic,
-		Payload:   msg.Payload,
-		Metadata:  msg.Metadata,
-		CreatedAt: timestamppb.New(msg.CreatedAt),
+		Id:         msg.ID,
+		Topic:      msg.Topic,
+		Payload:    msg.Payload,
+		Metadata:   msg.Metadata,
+		CreatedAt:  timestamppb.New(msg.CreatedAt),
+		RetryCount: int32(msg.RetryCount),
+		MaxRetries: int32(msg.MaxRetries),
 	}, nil
 }
 
@@ -70,3 +73,17 @@ func (s *GRPCServer) Ack(ctx context.Context, req *pb.AckRequest) (*pb.AckRespon
 	return &pb.AckResponse{}, nil
 }
 
+func (s *GRPCServer) Nack(ctx context.Context, req *pb.NackRequest) (*pb.NackResponse, error) {
+	if req.Id == "" {
+		return nil, status.Error(codes.InvalidArgument, "id is required")
+	}
+
+	if err := s.queueService.Nack(ctx, req.Id, req.Error); err != nil {
+		if errors.Is(err, queue.ErrNotFound) || errors.Is(err, queue.ErrNotProcessing) {
+			return nil, status.Errorf(codes.NotFound, "message not found or not in processing state: %v", err)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to nack: %v", err)
+	}
+
+	return &pb.NackResponse{}, nil
+}

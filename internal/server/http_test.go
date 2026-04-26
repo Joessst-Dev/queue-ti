@@ -73,7 +73,7 @@ var _ = Describe("HTTP Server", func() {
 		_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM messages")
 		Expect(err).NotTo(HaveOccurred())
 
-		queueService = queue.NewService(httpTestPool, 30*time.Second)
+		queueService = queue.NewService(httpTestPool, 30*time.Second, 3, 0)
 	})
 
 	// ---------------------------------------------------------------------------

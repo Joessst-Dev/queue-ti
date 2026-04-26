@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/base64"
+	"errors"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -41,6 +42,7 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig) *HTTPServer {
 	api.Get("/auth/status", s.authStatus)
 	api.Get("/messages", s.withAuth(), s.listMessages)
 	api.Post("/messages", s.withAuth(), s.enqueueMessage)
+	api.Post("/messages/:id/nack", s.withAuth(), s.nackMessage)
 
 	s.App = app
 	return s
@@ -86,13 +88,21 @@ type enqueueRequest struct {
 	Metadata map[string]string `json:"metadata"`
 }
 
+type nackRequest struct {
+	Error string `json:"error"`
+}
+
 type messageResponse struct {
-	ID        string            `json:"id"`
-	Topic     string            `json:"topic"`
-	Payload   string            `json:"payload"`
-	Metadata  map[string]string `json:"metadata"`
-	Status    string            `json:"status"`
-	CreatedAt string            `json:"created_at"`
+	ID         string            `json:"id"`
+	Topic      string            `json:"topic"`
+	Payload    string            `json:"payload"`
+	Metadata   map[string]string `json:"metadata"`
+	Status     string            `json:"status"`
+	RetryCount int               `json:"retry_count"`
+	MaxRetries int               `json:"max_retries"`
+	LastError  string            `json:"last_error,omitempty"`
+	ExpiresAt  *string           `json:"expires_at,omitempty"`
+	CreatedAt  string            `json:"created_at"`
 }
 
 func (s *HTTPServer) listMessages(c *fiber.Ctx) error {
@@ -105,14 +115,22 @@ func (s *HTTPServer) listMessages(c *fiber.Ctx) error {
 
 	resp := make([]messageResponse, 0, len(messages))
 	for _, m := range messages {
-		resp = append(resp, messageResponse{
-			ID:        m.ID,
-			Topic:     m.Topic,
-			Payload:   string(m.Payload),
-			Metadata:  m.Metadata,
-			Status:    m.Status,
-			CreatedAt: m.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		})
+		r := messageResponse{
+			ID:         m.ID,
+			Topic:      m.Topic,
+			Payload:    string(m.Payload),
+			Metadata:   m.Metadata,
+			Status:     m.Status,
+			RetryCount: m.RetryCount,
+			MaxRetries: m.MaxRetries,
+			LastError:  m.LastError,
+			CreatedAt:  m.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		}
+		if m.ExpiresAt != nil {
+			formatted := m.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")
+			r.ExpiresAt = &formatted
+		}
+		resp = append(resp, r)
 	}
 
 	return c.JSON(resp)
@@ -136,3 +154,19 @@ func (s *HTTPServer) enqueueMessage(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"id": id})
 }
 
+func (s *HTTPServer) nackMessage(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	var req nackRequest
+	// Body is optional — an empty body is valid (no error message provided).
+	_ = c.BodyParser(&req)
+
+	if err := s.queueService.Nack(c.Context(), id, req.Error); err != nil {
+		if errors.Is(err, queue.ErrNotFound) || errors.Is(err, queue.ErrNotProcessing) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
+}

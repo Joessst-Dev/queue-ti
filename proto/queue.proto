@@ -10,6 +10,7 @@ service QueueService {
   rpc Enqueue(EnqueueRequest) returns (EnqueueResponse);
   rpc Dequeue(DequeueRequest) returns (DequeueResponse);
   rpc Ack(AckRequest) returns (AckResponse);
+  rpc Nack(NackRequest) returns (NackResponse);
 }
 
 message EnqueueRequest {
@@ -32,6 +33,8 @@ message DequeueResponse {
   bytes payload = 3;
   map<string, string> metadata = 4;
   google.protobuf.Timestamp created_at = 5;
+  int32 retry_count = 6;
+  int32 max_retries = 7;
 }
 
 message AckRequest {
@@ -40,3 +43,9 @@ message AckRequest {
 
 message AckResponse {}
 
+message NackRequest {
+  string id = 1;
+  string error = 2;
+}
+
+message NackResponse {}
