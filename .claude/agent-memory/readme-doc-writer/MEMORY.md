@@ -2,3 +2,4 @@
 - [Retries & TTL Features Added](retries_ttl_features.md) — Documentation for retry count, max retries, message TTL, and expiry reaper features
 - [Frontend UI Features Added](frontend_ui_features.md) — Admin UI now shows retry counts, expiry, DLQ highlighting, and Nack/Requeue actions
 - [Log Level Configuration Documentation](log_level_feature.md) — Top-level log_level config key with debug/info/warn/error levels and QUEUETI_LOG_LEVEL env var
+- [Prometheus Metrics & Observability](observability_metrics.md) — /metrics endpoint, all counter/gauge definitions, nack outcomes, stats API integration
