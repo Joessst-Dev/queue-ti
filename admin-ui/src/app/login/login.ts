@@ -1,4 +1,4 @@
-import { Component, inject, computed, signal } from '@angular/core';
+import { Component, inject, computed, signal, ChangeDetectionStrategy } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormField, form, schema, required } from '@angular/forms/signals';
 import { Router } from '@angular/router';
@@ -124,6 +124,7 @@ interface LoginModel {
       </div>
     </div>
   `,
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Login {
   private auth = inject(AuthService);
