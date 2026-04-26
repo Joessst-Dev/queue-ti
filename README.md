@@ -9,6 +9,7 @@ A distributed message queue service built with Go gRPC and PostgreSQL, with an A
 - **Topic-based routing** — Messages are organized by topic; multiple independent queues share a single PostgreSQL table
 - **At-least-once delivery** — Messages are guaranteed to be delivered at least once via configurable visibility timeout (default 30 seconds)
 - **Automatic retries** — Failed messages are automatically retried up to a configurable limit (default 3 retries); consumers call `Nack` to signal failure
+- **Dead-letter queue (DLQ)** — Messages that exhaust their retry limit are automatically promoted to a `<topic>.dlq` topic; can be manually requeued back to the original topic
 - **Message TTL** — Messages can expire after a configurable duration (default 24 hours); an automatic reaper marks expired messages
 - **Contention-free dequeue** — Uses `FOR UPDATE SKIP LOCKED` for lock-free concurrent message consumption
 - **Basic authentication** — Optional basic auth for both gRPC and HTTP endpoints
@@ -103,6 +104,7 @@ queue:
   visibility_timeout: 30s  # Time a dequeued message remains invisible to other consumers
   max_retries: 3           # Maximum number of retries for a failed message
   message_ttl: 24h         # Time-to-live for messages (0 = no expiry)
+  dlq_threshold: 3         # Retry count at which messages are promoted to DLQ (0 = disabled)
 
 auth:
   enabled: false
@@ -127,6 +129,7 @@ Any configuration key can be overridden with an environment variable. Use the ke
 | `QUEUETI_QUEUE_VISIBILITY_TIMEOUT` | Visibility timeout | `30s` |
 | `QUEUETI_QUEUE_MAX_RETRIES` | Max retry count per message | `3` |
 | `QUEUETI_QUEUE_MESSAGE_TTL` | Message time-to-live (0 = no expiry) | `24h` |
+| `QUEUETI_QUEUE_DLQ_THRESHOLD` | Retry count for DLQ promotion (0 = disabled) | `3` |
 | `QUEUETI_AUTH_ENABLED` | Enable authentication | `true` |
 | `QUEUETI_AUTH_USERNAME` | Basic auth username | `admin` |
 | `QUEUETI_AUTH_PASSWORD` | Basic auth password | `secret` |
@@ -174,10 +177,12 @@ internal/
   - `metadata` (JSONB, optional)
   - `status` (TEXT, one of `pending`, `processing`, `deleted`, `failed`, `expired`)
   - `retry_count` (INTEGER, incremented on each nack)
-  - `max_retries` (INTEGER, set at enqueue time)
+  - `max_retries` (INTEGER, set at enqueue time; set to 0 for DLQ messages)
   - `last_error` (TEXT, error message from most recent nack)
   - `visibility_timeout` (TIMESTAMPTZ, null until dequeue)
   - `expires_at` (TIMESTAMPTZ, calculated at enqueue based on TTL)
+  - `original_topic` (TEXT, set when message is promoted to DLQ; null for regular messages)
+  - `dlq_moved_at` (TIMESTAMPTZ, set when message is promoted to DLQ; null otherwise)
   - `created_at`, `updated_at` (TIMESTAMPTZ)
 
 - **Index**: Composite index on `(topic, status, visibility_timeout, created_at)` for efficient dequeue queries.
@@ -189,16 +194,17 @@ internal/
   4. Return the message to the consumer.
 
 - **Message statuses**:
-  - **pending** — Ready to be dequeued (initial state after enqueue, or reset after a nack with retries remaining)
+  - **pending** — Ready to be dequeued (initial state after enqueue, or reset after a nack with retries remaining, or after requeue from DLQ)
   - **processing** — Currently held by a consumer (after dequeue, until ack or nack)
   - **deleted** — Acknowledged by consumer; permanently removed from the queue
-  - **failed** — Nacked with no retries remaining (exhausted max retry limit)
+  - **failed** — Nacked with no retries remaining (only when DLQ threshold is disabled or message has not reached threshold)
   - **expired** — Marked by the expiry reaper after TTL elapsed
 
 - **Message lifecycle**:
   - **pending** → (dequeued) → **processing** → (acknowledged) → **deleted**
-  - **pending** → (dequeued) → **processing** → (nacked, retries remaining) → **pending** (automatically retried)
-  - **pending** → (dequeued) → **processing** → (nacked, retries exhausted) → **failed**
+  - **pending** → (dequeued) → **processing** → (nacked, retries remaining and below DLQ threshold) → **pending** (automatically retried)
+  - **pending** → (dequeued) → **processing** → (nacked, DLQ threshold reached) → moved to **<topic>.dlq** as **pending** (with max_retries = 0)
+  - **<topic>.dlq pending** → (manually requeued) → **pending** in original topic (resets retry_count and restores max_retries)
   - **pending** or **processing** → (TTL expires) → **expired** (marked by automatic reaper)
   - **pending** → (dequeued) → **processing** → (visibility timeout expires) → **pending** (automatically reappears)
 
@@ -286,7 +292,7 @@ Fails if the message is not found or not in `'processing'` status.
 
 #### Nack
 
-Signals that processing of a message failed and should be retried (if retries remain) or marked failed.
+Signals that processing of a message failed and should be retried (if retries remain), promoted to the dead-letter queue (if DLQ threshold is reached), or marked failed.
 
 ```protobuf
 rpc Nack(NackRequest) returns (NackResponse);
@@ -299,7 +305,10 @@ message NackRequest {
 message NackResponse {}
 ```
 
-If the message has retries remaining (`retry_count + 1 < max_retries`), its status reverts to `'pending'` and `retry_count` is incremented. Otherwise, its status becomes `'failed'`.
+Behavior depends on the DLQ threshold and retry count:
+- If `retry_count + 1 >= dlq_threshold` (and `dlq_threshold > 0`), the message is **promoted to the dead-letter queue** (`<topic>.dlq`). Its `original_topic` is recorded, `max_retries` is set to 0 (preventing auto-retry), `retry_count` resets to 0, and status becomes `'pending'` in the DLQ topic.
+- Otherwise, if `retry_count + 1 < max_retries`, its status reverts to `'pending'` and `retry_count` is incremented.
+- Otherwise, its status becomes `'failed'`.
 
 Fails if the message is not found or not in `'processing'` status.
 
@@ -350,7 +359,21 @@ curl http://localhost:8080/api/messages?topic=orders
     "payload": "eyJvcmRlcl9pZCI6IDEyMzQ1fQ==",
     "metadata": {"user_id": "42"},
     "status": "pending",
+    "retry_count": 0,
+    "max_retries": 3,
     "created_at": "2025-04-25T12:00:00Z"
+  },
+  {
+    "id": "660e8400-e29b-41d4-a716-446655440001",
+    "topic": "orders.dlq",
+    "payload": "eyJvcmRlcl9pZCI6IDU2Nzg5fQ==",
+    "metadata": {"user_id": "43"},
+    "status": "pending",
+    "retry_count": 0,
+    "max_retries": 0,
+    "original_topic": "orders",
+    "dlq_moved_at": "2025-04-25T12:05:00Z",
+    "created_at": "2025-04-25T12:04:00Z"
   }
 ]
 ```
@@ -389,7 +412,19 @@ The `error` field is optional; if provided, it is stored in the message's `last_
 
 **Response:** HTTP 204 No Content on success.
 
-**Behavior**: If the message has retries remaining, its status reverts to `'pending'` and it can be dequeued again. Otherwise, its status becomes `'failed'`.
+**Behavior**: If the message has retries remaining and has not reached the DLQ threshold, its status reverts to `'pending'` and it can be dequeued again. If the DLQ threshold is reached, the message is promoted to the dead-letter queue (`<topic>.dlq`). Otherwise, its status becomes `'failed'`.
+
+#### POST /api/messages/:id/requeue
+
+Moves a dead-letter queue message back to its original topic for reprocessing.
+
+**Request body:** Empty (no body required)
+
+**Response:** HTTP 204 No Content on success.
+
+**Behavior**: Restores the message to its original topic (retrieved from `original_topic`), resets `retry_count` to 0, restores `max_retries` to the configured default, and sets status to `'pending'`. The message can then be dequeued and processed again.
+
+Returns HTTP 404 if the message is not found or is not a dead-letter message (i.e., does not have `original_topic` set).
 
 ### Authentication
 
@@ -546,18 +581,34 @@ Enable or configure the TTL with:
 QUEUETI_QUEUE_MESSAGE_TTL=24h   # 24 hours; can be 0 to disable
 ```
 
-### Retry Behavior
+### Retry Behavior and Dead-Letter Queue
 
 Every message carries `retry_count` and `max_retries`:
 - `max_retries` is set at enqueue time (from `QUEUETI_QUEUE_MAX_RETRIES`, default 3)
 - `retry_count` increments each time `Nack` is called
-- When `retry_count + 1 >= max_retries`, the next `Nack` marks the message as `'failed'` instead of resetting to `'pending'`
+- When `retry_count + 1 >= dlq_threshold` (if `dlq_threshold > 0`), the message is promoted to the dead-letter queue instead of being retried further
+- When DLQ is disabled (`dlq_threshold = 0`), messages with `retry_count + 1 >= max_retries` are marked as `'failed'`
 - Failed messages are not dequeued
 
-To adjust retry limits globally:
+To adjust retry and DLQ settings globally:
 ```bash
-QUEUETI_QUEUE_MAX_RETRIES=5  # Retry up to 5 times
+QUEUETI_QUEUE_MAX_RETRIES=5  # Retry up to 5 times (note: DLQ threshold may trigger first)
+QUEUETI_QUEUE_DLQ_THRESHOLD=3  # Promote to DLQ after 3 failed nacks
 ```
+
+**Dead-Letter Queue Details:**
+
+When a message reaches the DLQ threshold, it is automatically promoted to a separate queue with the topic name `<original-topic>.dlq`. For example, messages from the `orders` topic that exceed the DLQ threshold are moved to `orders.dlq`.
+
+In the DLQ topic:
+- The message is stored with `status = 'pending'` and `max_retries = 0`, preventing automatic retries
+- `original_topic` is set to the source topic (e.g., `orders`)
+- `dlq_moved_at` is set to the promotion timestamp
+- `retry_count` resets to 0
+
+To reprocess a DLQ message, call the `POST /api/messages/:id/requeue` endpoint. This restores the message to its original topic with `retry_count = 0` and `max_retries` restored to the configured default, allowing it to be dequeued and processed again.
+
+> **Note:** The DLQ topic name (`<topic>.dlq`) is reserved. Attempting to enqueue directly to a topic ending in `.dlq` returns an `ErrReservedTopic` error.
 
 ## Environment Variables (Docker Compose Example)
 
@@ -582,7 +633,6 @@ environment:
 
 - **No priority queues** — Messages are processed in FIFO order by topic.
 - **Single-table design** — All topics share one PostgreSQL table; consider partitioning for very high throughput.
-- **No dead-letter queue** — Failed messages (after retry exhaustion) are marked `'failed'` but remain in the table; no separate queue or webhook.
 - **No message scheduling** — Messages are available for dequeue immediately upon enqueue.
 
 ## Troubleshooting
