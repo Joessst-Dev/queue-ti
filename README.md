@@ -4,10 +4,12 @@ A distributed message queue service built with Go gRPC and PostgreSQL, with an A
 
 ## Features
 
-- **gRPC API** — High-performance queue operations (enqueue, dequeue, acknowledge) over gRPC
+- **gRPC API** — High-performance queue operations (enqueue, dequeue, acknowledge, nack) over gRPC
 - **HTTP Admin API** — REST endpoints for queue inspection and management from the admin UI
 - **Topic-based routing** — Messages are organized by topic; multiple independent queues share a single PostgreSQL table
 - **At-least-once delivery** — Messages are guaranteed to be delivered at least once via configurable visibility timeout (default 30 seconds)
+- **Automatic retries** — Failed messages are automatically retried up to a configurable limit (default 3 retries); consumers call `Nack` to signal failure
+- **Message TTL** — Messages can expire after a configurable duration (default 24 hours); an automatic reaper marks expired messages
 - **Contention-free dequeue** — Uses `FOR UPDATE SKIP LOCKED` for lock-free concurrent message consumption
 - **Basic authentication** — Optional basic auth for both gRPC and HTTP endpoints
 - **Admin UI** — Angular-based web interface to list messages, filter by topic, and manually enqueue test messages
@@ -99,6 +101,8 @@ db:
 
 queue:
   visibility_timeout: 30s  # Time a dequeued message remains invisible to other consumers
+  max_retries: 3           # Maximum number of retries for a failed message
+  message_ttl: 24h         # Time-to-live for messages (0 = no expiry)
 
 auth:
   enabled: false
@@ -121,6 +125,8 @@ Any configuration key can be overridden with an environment variable. Use the ke
 | `QUEUETI_DB_NAME` | PostgreSQL database | `queueti` |
 | `QUEUETI_DB_SSLMODE` | PostgreSQL SSL mode | `disable` |
 | `QUEUETI_QUEUE_VISIBILITY_TIMEOUT` | Visibility timeout | `30s` |
+| `QUEUETI_QUEUE_MAX_RETRIES` | Max retry count per message | `3` |
+| `QUEUETI_QUEUE_MESSAGE_TTL` | Message time-to-live (0 = no expiry) | `24h` |
 | `QUEUETI_AUTH_ENABLED` | Enable authentication | `true` |
 | `QUEUETI_AUTH_USERNAME` | Basic auth username | `admin` |
 | `QUEUETI_AUTH_PASSWORD` | Basic auth password | `secret` |
@@ -166,20 +172,34 @@ internal/
   - `topic` (TEXT, required)
   - `payload` (BYTEA, required)
   - `metadata` (JSONB, optional)
-  - `status` (TEXT, default `'pending'`)
+  - `status` (TEXT, one of `pending`, `processing`, `deleted`, `failed`, `expired`)
+  - `retry_count` (INTEGER, incremented on each nack)
+  - `max_retries` (INTEGER, set at enqueue time)
+  - `last_error` (TEXT, error message from most recent nack)
   - `visibility_timeout` (TIMESTAMPTZ, null until dequeue)
+  - `expires_at` (TIMESTAMPTZ, calculated at enqueue based on TTL)
   - `created_at`, `updated_at` (TIMESTAMPTZ)
 
 - **Index**: Composite index on `(topic, status, visibility_timeout, created_at)` for efficient dequeue queries.
 
 - **Dequeue algorithm**:
-  1. Query for the oldest pending message in the topic that is either not yet visible or has expired.
+  1. Query for the oldest pending message in the topic that is either not yet visible or has expired, has not exceeded its retry limit, and has not expired by TTL.
   2. Use `FOR UPDATE SKIP LOCKED` to prevent concurrent consumers from acquiring the same message.
   3. Transition the message to `'processing'` status and set `visibility_timeout` to `now() + [configured duration]`.
   4. Return the message to the consumer.
 
+- **Message statuses**:
+  - **pending** — Ready to be dequeued (initial state after enqueue, or reset after a nack with retries remaining)
+  - **processing** — Currently held by a consumer (after dequeue, until ack or nack)
+  - **deleted** — Acknowledged by consumer; permanently removed from the queue
+  - **failed** — Nacked with no retries remaining (exhausted max retry limit)
+  - **expired** — Marked by the expiry reaper after TTL elapsed
+
 - **Message lifecycle**:
   - **pending** → (dequeued) → **processing** → (acknowledged) → **deleted**
+  - **pending** → (dequeued) → **processing** → (nacked, retries remaining) → **pending** (automatically retried)
+  - **pending** → (dequeued) → **processing** → (nacked, retries exhausted) → **failed**
+  - **pending** or **processing** → (TTL expires) → **expired** (marked by automatic reaper)
   - **pending** → (dequeued) → **processing** → (visibility timeout expires) → **pending** (automatically reappears)
 
 ### Frontend
@@ -264,6 +284,25 @@ message AckResponse {}
 
 Fails if the message is not found or not in `'processing'` status.
 
+#### Nack
+
+Signals that processing of a message failed and should be retried (if retries remain) or marked failed.
+
+```protobuf
+rpc Nack(NackRequest) returns (NackResponse);
+
+message NackRequest {
+  string id = 1;          // Message UUID (required)
+  string error = 2;       // Error description (optional, stored in last_error)
+}
+
+message NackResponse {}
+```
+
+If the message has retries remaining (`retry_count + 1 < max_retries`), its status reverts to `'pending'` and `retry_count` is incremented. Otherwise, its status becomes `'failed'`.
+
+Fails if the message is not found or not in `'processing'` status.
+
 ### HTTP Admin API
 
 All HTTP endpoints are authenticated via basic auth if enabled.
@@ -334,6 +373,23 @@ Enqueues a message.
 ```json
 {"id": "550e8400-e29b-41d4-a716-446655440000"}
 ```
+
+#### POST /api/messages/:id/nack
+
+Signals that processing of a message failed.
+
+**Request body:**
+```json
+{
+  "error": "connection timeout"
+}
+```
+
+The `error` field is optional; if provided, it is stored in the message's `last_error` field.
+
+**Response:** HTTP 204 No Content on success.
+
+**Behavior**: If the message has retries remaining, its status reverts to `'pending'` and it can be dequeued again. Otherwise, its status becomes `'failed'`.
 
 ### Authentication
 
@@ -479,6 +535,30 @@ docker-compose up -d
 
 Access the admin UI at `http://localhost:8081` (admin / secret).
 
+## Automatic Expiry and Retry Management
+
+### Expiry Reaper
+
+When `message_ttl` is greater than zero, a background goroutine starts automatically on server startup. This reaper runs every 60 seconds and marks any messages with `expires_at < now()` (and status `'pending'` or `'processing'`) as `'expired'`. Expired messages are no longer dequeued by new consumers.
+
+Enable or configure the TTL with:
+```bash
+QUEUETI_QUEUE_MESSAGE_TTL=24h   # 24 hours; can be 0 to disable
+```
+
+### Retry Behavior
+
+Every message carries `retry_count` and `max_retries`:
+- `max_retries` is set at enqueue time (from `QUEUETI_QUEUE_MAX_RETRIES`, default 3)
+- `retry_count` increments each time `Nack` is called
+- When `retry_count + 1 >= max_retries`, the next `Nack` marks the message as `'failed'` instead of resetting to `'pending'`
+- Failed messages are not dequeued
+
+To adjust retry limits globally:
+```bash
+QUEUETI_QUEUE_MAX_RETRIES=5  # Retry up to 5 times
+```
+
 ## Environment Variables (Docker Compose Example)
 
 See the "Configuration" section above. Docker Compose sets these in `docker-compose.yaml`:
@@ -501,9 +581,8 @@ environment:
 ## Known Limitations
 
 - **No priority queues** — Messages are processed in FIFO order by topic.
-- **No message expiration** — Messages remain in the queue indefinitely unless manually deleted or acknowledged.
 - **Single-table design** — All topics share one PostgreSQL table; consider partitioning for very high throughput.
-- **No dead-letter queue** — Messages are not moved to a separate queue after repeated dequeue failures.
+- **No dead-letter queue** — Failed messages (after retry exhaustion) are marked `'failed'` but remain in the table; no separate queue or webhook.
 - **No message scheduling** — Messages are available for dequeue immediately upon enqueue.
 
 ## Troubleshooting
