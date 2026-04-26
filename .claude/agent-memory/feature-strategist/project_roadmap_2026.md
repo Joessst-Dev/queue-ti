@@ -1,16 +1,18 @@
 ---
 name: Q2 2026 Feature Roadmap
-description: Four features planned for implementation as of 2026-04-24: Retries, TTL, Avro schema validation, DLQ
+description: Status of originally planned features as of 2026-04-26; all four now shipped except Avro schema validation
 type: project
 ---
 
-As of 2026-04-24, the team plans to implement four features in this order (dependency-driven):
+As of 2026-04-26, the four originally planned features are confirmed built:
 
-1. **Retries** — `QUEUETI_QUEUE_MAX_RETRIES` env var; retry_count + max_retries columns on messages table; Nack RPC
-2. **Message TTL** — `QUEUETI_QUEUE_MESSAGE_TTL` env var; expires_at column on messages table; background reaper goroutine
-3. **Dead-Letter Queue (DLQ)** — `QUEUETI_QUEUE_DLQ_THRESHOLD` env var; depends on Retries being done first; moves exhausted messages to `<topic>.dlq` topic
-4. **Avro Schema Validation** — `QUEUETI_QUEUE_SCHEMA_REGISTRY_*` env vars; new `topic_schemas` table; validation at Enqueue time
+1. **Retries** — DONE (retry_count, max_retries columns; Nack RPC)
+2. **Message TTL** — DONE (expires_at column; background reaper)
+3. **Dead-Letter Queue (DLQ)** — DONE (messages promoted after N nacks; requeue from admin UI)
+4. **Avro Schema Validation** — NOT YET BUILT (highest effort; was deferred)
 
-**Why this order:** DLQ depends on retry_count existing (Feature 1). Avro is independent but highest effort; defer until reliability features are solid.
+The team is now looking for the next three features beyond the original four.
 
-**How to apply:** When suggesting implementation tasks or scoping new work, assume these four are in-flight and deprioritize features that conflict with the messages table schema changes they introduce.
+**Why:** Avro schema validation is still on the table but the team wants fresh recommendations on what else to prioritize alongside or instead of it.
+
+**How to apply:** When suggesting next features, treat Retries/TTL/DLQ as existing primitives to build on. Avro schema validation is a live candidate — score it honestly against alternatives.

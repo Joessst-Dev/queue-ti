@@ -33,7 +33,7 @@ var _ = Describe("Queue Service", func() {
 		_, err = pool.Exec(ctx, "DELETE FROM messages")
 		Expect(err).NotTo(HaveOccurred())
 
-		service = queue.NewService(pool, 30*time.Second, 3, 0, 3)
+		service = queue.NewService(pool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
 	})
 
 	AfterEach(func() {
@@ -57,7 +57,7 @@ var _ = Describe("Queue Service", func() {
 
 		Context("Given a service configured with max_retries = 5", func() {
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 5, 0, 3)
+				service = queue.NewService(pool, 30*time.Second, 5, 0, 3, queue.NoopRecorder{})
 			})
 
 			It("should store the message with retry_count = 0 and max_retries = 5", func() {
@@ -76,7 +76,7 @@ var _ = Describe("Queue Service", func() {
 
 		Context("Given a service with a TTL of 1 hour", func() {
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 3, time.Hour, 3)
+				service = queue.NewService(pool, 30*time.Second, 3, time.Hour, 3, queue.NoopRecorder{})
 			})
 
 			It("should set expires_at to approximately now + TTL", func() {
@@ -98,7 +98,7 @@ var _ = Describe("Queue Service", func() {
 
 		Context("Given a service with TTL = 0 (no expiry)", func() {
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 3, 0, 3)
+				service = queue.NewService(pool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
 			})
 
 			It("should store the message with expires_at = NULL", func() {
@@ -295,7 +295,7 @@ var _ = Describe("Queue Service", func() {
 			var messageID string
 
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 3, 0, 3)
+				service = queue.NewService(pool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
 				var err error
 				messageID, err = service.Enqueue(ctx, "retry-nack-topic", []byte("retry"), nil)
 				Expect(err).NotTo(HaveOccurred())
@@ -326,7 +326,7 @@ var _ = Describe("Queue Service", func() {
 			var messageID string
 
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 1, 0, 0)
+				service = queue.NewService(pool, 30*time.Second, 1, 0, 0, queue.NoopRecorder{})
 				var err error
 				messageID, err = service.Enqueue(ctx, "final-nack-topic", []byte("one-shot"), nil)
 				Expect(err).NotTo(HaveOccurred())
@@ -423,7 +423,7 @@ var _ = Describe("Queue Service", func() {
 				BeforeEach(func() {
 					// dlqThreshold = 2, maxRetries = 5 so normal retries would
 					// still be available — but DLQ fires first at count 2.
-					service = queue.NewService(pool, 30*time.Second, 5, 0, 2)
+					service = queue.NewService(pool, 30*time.Second, 5, 0, 2, queue.NoopRecorder{})
 
 					var err error
 					messageID, err = service.Enqueue(ctx, "orders", []byte("process me"), nil)
@@ -483,7 +483,7 @@ var _ = Describe("Queue Service", func() {
 
 				BeforeEach(func() {
 					// dlqThreshold = 3; after one nack retry_count = 1 < 3, no promotion.
-					service = queue.NewService(pool, 30*time.Second, 5, 0, 3)
+					service = queue.NewService(pool, 30*time.Second, 5, 0, 3, queue.NoopRecorder{})
 
 					var err error
 					messageID, err = service.Enqueue(ctx, "invoices", []byte("work"), nil)
@@ -517,7 +517,7 @@ var _ = Describe("Queue Service", func() {
 
 				BeforeEach(func() {
 					// Promote a message to DLQ by exhausting the threshold.
-					service = queue.NewService(pool, 30*time.Second, 5, 0, 1)
+					service = queue.NewService(pool, 30*time.Second, 5, 0, 1, queue.NoopRecorder{})
 
 					var err error
 					messageID, err = service.Enqueue(ctx, "shipments", []byte("ship it"), nil)

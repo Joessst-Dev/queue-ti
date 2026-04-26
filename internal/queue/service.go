@@ -42,15 +42,20 @@ type Service struct {
 	maxRetries        int
 	messageTTL        time.Duration
 	dlqThreshold      int
+	recorder          MetricsRecorder
 }
 
-func NewService(pool *pgxpool.Pool, visibilityTimeout time.Duration, maxRetries int, messageTTL time.Duration, dlqThreshold int) *Service {
+func NewService(pool *pgxpool.Pool, visibilityTimeout time.Duration, maxRetries int, messageTTL time.Duration, dlqThreshold int, recorder MetricsRecorder) *Service {
+	if recorder == nil {
+		recorder = NoopRecorder{}
+	}
 	return &Service{
 		pool:              pool,
 		visibilityTimeout: visibilityTimeout,
 		maxRetries:        maxRetries,
 		messageTTL:        messageTTL,
 		dlqThreshold:      dlqThreshold,
+		recorder:          recorder,
 	}
 }
 
@@ -83,6 +88,7 @@ func (s *Service) Enqueue(ctx context.Context, topic string, payload []byte, met
 		return "", fmt.Errorf("enqueue: %w", err)
 	}
 
+	s.recorder.RecordEnqueue(topic)
 	slog.Debug("message enqueued", "id", id, "topic", topic)
 	return id, nil
 }
@@ -138,19 +144,23 @@ func (s *Service) Dequeue(ctx context.Context, topic string) (*Message, error) {
 		}
 	}
 
+	s.recorder.RecordDequeue(msg.Topic)
 	slog.Debug("message dequeued", "id", msg.ID, "topic", msg.Topic, "retry_count", msg.RetryCount)
 	return &msg, nil
 }
 
 func (s *Service) Ack(ctx context.Context, id string) error {
-	result, err := s.pool.Exec(ctx,
-		`DELETE FROM messages WHERE id = $1 AND status = 'processing'`, id)
+	var topic string
+	err := s.pool.QueryRow(ctx,
+		`DELETE FROM messages WHERE id = $1 AND status = 'processing' RETURNING topic`, id,
+	).Scan(&topic)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("ack: %w", ErrNotFound)
+	}
 	if err != nil {
 		return fmt.Errorf("ack: %w", err)
 	}
-	if result.RowsAffected() == 0 {
-		return fmt.Errorf("ack: message not found or not in processing state")
-	}
+	s.recorder.RecordAck(topic)
 	slog.Debug("message acked", "id", id)
 	return nil
 }
@@ -214,6 +224,7 @@ func (s *Service) Nack(ctx context.Context, id string, processingError string) e
 		if err := tx.Commit(ctx); err != nil {
 			return err
 		}
+		s.recorder.RecordNack(topic, "dlq")
 		slog.Warn("message promoted to DLQ",
 			"id", id,
 			"original_topic", topic,
@@ -250,6 +261,7 @@ func (s *Service) Nack(ctx context.Context, id string, processingError string) e
 	}
 
 	if newStatus == "failed" {
+		s.recorder.RecordNack(topic, "failed")
 		slog.Info("message failed: retries exhausted",
 			"id", id,
 			"topic", topic,
@@ -257,6 +269,7 @@ func (s *Service) Nack(ctx context.Context, id string, processingError string) e
 			"max_retries", maxRetries,
 		)
 	} else {
+		s.recorder.RecordNack(topic, "retry")
 		slog.Debug("message nacked, will retry",
 			"id", id,
 			"topic", topic,
@@ -311,6 +324,7 @@ func (s *Service) Requeue(ctx context.Context, id string) error {
 		return err
 	}
 
+	s.recorder.RecordRequeue(*originalTopic)
 	slog.Info("message requeued from DLQ", "id", id, "original_topic", *originalTopic)
 	return nil
 }
@@ -404,6 +418,7 @@ func (s *Service) StartExpiryReaper(ctx context.Context, interval time.Duration)
 					continue
 				}
 				if n := tag.RowsAffected(); n > 0 {
+					s.recorder.RecordExpired(n)
 					slog.Info("expiry reaper expired messages", "count", n)
 				}
 			}

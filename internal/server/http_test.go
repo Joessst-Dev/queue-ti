@@ -16,8 +16,11 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/Joessst-Dev/queue-ti/internal/config"
 	"github.com/Joessst-Dev/queue-ti/internal/db"
+	"github.com/Joessst-Dev/queue-ti/internal/metrics"
 	"github.com/Joessst-Dev/queue-ti/internal/queue"
 	"github.com/Joessst-Dev/queue-ti/internal/server"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -80,7 +83,7 @@ var _ = Describe("HTTP Server", func() {
 		_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM messages")
 		Expect(err).NotTo(HaveOccurred())
 
-		queueService = queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3)
+		queueService = queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
 	})
 
 	// ---------------------------------------------------------------------------
@@ -91,7 +94,7 @@ var _ = Describe("HTTP Server", func() {
 		Context("Given the server is running", func() {
 			It("should return HTTP 200", func() {
 				// Given the HTTP server with auth disabled
-				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false})
+				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
 
 				// When we call the health endpoint
 				req := httptest.NewRequest("GET", "/healthz", nil)
@@ -112,7 +115,7 @@ var _ = Describe("HTTP Server", func() {
 		Context("Given auth is disabled", func() {
 			It("should return auth_required: false", func() {
 				// Given the HTTP server with auth disabled
-				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false})
+				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
 
 				// When we call the auth status endpoint
 				req := httptest.NewRequest("GET", "/api/auth/status", nil)
@@ -135,7 +138,7 @@ var _ = Describe("HTTP Server", func() {
 					Enabled:  true,
 					Username: "admin",
 					Password: "secret",
-				})
+				}, prometheus.NewRegistry())
 
 				// When we call the auth status endpoint
 				req := httptest.NewRequest("GET", "/api/auth/status", nil)
@@ -165,13 +168,13 @@ var _ = Describe("HTTP Server", func() {
 				Enabled:  true,
 				Username: "admin",
 				Password: "secret",
-			})
+			}, prometheus.NewRegistry())
 		})
 
 		Context("Given auth is disabled", func() {
 			It("should pass the request through without an Authorization header", func() {
 				// Given the HTTP server with auth disabled
-				noAuthServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false})
+				noAuthServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
 
 				// When we call a protected endpoint without credentials
 				req := httptest.NewRequest("GET", "/api/messages", nil)
@@ -260,7 +263,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false})
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
 		})
 
 		Context("Given no messages exist", func() {
@@ -357,7 +360,7 @@ var _ = Describe("HTTP Server", func() {
 					Enabled:  true,
 					Username: "admin",
 					Password: "secret",
-				})
+				}, prometheus.NewRegistry())
 				_, err := queueService.Enqueue(httpTestCtx, "auth-topic", []byte("secure-msg"), nil)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -385,7 +388,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false})
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
 		})
 
 		Context("Given the request body is not valid JSON", func() {
@@ -506,7 +509,7 @@ var _ = Describe("HTTP Server", func() {
 					Enabled:  true,
 					Username: "admin",
 					Password: "secret",
-				})
+				}, prometheus.NewRegistry())
 			})
 
 			It("should enqueue successfully when correct credentials are provided", func() {
@@ -549,7 +552,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false})
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
 		})
 
 		Context("Given a message that has been promoted to the DLQ", func() {
@@ -557,8 +560,8 @@ var _ = Describe("HTTP Server", func() {
 
 			BeforeEach(func() {
 				// Use dlqThreshold = 1 so a single nack promotes the message.
-				dlqService := queue.NewService(httpTestPool, 30*time.Second, 5, 0, 1)
-				httpServer = server.NewHTTPServer(dlqService, config.AuthConfig{Enabled: false})
+				dlqService := queue.NewService(httpTestPool, 30*time.Second, 5, 0, 1, queue.NoopRecorder{})
+				httpServer = server.NewHTTPServer(dlqService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
 
 				var err error
 				dlqMessageID, err = dlqService.Enqueue(httpTestCtx, "payments", []byte("charge"), nil)
@@ -600,6 +603,74 @@ var _ = Describe("HTTP Server", func() {
 	})
 
 	// ---------------------------------------------------------------------------
+	// GET /metrics
+	// ---------------------------------------------------------------------------
+
+	Describe("GET /metrics", func() {
+		var (
+			reg        *prometheus.Registry
+			httpServer *server.HTTPServer
+		)
+
+		BeforeEach(func() {
+			reg = prometheus.NewRegistry()
+			rec := metrics.New(httpTestPool, reg)
+			svc := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, rec)
+			httpServer = server.NewHTTPServer(svc, config.AuthConfig{Enabled: true, Username: "admin", Password: "secret"}, reg)
+		})
+
+		Context("when called without an Authorization header and auth is enabled", func() {
+			It("should return 200 OK — metrics are always public", func() {
+				req := httptest.NewRequest("GET", "/metrics", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+			})
+		})
+
+		Context("after a message has been enqueued", func() {
+			BeforeEach(func() {
+				_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM messages")
+				Expect(err).NotTo(HaveOccurred())
+
+				// Enqueue via the service that shares the same recorder.
+				reg2 := prometheus.NewRegistry()
+				rec2 := metrics.New(httpTestPool, reg2)
+				svc2 := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, rec2)
+				httpServer = server.NewHTTPServer(svc2, config.AuthConfig{Enabled: false}, reg2)
+
+				_, err = svc2.Enqueue(httpTestCtx, "metrics-topic", []byte("hello"), nil)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should include queueti_enqueued_total in the response body", func() {
+				req := httptest.NewRequest("GET", "/metrics", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				body, err := io.ReadAll(resp.Body)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(string(body)).To(ContainSubstring("queueti_enqueued_total"))
+			})
+
+			It("should include queueti_queue_depth in the response body", func() {
+				req := httptest.NewRequest("GET", "/metrics", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				body, err := io.ReadAll(resp.Body)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(string(body)).To(ContainSubstring("queueti_queue_depth"))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
 	// GET /api/messages pagination
 	// ---------------------------------------------------------------------------
 
@@ -608,7 +679,7 @@ var _ = Describe("HTTP Server", func() {
 		const paginationTopic = "pagination-topic"
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false})
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry())
 
 			// Given 5 messages are enqueued on the same topic
 			for i := 0; i < 5; i++ {

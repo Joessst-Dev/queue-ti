@@ -9,6 +9,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 
 	"github.com/Joessst-Dev/queue-ti/internal/config"
 	"github.com/Joessst-Dev/queue-ti/internal/queue"
@@ -20,7 +23,7 @@ type HTTPServer struct {
 	authConfig   config.AuthConfig
 }
 
-func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig) *HTTPServer {
+func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer prometheus.Gatherer) *HTTPServer {
 	s := &HTTPServer{
 		queueService: qs,
 		authConfig:   authCfg,
@@ -51,6 +54,14 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig) *HTTPServer {
 
 	app.Get("/healthz", func(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
+	})
+
+	promH := fasthttpadaptor.NewFastHTTPHandler(
+		promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{}),
+	)
+	app.Get("/metrics", func(c *fiber.Ctx) error {
+		promH(c.Context())
+		return nil
 	})
 
 	api := app.Group("/api")

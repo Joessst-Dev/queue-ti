@@ -12,9 +12,12 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/Joessst-Dev/queue-ti/internal/auth"
 	"github.com/Joessst-Dev/queue-ti/internal/config"
 	"github.com/Joessst-Dev/queue-ti/internal/db"
+	"github.com/Joessst-Dev/queue-ti/internal/metrics"
 	"github.com/Joessst-Dev/queue-ti/internal/queue"
 	"github.com/Joessst-Dev/queue-ti/internal/server"
 	pb "github.com/Joessst-Dev/queue-ti/pb"
@@ -70,7 +73,10 @@ func main() {
 		)
 	}
 
-	queueService := queue.NewService(pool, cfg.Queue.VisibilityTimeout, cfg.Queue.MaxRetries, cfg.Queue.MessageTTL, cfg.Queue.DLQThreshold)
+	reg := prometheus.NewRegistry()
+	rec := metrics.New(pool, reg)
+
+	queueService := queue.NewService(pool, cfg.Queue.VisibilityTimeout, cfg.Queue.MaxRetries, cfg.Queue.MessageTTL, cfg.Queue.DLQThreshold, rec)
 	queueService.StartExpiryReaper(ctx, time.Minute)
 
 	var opts []grpc.ServerOption
@@ -97,7 +103,7 @@ func main() {
 		}
 	}()
 
-	httpServer := server.NewHTTPServer(queueService, cfg.Auth)
+	httpServer := server.NewHTTPServer(queueService, cfg.Auth, reg)
 	httpAddr := fmt.Sprintf(":%d", cfg.Server.HTTPPort)
 	go func() {
 		slog.Info("HTTP server listening", "addr", httpAddr)
