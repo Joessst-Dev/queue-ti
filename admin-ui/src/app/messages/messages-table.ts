@@ -254,26 +254,28 @@ import { QueueMessage } from '../services/queue.service';
                     </button>
                   } @else if (msg.status === 'processing') {
                     @if (nackOpenId() === msg.id) {
-                      <div class="flex items-center gap-1">
+                      <div class="flex flex-col gap-1">
                         <input
                           type="text"
                           [value]="nackError()"
                           (input)="nackError.set($any($event.target).value)"
                           placeholder="Error reason (optional)"
-                          class="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-red-400 w-40"
+                          class="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-red-400 w-full"
                         />
-                        <button
-                          (click)="onNackConfirm(msg.id)"
-                          class="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer"
-                        >
-                          Confirm
-                        </button>
-                        <button
-                          (click)="nackOpenId.set(null)"
-                          class="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
-                        >
-                          Cancel
-                        </button>
+                        <div class="flex items-center gap-1">
+                          <button
+                            (click)="onNackConfirm(msg.id)"
+                            class="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            (click)="nackOpenId.set(null)"
+                            class="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
                     } @else {
                       <button

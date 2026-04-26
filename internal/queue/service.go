@@ -46,6 +46,13 @@ type Service struct {
 	recorder          MetricsRecorder
 }
 
+// Pool returns the underlying connection pool. It is intentionally narrow —
+// callers should prefer the Service methods for all queue operations, but the
+// HTTP layer needs the pool to call package-level schema functions directly.
+func (s *Service) Pool() *pgxpool.Pool {
+	return s.pool
+}
+
 func NewService(pool *pgxpool.Pool, visibilityTimeout time.Duration, maxRetries int, messageTTL time.Duration, dlqThreshold int, recorder MetricsRecorder) *Service {
 	if recorder == nil {
 		recorder = NoopRecorder{}
@@ -104,6 +111,10 @@ func (s *Service) resolveEnqueueParams(ctx context.Context, topic string) (maxRe
 func (s *Service) Enqueue(ctx context.Context, topic string, payload []byte, metadata map[string]string) (string, error) {
 	if strings.HasSuffix(topic, ".dlq") {
 		return "", fmt.Errorf("enqueue: %w", ErrReservedTopic)
+	}
+
+	if err := s.validatePayload(ctx, topic, payload); err != nil {
+		return "", err
 	}
 
 	maxRetries, expiresAt, maxDepth, err := s.resolveEnqueueParams(ctx, topic)

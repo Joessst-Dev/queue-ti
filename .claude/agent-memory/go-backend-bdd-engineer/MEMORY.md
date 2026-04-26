@@ -1,0 +1,1 @@
+- [Avro JSON validation approach](feedback_avro_json_validation.md) — hamba/avro/v2 is binary-only; JSON payloads need a hand-rolled struct-check, not avro.Unmarshal

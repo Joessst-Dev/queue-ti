@@ -5,3 +5,4 @@
 - [Prometheus Metrics & Observability](observability_metrics.md) — /metrics endpoint, all counter/gauge definitions, nack outcomes, stats API integration
 - [Per-Dequeue Visibility Timeout Override](per_dequeue_visibility_timeout.md) — Optional visibility_timeout_seconds in DequeueRequest overrides server default per-call
 - [Topic-Level Configuration Feature Documentation](topic_config_feature.md) — Per-topic max_retries/TTL/max_depth overrides, HTTP API (GET/PUT/DELETE), admin UI Config tab
+- [Avro Schema Validation Feature Documentation](avro_schema_feature.md) — Avro schema registration, validation rules, 4 HTTP endpoints, error responses, caching behavior

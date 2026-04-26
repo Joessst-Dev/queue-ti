@@ -33,6 +33,9 @@ func (s *GRPCServer) Enqueue(ctx context.Context, req *pb.EnqueueRequest) (*pb.E
 
 	id, err := s.queueService.Enqueue(ctx, req.Topic, req.Payload, req.Metadata)
 	if err != nil {
+		if errors.Is(err, queue.ErrSchemaValidation) {
+			return nil, status.Errorf(codes.InvalidArgument, "%s", err)
+		}
 		slog.Error("grpc enqueue failed", "topic", req.Topic, "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to enqueue: %v", err)
 	}

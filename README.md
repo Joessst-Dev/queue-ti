@@ -13,6 +13,7 @@ A distributed message queue service built with Go gRPC and PostgreSQL, with an A
 - **Message TTL** — Messages can expire after a configurable duration (default 24 hours); an automatic reaper marks expired messages
 - **Contention-free dequeue** — Uses `FOR UPDATE SKIP LOCKED` for lock-free concurrent message consumption
 - **Basic authentication** — Optional basic auth for both gRPC and HTTP endpoints
+- **Avro schema validation** — Optional per-topic Avro schema registration; payloads are validated at enqueue time with compiled schemas cached in memory
 - **Admin UI** — Angular-based web interface to list messages with detailed status, retry counts, and expiry information; filter by topic; manually enqueue test messages; inspect dead-letter queue messages; requeue or inline-nack processing messages; configure per-topic settings
 - **Configuration** — YAML-based global configuration with environment variable overrides via `QUEUETI_` prefix; per-topic overrides for retry count, TTL, and queue depth limits via HTTP API or admin UI
 
@@ -210,6 +211,166 @@ curl -u admin:secret -X PUT http://localhost:8080/api/topic-configs/orders \
 
 The admin UI includes a **Config** tab where operators can view and edit all topic configurations interactively without restarting the server.
 
+## Avro Schema Validation
+
+Topics can have an optional Avro schema registered. When a schema is registered for a topic, all `Enqueue` calls validate the JSON payload against that schema before storing the message. Topics without a registered schema accept any payload.
+
+### How It Works
+
+- **Schema registration**: Register an Avro schema for a topic via `PUT /api/topic-schemas/:topic` with the schema in JSON format. The schema must be valid Avro JSON; invalid schemas are rejected with HTTP 400.
+- **Validation at enqueue**: When a message is enqueued to a topic with a schema, the payload is validated as JSON and checked against the schema structure. If the payload does not conform, the enqueue fails with HTTP 422 (gRPC `InvalidArgument`) and includes the validation error.
+- **No schema = no validation**: Topics without a registered schema accept any payload. Existing messages are unaffected when a schema is added, updated, or removed.
+- **Performance**: Parsed Avro schemas are cached in memory per topic. The cache automatically invalidates when a schema is updated or deleted, and is rebuilt on the next enqueue operation.
+
+### Validation Rules
+
+For record schemas (the most common Avro type):
+- Every required field (fields with no default value) must be present in the JSON payload
+- Every present field must have a value compatible with its Avro type (string, int, long, float, double, boolean, null, record, array, map, union, enum, bytes, fixed)
+- Optional fields (fields with a default value) may be omitted from the payload
+- For other Avro types (primitives, arrays, maps, unions), the payload must be valid JSON and the top-level type must be compatible
+
+### Schema Registration Endpoints
+
+#### GET /api/topic-schemas
+
+Lists all registered schemas.
+
+```bash
+curl -u admin:secret http://localhost:8080/api/topic-schemas
+```
+
+**Response:**
+```json
+{
+  "items": [
+    {
+      "topic": "orders",
+      "schema_json": "{\"type\":\"record\",\"name\":\"Order\",\"fields\":[{\"name\":\"id\",\"type\":\"int\"},{\"name\":\"total\",\"type\":\"float\"}]}",
+      "version": 1,
+      "updated_at": "2025-04-25T12:00:00Z"
+    }
+  ]
+}
+```
+
+#### PUT /api/topic-schemas/:topic
+
+Registers or updates an Avro schema for a topic. If a schema already exists, the version is incremented and the schema is replaced.
+
+**Request body:**
+```json
+{
+  "schema_json": "{\"type\":\"record\",\"name\":\"Order\",\"fields\":[{\"name\":\"id\",\"type\":\"int\"},{\"name\":\"total\",\"type\":\"float\"}]}"
+}
+```
+
+**Response:** HTTP 200 OK with the registered schema.
+
+```json
+{
+  "topic": "orders",
+  "schema_json": "{\"type\":\"record\",\"name\":\"Order\",\"fields\":[{\"name\":\"id\",\"type\":\"int\"},{\"name\":\"total\",\"type\":\"float\"}]}",
+  "version": 1,
+  "updated_at": "2025-04-25T12:00:00Z"
+}
+```
+
+**Error responses:**
+- HTTP 400 if the `schema_json` is not valid Avro JSON
+
+**Example**: Register an Avro record schema for the `orders` topic:
+
+```bash
+curl -u admin:secret -X PUT http://localhost:8080/api/topic-schemas/orders \
+  -H "Content-Type: application/json" \
+  -d '{
+    "schema_json": "{\"type\":\"record\",\"name\":\"Order\",\"fields\":[{\"name\":\"order_id\",\"type\":\"int\",\"doc\":\"Unique order ID\"},{\"name\":\"customer_email\",\"type\":\"string\"},{\"name\":\"amount\",\"type\":\"double\"}]}"
+  }'
+```
+
+#### DELETE /api/topic-schemas/:topic
+
+Removes the registered schema for a topic. Existing messages are unaffected.
+
+**Request body:** Empty (no body required)
+
+**Response:** HTTP 204 No Content on success.
+
+**Example:**
+```bash
+curl -u admin:secret -X DELETE http://localhost:8080/api/topic-schemas/orders
+```
+
+#### GET /api/topic-schemas/:topic
+
+Fetches the schema registered for a specific topic.
+
+**Response:** HTTP 200 OK with the schema, or HTTP 404 if no schema is registered.
+
+```bash
+curl -u admin:secret http://localhost:8080/api/topic-schemas/orders
+```
+
+**Response body:**
+```json
+{
+  "topic": "orders",
+  "schema_json": "{\"type\":\"record\",\"name\":\"Order\",\"fields\":[{\"name\":\"order_id\",\"type\":\"int\"},{\"name\":\"customer_email\",\"type\":\"string\"},{\"name\":\"amount\",\"type\":\"double\"}]}",
+  "version": 1,
+  "updated_at": "2025-04-25T12:00:00Z"
+}
+```
+
+### Validation Errors
+
+When a payload fails validation, the error includes details about what went wrong:
+
+**HTTP 422 Unprocessable Entity (enqueue with invalid payload):**
+```json
+{
+  "error": "payload does not match topic schema: missing required field \"order_id\""
+}
+```
+
+Common validation error messages:
+- `missing required field "fieldname"` — A required field is absent from the payload
+- `field "fieldname": expected string, got number` — A field has the wrong JSON type
+- `payload is not a valid JSON object` — The payload is not valid JSON or is not an object for a record schema
+- `unexpected null for non-nullable type` — A null value was provided for a non-nullable field
+
+### Example: Register and Use a Schema
+
+1. **Register the schema:**
+   ```bash
+   curl -u admin:secret -X PUT http://localhost:8080/api/topic-schemas/orders \
+     -H "Content-Type: application/json" \
+     -d '{
+       "schema_json": "{\"type\":\"record\",\"name\":\"Order\",\"fields\":[{\"name\":\"order_id\",\"type\":\"int\"},{\"name\":\"customer_email\",\"type\":\"string\"},{\"name\":\"amount\",\"type\":\"double\"}]}"
+     }'
+   ```
+
+2. **Enqueue a valid message (succeeds):**
+   ```bash
+   curl -u admin:secret -X POST http://localhost:8080/api/messages \
+     -H "Content-Type: application/json" \
+     -d '{
+       "topic": "orders",
+       "payload": "{\"order_id\":12345,\"customer_email\":\"alice@example.com\",\"amount\":99.99}"
+     }'
+   ```
+
+3. **Enqueue an invalid message (fails with HTTP 422):**
+   ```bash
+   curl -u admin:secret -X POST http://localhost:8080/api/messages \
+     -H "Content-Type: application/json" \
+     -d '{
+       "topic": "orders",
+       "payload": "{\"order_id\":12345}"
+     }'
+   ```
+   Response: `{"error":"payload does not match topic schema: missing required field \"customer_email\""}`
+
 ## Architecture
 
 ### Backend
@@ -233,6 +394,10 @@ cmd/server/main.go
     ├── /api/topic-configs                   GET    List all topic configurations
     ├── /api/topic-configs/:topic            PUT    Create/update topic configuration
     ├── /api/topic-configs/:topic            DELETE Delete topic configuration
+    ├── /api/topic-schemas                   GET    List all registered schemas
+    ├── /api/topic-schemas/:topic            PUT    Register or update a schema
+    ├── /api/topic-schemas/:topic            DELETE Delete a registered schema
+    ├── /api/topic-schemas/:topic            GET    Fetch a single schema
     ├── /metrics                             GET    Prometheus metrics (unauthenticated)
     └── All /api/* endpoints require basic auth if enabled
 ```
@@ -277,6 +442,8 @@ internal/
   4. Return the message to the consumer.
 
 - **Per-dequeue visibility timeout override**: Clients can override the server-wide visibility timeout on a per-dequeue basis by setting the optional `visibility_timeout_seconds` field in the `DequeueRequest`. This is useful for consumers with variable processing times. For example, a slow batch processor can request a longer timeout without changing the global config. When `visibility_timeout_seconds` is omitted or not set, the server-wide default (typically 30 seconds) applies. Setting `visibility_timeout_seconds` to 0 is rejected with an `InvalidArgument` error.
+
+- **Avro schema validation**: Topics can have an optional Avro schema registered. If a schema is registered for a topic, every `Enqueue` call validates the JSON payload against that schema before writing the message to the database. Topics without a schema accept any payload. Validation errors return HTTP 422 (gRPC `InvalidArgument`), while invalid schema JSON on registration returns HTTP 400. Compiled schemas are cached in memory and automatically invalidated when a schema is updated or deleted.
 
 - **Message statuses**:
   - **pending** (yellow badge) — Ready to be dequeued (initial state after enqueue, or reset after a nack with retries remaining, or after requeue from DLQ)

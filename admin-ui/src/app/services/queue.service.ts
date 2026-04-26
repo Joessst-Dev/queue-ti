@@ -1,6 +1,18 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+
+export interface TopicSchema {
+  topic: string;
+  schema_json: string;
+  version: number;
+  updated_at: string;
+}
+
+export interface TopicSchemasResponse {
+  items: TopicSchema[];
+}
 
 export interface QueueMessage {
   id: string;
@@ -91,5 +103,23 @@ export class QueueService {
 
   deleteTopicConfig(topic: string): Observable<void> {
     return this.http.delete<void>(`/api/topic-configs/${topic}`);
+  }
+
+  getTopicSchemas(): Observable<TopicSchema[]> {
+    return this.http.get<TopicSchemasResponse>('/api/topic-schemas').pipe(
+      map((r) => r.items ?? []),
+    );
+  }
+
+  getTopicSchema(topic: string): Observable<TopicSchema> {
+    return this.http.get<TopicSchema>(`/api/topic-schemas/${topic}`);
+  }
+
+  upsertTopicSchema(topic: string, schemaJson: string): Observable<TopicSchema> {
+    return this.http.put<TopicSchema>(`/api/topic-schemas/${topic}`, { schema_json: schemaJson });
+  }
+
+  deleteTopicSchema(topic: string): Observable<void> {
+    return this.http.delete<void>(`/api/topic-schemas/${topic}`);
   }
 }
