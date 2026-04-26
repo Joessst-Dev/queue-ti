@@ -110,6 +110,8 @@ auth:
   enabled: false
   username: admin
   password: secret
+
+log_level: info         # Log level: debug, info, warn, error (default: info)
 ```
 
 ### Environment Variables
@@ -133,6 +135,30 @@ Any configuration key can be overridden with an environment variable. Use the ke
 | `QUEUETI_AUTH_ENABLED` | Enable authentication | `true` |
 | `QUEUETI_AUTH_USERNAME` | Basic auth username | `admin` |
 | `QUEUETI_AUTH_PASSWORD` | Basic auth password | `secret` |
+| `QUEUETI_LOG_LEVEL` | Log level (debug, info, warn, error) | `info` |
+
+### Log Levels
+
+The `log_level` configuration controls the verbosity of server logging. Choose the appropriate level for your environment:
+
+| Level | Use Case | Typical Output |
+|-------|----------|-----------------|
+| **debug** | Local development, detailed message tracing | Per-message operations (enqueue, dequeue, ack, nack-retry), HTTP requests |
+| **info** | Production (default) | Server startup, DLQ promotions, requeue operations, expiry reaper results, auth enabled notice |
+| **warn** | Production monitoring | Authentication failures, DLQ threshold misconfiguration |
+| **error** | Production incidents | Unexpected DB failures, server errors |
+
+Set via environment variable:
+```bash
+QUEUETI_LOG_LEVEL=debug
+```
+
+Or in `config.yaml`:
+```yaml
+log_level: debug
+```
+
+The resolved log level is printed at server startup in the `"config loaded"` log line.
 
 ## Architecture
 

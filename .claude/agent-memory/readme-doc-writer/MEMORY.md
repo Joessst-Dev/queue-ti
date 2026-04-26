@@ -1,3 +1,4 @@
 - [README Initial Documentation](readme_initial_write.md) — Comprehensive README covering overview, architecture, getting started, config, API reference, tests
 - [Retries & TTL Features Added](retries_ttl_features.md) — Documentation for retry count, max retries, message TTL, and expiry reaper features
 - [Frontend UI Features Added](frontend_ui_features.md) — Admin UI now shows retry counts, expiry, DLQ highlighting, and Nack/Requeue actions
+- [Log Level Configuration Documentation](log_level_feature.md) — Top-level log_level config key with debug/info/warn/error levels and QUEUETI_LOG_LEVEL env var
