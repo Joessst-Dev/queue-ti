@@ -1,1 +1,2 @@
 - [Avro JSON validation approach](feedback_avro_json_validation.md) — hamba/avro/v2 is binary-only; JSON payloads need a hand-rolled struct-check, not avro.Unmarshal
+- [gRPC JWT auth and grant enforcement](project_grpc_jwt_auth.md) — Bearer JWT interceptor; GRPCServer.checkGrant; Ack/Nack resolve topic via TopicForMessage before checking grants

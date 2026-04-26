@@ -36,7 +36,7 @@ var _ = Describe("gRPC Server", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		queueService := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
-		grpcServer := server.NewGRPCServer(queueService)
+		grpcServer := server.NewGRPCServer(queueService, nil)
 
 		lis := bufconn.Listen(1024 * 1024)
 		srv = grpc.NewServer()

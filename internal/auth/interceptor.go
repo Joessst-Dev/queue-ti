@@ -2,7 +2,7 @@ package auth
 
 import (
 	"context"
-	"encoding/base64"
+	"log/slog"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -11,10 +11,26 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/Joessst-Dev/queue-ti/internal/config"
+	"github.com/Joessst-Dev/queue-ti/internal/users"
 )
 
+// claimsKey is an unexported type used as the context key for JWT claims,
+// preventing collisions with keys from other packages.
+type claimsKey struct{}
+
+// ClaimsFromContext retrieves the JWT claims stored by the interceptor.
+// Returns nil when auth is disabled or the interceptor has not run.
+func ClaimsFromContext(ctx context.Context) *users.Claims {
+	v := ctx.Value(claimsKey{})
+	if v == nil {
+		return nil
+	}
+	claims, _ := v.(*users.Claims)
+	return claims
+}
+
 // UnaryInterceptor returns a gRPC unary interceptor that validates
-// basic authentication credentials from the "authorization" metadata header.
+// JWT Bearer tokens from the "authorization" metadata header.
 // If auth is disabled in config, all requests are allowed through.
 func UnaryInterceptor(cfg config.AuthConfig) grpc.UnaryServerInterceptor {
 	return func(
@@ -37,34 +53,18 @@ func UnaryInterceptor(cfg config.AuthConfig) grpc.UnaryServerInterceptor {
 			return nil, status.Error(codes.Unauthenticated, "missing authorization header")
 		}
 
-		username, password, err := parseBasicAuth(authHeader[0])
+		if !strings.HasPrefix(authHeader[0], "Bearer ") {
+			return nil, status.Error(codes.Unauthenticated, "unsupported auth scheme")
+		}
+
+		tokenStr := strings.TrimPrefix(authHeader[0], "Bearer ")
+		claims, err := users.ParseToken([]byte(cfg.JWTSecret), tokenStr)
 		if err != nil {
-			return nil, status.Error(codes.Unauthenticated, "invalid authorization format")
+			slog.Warn("grpc jwt auth: invalid or expired token", "error", err)
+			return nil, status.Error(codes.Unauthenticated, "invalid or expired token")
 		}
 
-		if username != cfg.Username || password != cfg.Password {
-			return nil, status.Error(codes.Unauthenticated, "invalid credentials")
-		}
-
-		return handler(ctx, req)
+		enrichedCtx := context.WithValue(ctx, claimsKey{}, claims)
+		return handler(enrichedCtx, req)
 	}
-}
-
-// parseBasicAuth extracts username and password from a "Basic <base64>" header value.
-func parseBasicAuth(header string) (string, string, error) {
-	if !strings.HasPrefix(header, "Basic ") {
-		return "", "", status.Error(codes.Unauthenticated, "unsupported auth scheme")
-	}
-
-	decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(header, "Basic "))
-	if err != nil {
-		return "", "", err
-	}
-
-	parts := strings.SplitN(string(decoded), ":", 2)
-	if len(parts) != 2 {
-		return "", "", status.Error(codes.Unauthenticated, "invalid credentials format")
-	}
-
-	return parts[0], parts[1], nil
 }

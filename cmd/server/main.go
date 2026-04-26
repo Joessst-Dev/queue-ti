@@ -94,12 +94,12 @@ func main() {
 
 	var opts []grpc.ServerOption
 	if cfg.Auth.Enabled {
-		slog.Info("basic authentication enabled")
+		slog.Info("JWT authentication enabled")
 		opts = append(opts, grpc.UnaryInterceptor(auth.UnaryInterceptor(cfg.Auth)))
 	}
 
 	grpcServer := grpc.NewServer(opts...)
-	pb.RegisterQueueServiceServer(grpcServer, server.NewGRPCServer(queueService))
+	pb.RegisterQueueServiceServer(grpcServer, server.NewGRPCServer(queueService, userStore))
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	lis, err := net.Listen("tcp", addr)
