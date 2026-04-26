@@ -14,16 +14,13 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	"github.com/Joessst-Dev/queue-ti/internal/db"
 	"github.com/Joessst-Dev/queue-ti/internal/queue"
 	"github.com/Joessst-Dev/queue-ti/internal/server"
 	pb "github.com/Joessst-Dev/queue-ti/pb"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var _ = Describe("gRPC Server", func() {
 	var (
-		pool   *pgxpool.Pool
 		client pb.QueueServiceClient
 		conn   *grpc.ClientConn
 		srv    *grpc.Server
@@ -33,19 +30,12 @@ var _ = Describe("gRPC Server", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 
-		var err error
-		dsn := "postgres://postgres:postgres@localhost:5432/queueti_test?sslmode=disable"
-		pool, err = pgxpool.New(ctx, dsn)
+		// httpTestPool is provisioned by the BeforeSuite in http_test.go.
+		// We clean up messages here to guarantee test isolation.
+		_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM messages")
 		Expect(err).NotTo(HaveOccurred())
 
-		err = db.Migrate(ctx, pool)
-		Expect(err).NotTo(HaveOccurred())
-
-		// Ensure a clean state before each test
-		_, err = pool.Exec(ctx, "DELETE FROM messages")
-		Expect(err).NotTo(HaveOccurred())
-
-		queueService := queue.NewService(pool, 30*time.Second)
+		queueService := queue.NewService(httpTestPool, 30*time.Second, 3, 0)
 		grpcServer := server.NewGRPCServer(queueService)
 
 		lis := bufconn.Listen(1024 * 1024)
@@ -73,9 +63,6 @@ var _ = Describe("gRPC Server", func() {
 		}
 		if srv != nil {
 			srv.Stop()
-		}
-		if pool != nil {
-			pool.Close()
 		}
 	})
 
@@ -175,5 +162,57 @@ var _ = Describe("gRPC Server", func() {
 			})
 		})
 	})
-})
 
+	// Tests for the Nack RPC endpoint
+	Describe("Nack", func() {
+		Context("Given a message that is currently being processed", func() {
+			var messageID string
+
+			BeforeEach(func() {
+				enqResp, err := client.Enqueue(ctx, &pb.EnqueueRequest{
+					Topic:   "grpc-nack-topic",
+					Payload: []byte("nack me"),
+				})
+				Expect(err).NotTo(HaveOccurred())
+				messageID = enqResp.Id
+
+				_, err = client.Dequeue(ctx, &pb.DequeueRequest{Topic: "grpc-nack-topic"})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should successfully nack the message without error", func() {
+				// When we nack the processing message
+				_, err := client.Nack(ctx, &pb.NackRequest{
+					Id:    messageID,
+					Error: "transient failure",
+				})
+
+				// Then no error is returned
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Context("Given a message ID that does not exist", func() {
+			It("should return a NotFound gRPC error", func() {
+				_, err := client.Nack(ctx, &pb.NackRequest{
+					Id:    "00000000-0000-0000-0000-000000000000",
+					Error: "irrelevant",
+				})
+
+				Expect(err).To(HaveOccurred())
+				st, _ := status.FromError(err)
+				Expect(st.Code()).To(Equal(codes.NotFound))
+			})
+		})
+
+		Context("Given an empty message ID", func() {
+			It("should return InvalidArgument", func() {
+				_, err := client.Nack(ctx, &pb.NackRequest{Id: ""})
+
+				Expect(err).To(HaveOccurred())
+				st, _ := status.FromError(err)
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+			})
+		})
+	})
+})

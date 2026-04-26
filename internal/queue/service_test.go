@@ -33,7 +33,7 @@ var _ = Describe("Queue Service", func() {
 		_, err = pool.Exec(ctx, "DELETE FROM messages")
 		Expect(err).NotTo(HaveOccurred())
 
-		service = queue.NewService(pool, 30*time.Second)
+		service = queue.NewService(pool, 30*time.Second, 3, 0)
 	})
 
 	AfterEach(func() {
@@ -52,6 +52,65 @@ var _ = Describe("Queue Service", func() {
 				// Then no error occurs and a non-empty ID is returned
 				Expect(err).NotTo(HaveOccurred())
 				Expect(id).NotTo(BeEmpty())
+			})
+		})
+
+		Context("Given a service configured with max_retries = 5", func() {
+			BeforeEach(func() {
+				service = queue.NewService(pool, 30*time.Second, 5, 0)
+			})
+
+			It("should store the message with retry_count = 0 and max_retries = 5", func() {
+				id, err := service.Enqueue(ctx, "retry-topic", []byte("payload"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				var retryCount, maxRetries int
+				err = pool.QueryRow(ctx,
+					`SELECT retry_count, max_retries FROM messages WHERE id = $1`, id,
+				).Scan(&retryCount, &maxRetries)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(retryCount).To(Equal(0))
+				Expect(maxRetries).To(Equal(5))
+			})
+		})
+
+		Context("Given a service with a TTL of 1 hour", func() {
+			BeforeEach(func() {
+				service = queue.NewService(pool, 30*time.Second, 3, time.Hour)
+			})
+
+			It("should set expires_at to approximately now + TTL", func() {
+				before := time.Now()
+				id, err := service.Enqueue(ctx, "ttl-topic", []byte("payload"), nil)
+				Expect(err).NotTo(HaveOccurred())
+				after := time.Now()
+
+				var expiresAt *time.Time
+				err = pool.QueryRow(ctx,
+					`SELECT expires_at FROM messages WHERE id = $1`, id,
+				).Scan(&expiresAt)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(expiresAt).NotTo(BeNil())
+				Expect(*expiresAt).To(BeTemporally(">=", before.Add(time.Hour-time.Second)))
+				Expect(*expiresAt).To(BeTemporally("<=", after.Add(time.Hour+time.Second)))
+			})
+		})
+
+		Context("Given a service with TTL = 0 (no expiry)", func() {
+			BeforeEach(func() {
+				service = queue.NewService(pool, 30*time.Second, 3, 0)
+			})
+
+			It("should store the message with expires_at = NULL", func() {
+				id, err := service.Enqueue(ctx, "no-ttl-topic", []byte("payload"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				var expiresAt *time.Time
+				err = pool.QueryRow(ctx,
+					`SELECT expires_at FROM messages WHERE id = $1`, id,
+				).Scan(&expiresAt)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(expiresAt).To(BeNil())
 			})
 		})
 	})
@@ -111,6 +170,52 @@ var _ = Describe("Queue Service", func() {
 				Expect(err).To(Equal(queue.ErrNoMessage))
 			})
 		})
+
+		Context("Given a message whose expires_at is in the past", func() {
+			BeforeEach(func() {
+				// Insert an already-expired message directly so we can control the timestamp.
+				_, err := pool.Exec(ctx, `
+					INSERT INTO messages (topic, payload, max_retries, expires_at)
+					VALUES ('exp-topic', 'stale', 3, now() - interval '1 second')
+				`)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not return the expired message", func() {
+				_, err := service.Dequeue(ctx, "exp-topic")
+				Expect(err).To(Equal(queue.ErrNoMessage))
+			})
+		})
+
+		Context("Given a message whose retry_count has reached max_retries", func() {
+			BeforeEach(func() {
+				// Insert a message that has already exhausted its retries.
+				_, err := pool.Exec(ctx, `
+					INSERT INTO messages (topic, payload, retry_count, max_retries)
+					VALUES ('exhausted-topic', 'done', 3, 3)
+				`)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not return the retry-exhausted message", func() {
+				_, err := service.Dequeue(ctx, "exhausted-topic")
+				Expect(err).To(Equal(queue.ErrNoMessage))
+			})
+		})
+
+		Context("Given a message with retries remaining and no expiry", func() {
+			BeforeEach(func() {
+				_, err := service.Enqueue(ctx, "available-topic", []byte("work"), nil)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the message normally", func() {
+				msg, err := service.Dequeue(ctx, "available-topic")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msg).NotTo(BeNil())
+				Expect(msg.Payload).To(Equal([]byte("work")))
+			})
+		})
 	})
 
 	// Tests for acknowledging (completing) messages
@@ -154,6 +259,125 @@ var _ = Describe("Queue Service", func() {
 		})
 	})
 
+	// Tests for negative acknowledgement (Nack)
+	Describe("Nack", func() {
+		Context("Given a message that is currently being processed", func() {
+			var messageID string
+
+			BeforeEach(func() {
+				var err error
+				messageID, err = service.Enqueue(ctx, "nack-topic", []byte("work"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = service.Dequeue(ctx, "nack-topic")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should increment retry_count, set last_error, and reset visibility_timeout to NULL", func() {
+				err := service.Nack(ctx, messageID, "something went wrong")
+				Expect(err).NotTo(HaveOccurred())
+
+				var retryCount int
+				var lastError *string
+				var visibilityTimeout *time.Time
+				err = pool.QueryRow(ctx,
+					`SELECT retry_count, last_error, visibility_timeout FROM messages WHERE id = $1`, messageID,
+				).Scan(&retryCount, &lastError, &visibilityTimeout)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(retryCount).To(Equal(1))
+				Expect(lastError).NotTo(BeNil())
+				Expect(*lastError).To(Equal("something went wrong"))
+				Expect(visibilityTimeout).To(BeNil())
+			})
+		})
+
+		Context("Given a service with max_retries = 3 and a message on its first nack (retry_count 0 → 1)", func() {
+			var messageID string
+
+			BeforeEach(func() {
+				service = queue.NewService(pool, 30*time.Second, 3, 0)
+				var err error
+				messageID, err = service.Enqueue(ctx, "retry-nack-topic", []byte("retry"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = service.Dequeue(ctx, "retry-nack-topic")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should set status back to 'pending' so the message can be dequeued again", func() {
+				err := service.Nack(ctx, messageID, "transient error")
+				Expect(err).NotTo(HaveOccurred())
+
+				var msgStatus string
+				err = pool.QueryRow(ctx,
+					`SELECT status FROM messages WHERE id = $1`, messageID,
+				).Scan(&msgStatus)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msgStatus).To(Equal("pending"))
+
+				// Confirm it can actually be dequeued again.
+				msg, err := service.Dequeue(ctx, "retry-nack-topic")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msg.ID).To(Equal(messageID))
+			})
+		})
+
+		Context("Given a service with max_retries = 1 and a message on its first (and last) nack", func() {
+			var messageID string
+
+			BeforeEach(func() {
+				service = queue.NewService(pool, 30*time.Second, 1, 0)
+				var err error
+				messageID, err = service.Enqueue(ctx, "final-nack-topic", []byte("one-shot"), nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = service.Dequeue(ctx, "final-nack-topic")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should transition the message to 'failed' and make it unavailable for dequeue", func() {
+				err := service.Nack(ctx, messageID, "fatal error")
+				Expect(err).NotTo(HaveOccurred())
+
+				var msgStatus string
+				err = pool.QueryRow(ctx,
+					`SELECT status FROM messages WHERE id = $1`, messageID,
+				).Scan(&msgStatus)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msgStatus).To(Equal("failed"))
+
+				// Confirm it is no longer dequeue-able.
+				_, err = service.Dequeue(ctx, "final-nack-topic")
+				Expect(err).To(Equal(queue.ErrNoMessage))
+			})
+		})
+
+		Context("Given a message ID that does not exist", func() {
+			It("should return ErrNotFound", func() {
+				err := service.Nack(ctx, "00000000-0000-0000-0000-000000000000", "irrelevant")
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring(queue.ErrNotFound.Error())))
+			})
+		})
+
+		Context("Given a message that is in 'pending' state (not processing)", func() {
+			var messageID string
+
+			BeforeEach(func() {
+				var err error
+				messageID, err = service.Enqueue(ctx, "pending-nack-topic", []byte("pending"), nil)
+				Expect(err).NotTo(HaveOccurred())
+				// Deliberately do NOT dequeue it — it stays 'pending'.
+			})
+
+			It("should return ErrNotProcessing", func() {
+				err := service.Nack(ctx, messageID, "should fail")
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring(queue.ErrNotProcessing.Error())))
+			})
+		})
+	})
+
 	// Tests for metadata preservation through the queue lifecycle
 	Describe("Metadata", func() {
 		Context("Given a message with metadata key-value pairs", func() {
@@ -173,5 +397,38 @@ var _ = Describe("Queue Service", func() {
 			})
 		})
 	})
-})
 
+	// Tests for the background expiry reaper
+	Describe("StartExpiryReaper", func() {
+		Context("Given a message that is already expired", func() {
+			var messageID string
+
+			BeforeEach(func() {
+				// Insert an expired pending message directly.
+				err := pool.QueryRow(ctx, `
+					INSERT INTO messages (topic, payload, max_retries, expires_at)
+					VALUES ('reaper-topic', 'stale', 3, now() - interval '1 second')
+					RETURNING id
+				`).Scan(&messageID)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should mark the expired message as 'expired' after the reaper fires", func() {
+				reaperCtx, cancel := context.WithCancel(ctx)
+				defer cancel()
+
+				// Use a very short interval so the reaper fires quickly in the test.
+				service.StartExpiryReaper(reaperCtx, 50*time.Millisecond)
+
+				// Wait long enough for at least one reaper tick.
+				Eventually(func() string {
+					var msgStatus string
+					_ = pool.QueryRow(ctx,
+						`SELECT status FROM messages WHERE id = $1`, messageID,
+					).Scan(&msgStatus)
+					return msgStatus
+				}, 2*time.Second, 100*time.Millisecond).Should(Equal("expired"))
+			})
+		})
+	})
+})

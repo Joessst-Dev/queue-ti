@@ -31,6 +31,8 @@ type DBConfig struct {
 
 type QueueConfig struct {
 	VisibilityTimeout time.Duration `mapstructure:"visibility_timeout"`
+	MaxRetries        int           `mapstructure:"max_retries"`
+	MessageTTL        time.Duration `mapstructure:"message_ttl"`
 }
 
 type AuthConfig struct {
@@ -58,6 +60,8 @@ func Load() (*Config, error) {
 	viper.SetDefault("db.name", "queueti")
 	viper.SetDefault("db.sslmode", "disable")
 	viper.SetDefault("queue.visibility_timeout", "30s")
+	viper.SetDefault("queue.max_retries", 3)
+	viper.SetDefault("queue.message_ttl", "24h")
 	viper.SetDefault("auth.enabled", false)
 	viper.SetDefault("auth.username", "")
 	viper.SetDefault("auth.password", "")
@@ -72,6 +76,8 @@ func Load() (*Config, error) {
 	_ = viper.BindEnv("db.name")
 	_ = viper.BindEnv("db.sslmode")
 	_ = viper.BindEnv("queue.visibility_timeout")
+	_ = viper.BindEnv("queue.max_retries")
+	_ = viper.BindEnv("queue.message_ttl")
 	_ = viper.BindEnv("auth.enabled")
 	_ = viper.BindEnv("auth.username")
 	_ = viper.BindEnv("auth.password")

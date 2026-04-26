@@ -31,6 +31,8 @@ var _ = Describe("Load", func() {
 			Expect(cfg.DB.Name).To(Equal("queueti"))
 			Expect(cfg.DB.SSLMode).To(Equal("disable"))
 			Expect(cfg.Queue.VisibilityTimeout).To(Equal(30 * time.Second))
+			Expect(cfg.Queue.MaxRetries).To(Equal(3))
+			Expect(cfg.Queue.MessageTTL).To(Equal(24 * time.Hour))
 			Expect(cfg.Auth.Enabled).To(BeFalse())
 			Expect(cfg.Auth.Username).To(BeEmpty())
 			Expect(cfg.Auth.Password).To(BeEmpty())
@@ -48,6 +50,8 @@ var _ = Describe("Load", func() {
 			os.Unsetenv("QUEUETI_DB_NAME")
 			os.Unsetenv("QUEUETI_DB_SSLMODE")
 			os.Unsetenv("QUEUETI_QUEUE_VISIBILITY_TIMEOUT")
+			os.Unsetenv("QUEUETI_QUEUE_MAX_RETRIES")
+			os.Unsetenv("QUEUETI_QUEUE_MESSAGE_TTL")
 			os.Unsetenv("QUEUETI_AUTH_ENABLED")
 			os.Unsetenv("QUEUETI_AUTH_USERNAME")
 			os.Unsetenv("QUEUETI_AUTH_PASSWORD")
@@ -90,6 +94,24 @@ var _ = Describe("Load", func() {
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Queue.VisibilityTimeout).To(Equal(2 * time.Minute))
+		})
+
+		It("overrides max_retries via QUEUETI_QUEUE_MAX_RETRIES", func() {
+			os.Setenv("QUEUETI_QUEUE_MAX_RETRIES", "5")
+
+			cfg, err := config.Load()
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.Queue.MaxRetries).To(Equal(5))
+		})
+
+		It("overrides message_ttl via QUEUETI_QUEUE_MESSAGE_TTL", func() {
+			os.Setenv("QUEUETI_QUEUE_MESSAGE_TTL", "48h")
+
+			cfg, err := config.Load()
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.Queue.MessageTTL).To(Equal(48 * time.Hour))
 		})
 
 		It("enables auth and sets credentials", func() {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -25,7 +26,8 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	pool, err := db.Connect(ctx, cfg.DB)
 	if err != nil {
@@ -37,7 +39,8 @@ func main() {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	queueService := queue.NewService(pool, cfg.Queue.VisibilityTimeout)
+	queueService := queue.NewService(pool, cfg.Queue.VisibilityTimeout, cfg.Queue.MaxRetries, cfg.Queue.MessageTTL)
+	queueService.StartExpiryReaper(ctx, time.Minute)
 
 	var opts []grpc.ServerOption
 	if cfg.Auth.Enabled {
@@ -76,7 +79,7 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
+	cancel()
 	httpServer.App.Shutdown()
 	grpcServer.GracefulStop()
 }
-

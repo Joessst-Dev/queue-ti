@@ -177,6 +177,8 @@ type DequeueResponse struct {
 	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
 	Metadata      map[string]string      `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	RetryCount    int32                  `protobuf:"varint,6,opt,name=retry_count,json=retryCount,proto3" json:"retry_count,omitempty"`
+	MaxRetries    int32                  `protobuf:"varint,7,opt,name=max_retries,json=maxRetries,proto3" json:"max_retries,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -244,6 +246,20 @@ func (x *DequeueResponse) GetCreatedAt() *timestamppb.Timestamp {
 		return x.CreatedAt
 	}
 	return nil
+}
+
+func (x *DequeueResponse) GetRetryCount() int32 {
+	if x != nil {
+		return x.RetryCount
+	}
+	return 0
+}
+
+func (x *DequeueResponse) GetMaxRetries() int32 {
+	if x != nil {
+		return x.MaxRetries
+	}
+	return 0
 }
 
 type AckRequest struct {
@@ -326,6 +342,94 @@ func (*AckResponse) Descriptor() ([]byte, []int) {
 	return file_queue_proto_rawDescGZIP(), []int{5}
 }
 
+type NackRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NackRequest) Reset() {
+	*x = NackRequest{}
+	mi := &file_queue_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NackRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NackRequest) ProtoMessage() {}
+
+func (x *NackRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_queue_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NackRequest.ProtoReflect.Descriptor instead.
+func (*NackRequest) Descriptor() ([]byte, []int) {
+	return file_queue_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *NackRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *NackRequest) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type NackResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NackResponse) Reset() {
+	*x = NackResponse{}
+	mi := &file_queue_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NackResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NackResponse) ProtoMessage() {}
+
+func (x *NackResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_queue_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NackResponse.ProtoReflect.Descriptor instead.
+func (*NackResponse) Descriptor() ([]byte, []int) {
+	return file_queue_proto_rawDescGZIP(), []int{7}
+}
+
 var File_queue_proto protoreflect.FileDescriptor
 
 const file_queue_proto_rawDesc = "" +
@@ -341,25 +445,34 @@ const file_queue_proto_rawDesc = "" +
 	"\x0fEnqueueResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"&\n" +
 	"\x0eDequeueRequest\x12\x14\n" +
-	"\x05topic\x18\x01 \x01(\tR\x05topic\"\x8b\x02\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\"\xcd\x02\n" +
 	"\x0fDequeueResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05topic\x18\x02 \x01(\tR\x05topic\x12\x18\n" +
 	"\apayload\x18\x03 \x01(\fR\apayload\x12@\n" +
 	"\bmetadata\x18\x04 \x03(\v2$.queue.DequeueResponse.MetadataEntryR\bmetadata\x129\n" +
 	"\n" +
-	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x1a;\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1f\n" +
+	"\vretry_count\x18\x06 \x01(\x05R\n" +
+	"retryCount\x12\x1f\n" +
+	"\vmax_retries\x18\a \x01(\x05R\n" +
+	"maxRetries\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x1c\n" +
 	"\n" +
 	"AckRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\r\n" +
-	"\vAckResponse2\xb0\x01\n" +
+	"\vAckResponse\"3\n" +
+	"\vNackRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\x0e\n" +
+	"\fNackResponse2\xe1\x01\n" +
 	"\fQueueService\x128\n" +
 	"\aEnqueue\x12\x15.queue.EnqueueRequest\x1a\x16.queue.EnqueueResponse\x128\n" +
 	"\aDequeue\x12\x15.queue.DequeueRequest\x1a\x16.queue.DequeueResponse\x12,\n" +
-	"\x03Ack\x12\x11.queue.AckRequest\x1a\x12.queue.AckResponseB$Z\"github.com/Joessst-Dev/queue-ti/pbb\x06proto3"
+	"\x03Ack\x12\x11.queue.AckRequest\x1a\x12.queue.AckResponse\x12/\n" +
+	"\x04Nack\x12\x12.queue.NackRequest\x1a\x13.queue.NackResponseB$Z\"github.com/Joessst-Dev/queue-ti/pbb\x06proto3"
 
 var (
 	file_queue_proto_rawDescOnce sync.Once
@@ -373,7 +486,7 @@ func file_queue_proto_rawDescGZIP() []byte {
 	return file_queue_proto_rawDescData
 }
 
-var file_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_queue_proto_goTypes = []any{
 	(*EnqueueRequest)(nil),        // 0: queue.EnqueueRequest
 	(*EnqueueResponse)(nil),       // 1: queue.EnqueueResponse
@@ -381,25 +494,29 @@ var file_queue_proto_goTypes = []any{
 	(*DequeueResponse)(nil),       // 3: queue.DequeueResponse
 	(*AckRequest)(nil),            // 4: queue.AckRequest
 	(*AckResponse)(nil),           // 5: queue.AckResponse
-	nil,                           // 6: queue.EnqueueRequest.MetadataEntry
-	nil,                           // 7: queue.DequeueResponse.MetadataEntry
-	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
+	(*NackRequest)(nil),           // 6: queue.NackRequest
+	(*NackResponse)(nil),          // 7: queue.NackResponse
+	nil,                           // 8: queue.EnqueueRequest.MetadataEntry
+	nil,                           // 9: queue.DequeueResponse.MetadataEntry
+	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
 }
 var file_queue_proto_depIdxs = []int32{
-	6, // 0: queue.EnqueueRequest.metadata:type_name -> queue.EnqueueRequest.MetadataEntry
-	7, // 1: queue.DequeueResponse.metadata:type_name -> queue.DequeueResponse.MetadataEntry
-	8, // 2: queue.DequeueResponse.created_at:type_name -> google.protobuf.Timestamp
-	0, // 3: queue.QueueService.Enqueue:input_type -> queue.EnqueueRequest
-	2, // 4: queue.QueueService.Dequeue:input_type -> queue.DequeueRequest
-	4, // 5: queue.QueueService.Ack:input_type -> queue.AckRequest
-	1, // 6: queue.QueueService.Enqueue:output_type -> queue.EnqueueResponse
-	3, // 7: queue.QueueService.Dequeue:output_type -> queue.DequeueResponse
-	5, // 8: queue.QueueService.Ack:output_type -> queue.AckResponse
-	6, // [6:9] is the sub-list for method output_type
-	3, // [3:6] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	8,  // 0: queue.EnqueueRequest.metadata:type_name -> queue.EnqueueRequest.MetadataEntry
+	9,  // 1: queue.DequeueResponse.metadata:type_name -> queue.DequeueResponse.MetadataEntry
+	10, // 2: queue.DequeueResponse.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 3: queue.QueueService.Enqueue:input_type -> queue.EnqueueRequest
+	2,  // 4: queue.QueueService.Dequeue:input_type -> queue.DequeueRequest
+	4,  // 5: queue.QueueService.Ack:input_type -> queue.AckRequest
+	6,  // 6: queue.QueueService.Nack:input_type -> queue.NackRequest
+	1,  // 7: queue.QueueService.Enqueue:output_type -> queue.EnqueueResponse
+	3,  // 8: queue.QueueService.Dequeue:output_type -> queue.DequeueResponse
+	5,  // 9: queue.QueueService.Ack:output_type -> queue.AckResponse
+	7,  // 10: queue.QueueService.Nack:output_type -> queue.NackResponse
+	7,  // [7:11] is the sub-list for method output_type
+	3,  // [3:7] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_queue_proto_init() }
@@ -413,7 +530,7 @@ func file_queue_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_queue_proto_rawDesc), len(file_queue_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

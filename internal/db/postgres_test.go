@@ -197,9 +197,13 @@ var _ = Describe("Migrate", func() {
 
 			Expect(columns).To(ConsistOf(
 				"created_at",
+				"expires_at",
 				"id",
+				"last_error",
+				"max_retries",
 				"metadata",
 				"payload",
+				"retry_count",
 				"status",
 				"topic",
 				"updated_at",
