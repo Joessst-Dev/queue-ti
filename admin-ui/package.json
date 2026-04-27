@@ -2,6 +2,9 @@
   "name": "@admin-ui/source",
   "version": "0.0.0",
   "license": "MIT",
+  "engines": {
+    "node": ">=24.15.0"
+  },
   "scripts": {
     "start": "nx serve",
     "build": "nx build",
