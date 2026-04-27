@@ -8,8 +8,8 @@ import { TopicSchemaSection } from './topic-schema-section';
   imports: [TopicConfigSection, TopicSchemaSection],
   template: `
     <div class="space-y-6">
-      <app-topic-config-section />
-      <app-topic-schema-section />
+      <div><app-topic-config-section /></div>
+      <div><app-topic-schema-section /></div>
     </div>
   `,
 })

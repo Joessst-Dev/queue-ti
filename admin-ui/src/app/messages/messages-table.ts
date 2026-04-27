@@ -16,6 +16,9 @@ import {
 } from '@angular/cdk/scrolling';
 import { QueueMessage } from '../services/queue.service';
 
+// py-4 top (16) + text-sm line-height (20) + py-4 bottom (16) + divide-y border (1) = 53
+const ITEM_SIZE = 53;
+
 @Component({
   selector: 'app-messages-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -124,108 +127,71 @@ import { QueueMessage } from '../services/queue.service';
       }
 
       <div class="overflow-x-auto">
-        <!-- Header table — lives outside the viewport so it never gets translated away -->
+        <!-- Header table — lives outside the viewport so it never scrolls away -->
         <table
           class="w-full table-fixed border-b border-gray-200"
           [style.width]="'calc(100% - ' + scrollbarWidth() + 'px)'"
         >
           <colgroup>
             <col class="hidden lg:table-column" style="width: 9%">
-            <col style="width: 11%">
+            <col style="width: 13%">
             <col class="hidden md:table-column" style="width: 10%">
-            <col class="hidden md:table-column" style="width: 18%">
+            <col class="hidden md:table-column" style="width: 16%">
             <col style="width: 8%">
             <col class="hidden md:table-column" style="width: 7%">
             <col class="hidden lg:table-column" style="width: 9%">
-            <col class="hidden lg:table-column" style="width: 12%">
+            <col class="hidden lg:table-column" style="width: 11%">
             <col class="hidden md:table-column" style="width: 9%">
-            <col style="width: 7%">
+            <col style="width: 8%">
           </colgroup>
           <thead class="bg-gray-50">
             <tr>
-              <th
-                class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-              >
-                ID
-              </th>
-              <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-              >
-                Topic
-              </th>
-              <th
-                class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-              >
-                Key
-              </th>
-              <th
-                class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-              >
-                Payload
-              </th>
-              <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-              >
-                Status
-              </th>
-              <th
-                class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-              >
-                Retries
-              </th>
-              <th
-                class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-              >
-                Expires
-              </th>
-              <th
-                class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-              >
-                Metadata
-              </th>
-              <th
-                class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-              >
-                Created
-              </th>
-              <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-              >
-                Actions
-              </th>
+              <th class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Topic</th>
+              <th class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Key</th>
+              <th class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payload</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+              <th class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Retries</th>
+              <th class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expires</th>
+              <th class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Metadata</th>
+              <th class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
         </table>
+
         <cdk-virtual-scroll-viewport
-          [itemSize]="73"
-          style="height: 520px;"
+          [itemSize]="itemSize"
+          [minBufferPx]="600"
+          [maxBufferPx]="1200"
+          [style.height]="viewportHeight()"
           (scrolledIndexChange)="scrollIndexChange.emit($event)"
         >
           <table class="w-full table-fixed">
             <colgroup>
               <col class="hidden lg:table-column" style="width: 9%">
-              <col style="width: 11%">
+              <col style="width: 13%">
               <col class="hidden md:table-column" style="width: 10%">
-              <col class="hidden md:table-column" style="width: 18%">
+              <col class="hidden md:table-column" style="width: 16%">
               <col style="width: 8%">
               <col class="hidden md:table-column" style="width: 7%">
               <col class="hidden lg:table-column" style="width: 9%">
-              <col class="hidden lg:table-column" style="width: 12%">
+              <col class="hidden lg:table-column" style="width: 11%">
               <col class="hidden md:table-column" style="width: 9%">
-              <col style="width: 7%">
+              <col style="width: 8%">
             </colgroup>
             <tbody class="divide-y divide-gray-200">
               <tr *cdkVirtualFor="let msg of messages(); trackBy: trackByMsgId" [class]="rowClasses(msg)">
-                <td class="hidden lg:table-cell px-6 py-4 text-sm font-mono text-gray-600">
-                  <div class="flex items-center gap-1">
-                    <span [title]="msg.id"
-                      >{{ msg.id | slice: 0 : 8 }}&hellip;</span
-                    >
+
+                <!-- ID -->
+                <td class="hidden lg:table-cell px-6 py-4 text-sm font-mono text-gray-600 overflow-hidden">
+                  <div class="flex items-center gap-1 min-w-0">
+                    <span class="truncate" [title]="msg.id">{{ msg.id | slice: 0 : 8 }}&hellip;</span>
                     <button
                       type="button"
                       (click)="copyId(msg.id)"
                       [title]="'Copy full ID: ' + msg.id"
-                      class="text-gray-400 hover:text-gray-600 cursor-pointer"
+                      class="shrink-0 text-gray-400 hover:text-gray-600 cursor-pointer"
                     >
                       @if (copiedId() === msg.id) {
                         <svg class="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -239,26 +205,30 @@ import { QueueMessage } from '../services/queue.service';
                     </button>
                   </div>
                 </td>
-                <td class="px-6 py-4 text-sm text-gray-900">
-                  <div>{{ msg.topic }}</div>
-                  @if (msg.original_topic) {
-                    <div class="text-xs text-gray-400 mt-0.5">
-                      from: {{ msg.original_topic }}
-                    </div>
-                  }
+
+                <!-- Topic — ellipsis + tooltip; original_topic in tooltip only -->
+                <td
+                  class="px-6 py-4 text-sm text-gray-900 truncate"
+                  [title]="msg.original_topic ? msg.topic + ' (from: ' + msg.original_topic + ')' : msg.topic"
+                >
+                  {{ msg.topic }}
                 </td>
-                <td class="hidden md:table-cell px-6 py-4 text-sm text-gray-600 font-mono truncate">
+
+                <!-- Key -->
+                <td class="hidden md:table-cell px-6 py-4 text-sm text-gray-600 font-mono truncate" [title]="msg.key ?? ''">
                   @if (msg.key) {
                     {{ msg.key }}
                   } @else {
                     <span class="text-gray-400">&mdash;</span>
                   }
                 </td>
-                <td
-                  class="hidden md:table-cell px-6 py-4 text-sm text-gray-600 max-w-xs truncate font-mono"
-                >
+
+                <!-- Payload -->
+                <td class="hidden md:table-cell px-6 py-4 text-sm text-gray-600 font-mono truncate" [title]="msg.payload">
                   {{ msg.payload }}
                 </td>
+
+                <!-- Status -->
                 <td class="px-6 py-4 text-sm">
                   <span
                     class="inline-flex px-2 py-0.5 text-xs font-medium rounded-full"
@@ -267,6 +237,8 @@ import { QueueMessage } from '../services/queue.service';
                     {{ msg.status }}
                   </span>
                 </td>
+
+                <!-- Retries -->
                 <td class="hidden md:table-cell px-6 py-4 text-sm">
                   <span
                     [title]="msg.last_error || ''"
@@ -275,71 +247,74 @@ import { QueueMessage } from '../services/queue.service';
                     {{ msg.retry_count }} / {{ msg.max_retries }}
                   </span>
                 </td>
-                <td class="hidden lg:table-cell px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
+
+                <!-- Expires -->
+                <td class="hidden lg:table-cell px-6 py-4 text-sm text-gray-500 truncate">
                   @if (msg.expires_at) {
                     {{ msg.expires_at | date: 'short' }}
                   } @else {
                     <span class="text-gray-400">&mdash;</span>
                   }
                 </td>
-                <td class="hidden lg:table-cell px-6 py-4 text-sm text-gray-500">
-                  @if (
-                    msg.metadata && objectKeys(msg.metadata).length > 0
-                  ) {
-                    @for (key of objectKeys(msg.metadata); track key) {
-                      <span
-                        class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 mr-1 mb-1"
-                      >
-                        {{ key }}={{ msg.metadata[key] }}
-                      </span>
-                    }
+
+                <!-- Metadata — single-line, clips overflow tags -->
+                <td class="hidden lg:table-cell px-6 py-4 text-sm text-gray-500 overflow-hidden"
+                    [title]="metadataTitle(msg.metadata)">
+                  @if (msg.metadata && objectKeys(msg.metadata).length > 0) {
+                    <div class="flex gap-1 overflow-hidden">
+                      @for (key of objectKeys(msg.metadata); track key) {
+                        <span class="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
+                          {{ key }}={{ msg.metadata[key] }}
+                        </span>
+                      }
+                    </div>
                   } @else {
                     <span class="text-gray-400">&mdash;</span>
                   }
                 </td>
-                <td
-                  class="hidden md:table-cell px-6 py-4 text-sm text-gray-500 whitespace-nowrap"
-                >
+
+                <!-- Created -->
+                <td class="hidden md:table-cell px-6 py-4 text-sm text-gray-500 truncate">
                   {{ msg.created_at | date: 'short' }}
                 </td>
-                <td class="px-6 py-4 text-sm whitespace-nowrap">
-                  <div class="flex flex-col gap-1">
+
+                <!-- Actions — single row of compact buttons -->
+                <td class="px-6 py-4 text-sm overflow-visible">
+                  <div class="flex items-center gap-1 flex-nowrap">
                     @if (isDlq(msg)) {
                       <button
                         (click)="requeue.emit(msg.id)"
-                        class="px-3 py-1 text-xs font-medium bg-amber-100 text-amber-800 rounded hover:bg-amber-200 cursor-pointer"
+                        class="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 rounded hover:bg-amber-200 cursor-pointer whitespace-nowrap"
                       >
                         Requeue
                       </button>
                     } @else if (msg.status === 'processing') {
                       @if (nackOpenId() === msg.id) {
-                        <div class="flex flex-col gap-1">
-                          <input
-                            type="text"
-                            [value]="nackError()"
-                            (input)="nackError.set($any($event.target).value)"
-                            placeholder="Error reason (optional)"
-                            class="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-red-400 w-full"
-                          />
-                          <div class="flex items-center gap-1">
-                            <button
-                              (click)="onNackConfirm(msg.id)"
-                              class="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer"
-                            >
-                              Confirm
-                            </button>
-                            <button
-                              (click)="nackOpenId.set(null)"
-                              class="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
+                        <input
+                          type="text"
+                          [value]="nackError()"
+                          (input)="nackError.set($any($event.target).value)"
+                          placeholder="Reason…"
+                          class="px-1 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-red-400 w-20 shrink-0"
+                        />
+                        <button
+                          (click)="onNackConfirm(msg.id)"
+                          title="Confirm nack"
+                          class="shrink-0 px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer"
+                        >
+                          ✓
+                        </button>
+                        <button
+                          (click)="nackOpenId.set(null)"
+                          title="Cancel"
+                          class="shrink-0 px-1.5 py-0.5 text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
+                        >
+                          ✗
+                        </button>
                       } @else {
                         <button
                           (click)="nackOpenId.set(msg.id); nackError.set('')"
-                          class="px-3 py-1 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer"
+                          class="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer whitespace-nowrap"
                         >
                           Nack
                         </button>
@@ -349,30 +324,28 @@ import { QueueMessage } from '../services/queue.service';
                       <button
                         type="button"
                         (click)="onPurgeByKey(msg)"
-                        class="px-3 py-1 text-xs font-medium text-red-600 border border-red-300 rounded hover:bg-red-50 focus:outline-none focus:ring-1 focus:ring-red-400 cursor-pointer"
+                        [title]="purgeKeyTitle(msg.key)"
+                        class="shrink-0 p-0.5 text-red-400 hover:text-red-600 cursor-pointer"
                       >
-                        Purge key
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                        </svg>
                       </button>
                     }
                   </div>
                 </td>
+
               </tr>
               @if (messages().length === 0 && !loading()) {
                 <tr>
-                  <td
-                    colspan="10"
-                    class="px-6 py-12 text-center text-sm text-gray-500"
-                  >
+                  <td colspan="10" class="px-6 py-12 text-center text-sm text-gray-500">
                     No messages found
                   </td>
                 </tr>
               }
               @if (messages().length === 0 && loading()) {
                 <tr>
-                  <td
-                    colspan="10"
-                    class="px-6 py-12 text-center text-sm text-gray-500"
-                  >
+                  <td colspan="10" class="px-6 py-12 text-center text-sm text-gray-500">
                     Loading messages...
                   </td>
                 </tr>
@@ -396,9 +369,11 @@ export class MessagesTable {
   readonly purge = output<{ topic: string; statuses: string[] }>();
   readonly purgeByKey = output<{ topic: string; key: string }>();
 
-  private readonly viewport = viewChild(CdkVirtualScrollViewport);
+  readonly itemSize = ITEM_SIZE;
 
+  private readonly viewport = viewChild(CdkVirtualScrollViewport);
   readonly scrollbarWidth = signal(0);
+
   readonly nackOpenId = signal<string | null>(null);
   readonly nackError = signal('');
   readonly copiedId = signal<string | null>(null);
@@ -417,8 +392,23 @@ export class MessagesTable {
     });
   }
 
+  viewportHeight(): string {
+    const count = this.messages().length;
+    if (count === 0) return '120px';
+    return `${Math.min(520, count * ITEM_SIZE)}px`;
+  }
+
   trackByMsgId(_: number, msg: QueueMessage): string {
     return msg.id;
+  }
+
+  purgeKeyTitle(key: string | null | undefined): string {
+    return key ? `Purge all messages with key "${key}"` : '';
+  }
+
+  metadataTitle(metadata: Record<string, string> | null | undefined): string {
+    if (!metadata) return '';
+    return Object.entries(metadata).map(([k, v]) => `${k}=${v}`).join(', ');
   }
 
   statusClasses(status: string): string {

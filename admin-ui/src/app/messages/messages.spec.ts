@@ -132,8 +132,6 @@ const setup = async (opts: {
   await fixture.whenStable();
   fixture.detectChanges();
 
-  // JSDOM reports all elements as having zero dimensions. Give the CDK viewport
-  // a non-zero clientHeight so it renders items instead of the empty virtual range.
   const vpQuery = fixture.debugElement.query(By.directive(CdkVirtualScrollViewport));
   if (vpQuery) {
     Object.defineProperty(vpQuery.nativeElement, 'clientHeight', { value: 520, configurable: true });

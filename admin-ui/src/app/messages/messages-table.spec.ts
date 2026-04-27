@@ -335,16 +335,15 @@ describe('MessagesTable', () => {
   });
 
   describe('Purge key button', () => {
+    const findPurgeKeyBtn = (el: HTMLElement): HTMLButtonElement | undefined =>
+      el.querySelector<HTMLButtonElement>('button[title*="Purge all messages with key"]') ?? undefined;
+
     describe('when message has a key', () => {
-      it('should show the "Purge key" button', async () => {
+      it('should show the purge-key button', async () => {
         const messages = [makeMessage({ key: 'order-123' })];
         const { fixture } = await setup({ messages });
 
-        const el: HTMLElement = fixture.nativeElement;
-        const purgeKeyBtn = Array.from(el.querySelectorAll('button')).find(
-          (b) => b.textContent?.trim() === 'Purge key',
-        );
-        expect(purgeKeyBtn).not.toBeUndefined();
+        expect(findPurgeKeyBtn(fixture.nativeElement)).not.toBeUndefined();
       });
 
       it('should emit purgeByKey output with the correct topic and key on confirm', async () => {
@@ -354,14 +353,9 @@ describe('MessagesTable', () => {
         const emitted: { topic: string; key: string }[] = [];
         component.purgeByKey.subscribe((v: { topic: string; key: string }) => emitted.push(v));
 
-        // Stub window.confirm to return true
         vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-        const el: HTMLElement = fixture.nativeElement;
-        const purgeKeyBtn = Array.from(el.querySelectorAll('button')).find(
-          (b) => b.textContent?.trim() === 'Purge key',
-        ) as HTMLButtonElement;
-        purgeKeyBtn.click();
+        findPurgeKeyBtn(fixture.nativeElement)!.click();
         await fixture.whenStable();
 
         expect(emitted.length).toBe(1);
@@ -373,15 +367,11 @@ describe('MessagesTable', () => {
     });
 
     describe('when message has no key', () => {
-      it('should not show the "Purge key" button', async () => {
+      it('should not show the purge-key button', async () => {
         const messages = [makeMessage()];
         const { fixture } = await setup({ messages });
 
-        const el: HTMLElement = fixture.nativeElement;
-        const purgeKeyBtn = Array.from(el.querySelectorAll('button')).find(
-          (b) => b.textContent?.trim() === 'Purge key',
-        );
-        expect(purgeKeyBtn).toBeUndefined();
+        expect(findPurgeKeyBtn(fixture.nativeElement)).toBeUndefined();
       });
     });
   });

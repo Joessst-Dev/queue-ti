@@ -14,8 +14,8 @@ import { MaintenanceSection } from '../messages/maintenance-section';
       <app-messages-header [isAuthenticated]="auth.isAuthenticated()" (signOut)="onLogout()" />
 
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        <app-users-section />
-        <app-maintenance-section />
+        <div><app-users-section /></div>
+        <div><app-maintenance-section /></div>
       </div>
     </div>
   `,
