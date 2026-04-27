@@ -1817,6 +1817,69 @@ Verify the PostgreSQL service is running and the credentials in `config.yaml` or
 psql -h localhost -U postgres -d queueti -c "SELECT 1;"
 ```
 
+## Release Management
+
+### Versioning
+
+queue-ti uses [Semantic Versioning](https://semver.org). A single `v1.2.3` tag on `main` drives all release artifacts:
+
+| Artifact | Published as |
+|---|---|
+| Docker image | `ghcr.io/<owner>/queue-ti:v1.2.3` and `:latest` on GHCR |
+| Go client library | `github.com/Joessst-Dev/queue-ti/client@v1.2.3` (sub-module tag `client/v1.2.3`) |
+| GitHub Release | Auto-generated changelog with Docker pull and `go get` commands |
+
+### Cutting a release
+
+1. Ensure `main` is in a releasable state — CI must be green.
+2. Push a version tag:
+   ```bash
+   git tag v1.2.3
+   git push origin v1.2.3
+   ```
+3. The release pipeline runs automatically. It will:
+   - Run the full backend and frontend test suites (release is blocked on failure)
+   - Build and push a multi-arch Docker image (`linux/amd64` + `linux/arm64`) to GHCR
+   - Create the `client/v1.2.3` Go sub-module tag on the same commit
+   - Publish a GitHub Release with auto-generated notes
+
+No other manual steps are required. Monitor the run at **Actions → Release** in the GitHub repository.
+
+### Using a release
+
+**Docker:**
+```bash
+docker pull ghcr.io/<owner>/queue-ti:v1.2.3
+```
+
+Or with docker-compose, pin the image tag in `docker-compose.yaml`:
+```yaml
+services:
+  queueti:
+    image: ghcr.io/<owner>/queue-ti:v1.2.3
+```
+
+**Go client library:**
+```bash
+go get github.com/Joessst-Dev/queue-ti/client@v1.2.3
+```
+
+### CI pipeline
+
+The CI pipeline (`.github/workflows/ci.yml`) runs on every push and pull request:
+
+| Job | What it does |
+|---|---|
+| `backend` | `go build`, Ginkgo test suite with a real PostgreSQL container |
+| `frontend` | Angular production build, Vitest unit tests, ESLint |
+| `build-image` | Docker image build (no push) — catches Dockerfile regressions early |
+
+The release pipeline (`.github/workflows/release.yml`) runs only on `v*.*.*` tag pushes and reuses the same test jobs as a gate before publishing any artifact.
+
+### Changelog
+
+Release notes are generated automatically by GitHub from merged PR titles and commit messages since the previous tag. To produce meaningful changelogs, use descriptive PR titles and squash-merge feature branches.
+
 ## Contributing
 
 To contribute to queue-ti:

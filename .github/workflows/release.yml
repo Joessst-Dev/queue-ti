@@ -1,27 +1,23 @@
-name: CI
+name: Release
 
+# Triggered by semantic version tags pushed to any commit on main.
+# Workflow: test (backend + frontend in parallel) → release (image + tags + GH Release).
 on:
   push:
-    branches: ["**"]
-  pull_request:
-    branches: [main]
+    tags:
+      - "v*.*.*"
 
-# Limit concurrent runs on the same ref: cancel in-flight runs on new pushes,
-# but never cancel runs on the main branch (let them finish for accurate status).
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
-
+# write: create the GitHub Release and push the client/ sub-module tag.
+# packages: write: push the Docker image to GHCR.
 permissions:
-  contents: read
+  contents: write
+  packages: write
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 1: Go backend — build + test
-  # Tests use testcontainers-go, which spins up PostgreSQL containers
-  # programmatically via the Docker socket available on ubuntu-latest runners.
-  # One package (internal/queue) uses a hard-coded localhost:5432 DSN, so we
-  # also start a GitHub Actions service container to satisfy that dependency.
+  # Job 1a: Go backend — build + test (gates the release)
+  # Mirrors the backend job in ci.yml exactly so the release never ships code
+  # that would have failed a normal CI run.
   # ─────────────────────────────────────────────────────────────────────────────
   backend:
     name: "Backend: Build & Test"
@@ -53,39 +49,23 @@ jobs:
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version: "1.25.5"
-          # actions/setup-go caches the module download cache (~/.cache/go) and
-          # the build cache (~/.cache/go-build) automatically when cache: true
-          # (the default). Cache key is derived from go.sum.
           cache: true
 
       - name: Install dependencies (go mod tidy)
         run: make deps
 
       - name: Build backend binary
-        # Compile the server to catch any build-breaking errors before running
-        # the full test suite, which is slower due to testcontainers startup.
         run: go build -v ./cmd/server/...
 
       - name: Install Ginkgo CLI
-        # Install the ginkgo binary so `make test` / `ginkgo ./...` works.
-        # Using `go install` ensures the version is tied to the go.sum entry.
         run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.28.1
 
       - name: Run Go tests (Ginkgo)
-        # make test runs: ginkgo ./...
-        # -r  = recurse into subdirectories
-        # --randomize-all = catch order-dependent bugs
-        # --fail-fast = bail on the first suite failure for faster feedback
-        # Testcontainers packages pull the postgres:16-alpine image on first run;
-        # subsequent runs hit the Docker layer cache on the same runner.
         run: make test
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 2: Angular frontend — build, test, lint
+  # Job 1b: Angular frontend — build, test, lint (gates the release)
   # Runs in parallel with the backend job.
-  # All Nx commands are run from admin-ui/ because nx.json and project.json live
-  # there; the Nx daemon is disabled to avoid background process cleanup issues
-  # in CI.
   # ─────────────────────────────────────────────────────────────────────────────
   frontend:
     name: "Frontend: Build, Test & Lint"
@@ -94,14 +74,10 @@ jobs:
 
     defaults:
       run:
-        # Run every step inside the admin-ui workspace directory.
         working-directory: admin-ui
 
     env:
-      # Disable the Nx daemon in CI — it adds no benefit and can leave orphan
-      # processes that confuse the runner.
       NX_DAEMON: "false"
-      # Nx telemetry is off in CI to avoid noise and latency.
       NX_CLOUD_NO_TIMEOUTS: "true"
       NX_NO_CLOUD: "true"
 
@@ -131,64 +107,103 @@ jobs:
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: admin-ui/.nx/cache
-          # Nx cache is keyed on the lockfile + all source files via a hash;
-          # we use the lockfile as the primary key and fall back to any prior
-          # cache for the same branch prefix for partial hits.
           key: nx-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}-${{ hashFiles('admin-ui/src/**') }}
           restore-keys: |
             nx-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}-
             nx-${{ runner.os }}-
 
       - name: Build Angular application (production)
-        # Builds to admin-ui/dist/admin-ui/browser via @angular/build:application.
-        # Runs production configuration by default (set in project.json).
         run: npx nx build
 
       - name: Run unit tests (Vitest, headless)
-        # @angular/build:unit-test executor runs Vitest. No browser needed.
         run: npx nx test
 
       - name: Run ESLint
         run: npx nx lint
 
-      - name: Upload build artifact
-        # Upload the production build so it can be downloaded from the Actions UI
-        # or used by a subsequent deploy job.
-        if: success()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: admin-ui-dist-${{ github.sha }}
-          path: admin-ui/dist/admin-ui/
-          retention-days: 7
-
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 3: Docker image build (dry run)
-  # Validates the multi-stage Dockerfile on every push and PR so regressions
-  # are caught before they block a release. No image is pushed — amd64 only is
-  # sufficient for regression detection; arm64 cross-compilation would double
-  # build time with no additional signal at this stage.
+  # Job 2: Release — build multi-arch image, push to GHCR, tag client module,
+  # create GitHub Release. Only runs after both test jobs pass.
   # ─────────────────────────────────────────────────────────────────────────────
-  build-image:
-    name: "Docker: Build image (dry run)"
+  release:
+    name: "Release: Publish image, tag client module, create GitHub Release"
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: [backend, frontend]
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (full history for tag push)
+        # fetch-depth: 0 is required so `git push origin client/<tag>` works —
+        # a shallow clone cannot push tags back to the remote.
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go ${{ '1.25.5' }}
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: "1.25.5"
+          cache: true
 
       - name: Set up Docker Buildx
-        # Buildx is required for cache-from/cache-to with type=gha and for
-        # multi-platform builds in the release workflow.
+        # Required for multi-platform builds (linux/amd64 + linux/arm64) and
+        # GitHub Actions cache backend (type=gha).
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
-      - name: Build Docker image (no push)
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version (strip v prefix)
+        # Produces outputs.version = "1.2.3" from tag "v1.2.3".
+        # Used to set the Go module version label on the image.
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build and push multi-arch Docker image
+        # Builds linux/amd64 and linux/arm64 in a single manifest and pushes
+        # both tags: the exact version tag and the rolling `latest` tag.
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: .
-          push: false
-          platforms: linux/amd64
-          # Build arm64 in CI would double the time; amd64 is sufficient for
-          # regression detection. The release workflow builds both platforms.
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/queue-ti:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/queue-ti:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Tag client sub-module
+        # Creates the `client/v1.2.3` tag on the same commit as the release tag.
+        # This is the standard Go sub-module tagging convention: consumers run
+        # `go get github.com/Joessst-Dev/queue-ti/client@v1.2.3` and the Go
+        # toolchain resolves the `client/v1.2.3` tag automatically.
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "client/${{ github.ref_name }}" "${{ github.sha }}"
+          git push origin "client/${{ github.ref_name }}"
+
+      - name: Create GitHub Release
+        # Generates release notes automatically from merged PRs and commits
+        # since the previous tag, then prepends the Docker pull and Go get
+        # instructions for immediate usability.
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          generate_release_notes: true
+          body: |
+            ## Docker
+
+            ```bash
+            docker pull ghcr.io/${{ github.repository_owner }}/queue-ti:${{ github.ref_name }}
+            ```
+
+            ## Go Client Library
+
+            ```bash
+            go get github.com/Joessst-Dev/queue-ti/client@${{ github.ref_name }}
+            ```
