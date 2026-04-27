@@ -68,6 +68,8 @@ admin-ui/.nx/workspace-data
 # Claude
 .claude/worktrees
 .claude/settings.local.json
+.claude/agent-memory/
+.claude/projects/
 
 # Vitest
 admin-ui/__screenshots__/

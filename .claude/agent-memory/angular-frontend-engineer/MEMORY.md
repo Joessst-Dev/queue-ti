@@ -1,2 +1,0 @@
-- [Zoneless Angular testing patterns](feedback_zoneless_testing.md) — no fakeAsync/tick; use async+whenStable; form() calls need runInInjectionContext
-- [Functional guard testing pattern](feedback_guard_testing.md) — configure TestBed per-it block; never use overrideProvider after module instantiation
