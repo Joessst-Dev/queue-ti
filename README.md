@@ -741,16 +741,6 @@ graph TD
 
     HTTPServer -->|scrape /metrics| Prometheus["Prometheus<br/>(optional)"]
 
-    style Browser fill:#e1f5ff
-    style GRPCClients fill:#e1f5ff
-    style AdminUI fill:#fff3e0
-    style HTTPServer fill:#f3e5f5
-    style GRPCServer fill:#f3e5f5
-    style QueueService fill:#f3e5f5
-    style ExpiryReaper fill:#f3e5f5
-    style DeleteReaper fill:#f3e5f5
-    style AuthModule fill:#f3e5f5
-    style PostgreSQL fill:#e8f5e9
 ```
 
 **Architecture Overview:**
