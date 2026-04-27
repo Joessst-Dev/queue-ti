@@ -1,4 +1,4 @@
-.PHONY: proto deps test run bench bench-mem bench-queue bench-loadtest
+.PHONY: proto deps test run bench bench-mem bench-queue bench-loadtest install-hooks
 
 proto:
 	protoc --go_out=pb --go_opt=paths=source_relative \
@@ -8,6 +8,11 @@ proto:
 
 deps:
 	go mod tidy
+
+install-hooks:
+	cp scripts/commit-msg .git/hooks/commit-msg
+	chmod +x .git/hooks/commit-msg
+	@echo "commit-msg hook installed"
 
 test:
 	ginkgo ./...

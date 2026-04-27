@@ -1,0 +1,11 @@
+{
+  "name": "queue-ti",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Dev tooling for the queue-ti repo root (commitlint, etc.). Not published.",
+  "devDependencies": {
+    "@commitlint/cli": "^19.0.0",
+    "@commitlint/config-conventional": "^19.0.0"
+  }
+}

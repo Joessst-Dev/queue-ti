@@ -1,0 +1,9 @@
+#!/bin/sh
+# commit-msg hook: validates commit message against Conventional Commits rules.
+# Powered by commitlint (@commitlint/config-conventional).
+# Format: <type>(<optional scope>): <subject>
+# Example: feat: add dark mode
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+npx --prefix "$REPO_ROOT" commitlint --edit "$1"

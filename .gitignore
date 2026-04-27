@@ -46,6 +46,9 @@ admin-ui/dist
 admin-ui/tmp
 admin-ui/out-tsc
 
+# Root dev tooling - dependencies
+node_modules
+
 # Frontend - dependencies
 admin-ui/node_modules
 
