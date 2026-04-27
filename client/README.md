@@ -122,6 +122,26 @@ id, err := producer.Publish(ctx, "payments", payload,
 | Option | Description |
 |---|---|
 | `WithMetadata(map[string]string)` | Attach key-value metadata to the message |
+| `WithKey(key string)` | Set a deduplication key for upsert semantics |
+
+#### Idempotent publishing with `WithKey`
+
+When you publish a message with a key, queue-ti uses upsert semantics: if a pending message with the same topic and key already exists in the queue, its payload and metadata are updated in place (the existing message ID is returned). This ensures idempotency when retrying publish operations.
+
+**Caveat:** Once a message begins processing (transitions to `processing` status), it is no longer considered "pending". A key match only applies to messages awaiting processing. If the keyed message is already processing, a new row is inserted.
+
+```go
+// Idempotent publish: if a message with topic="orders" and key="order-123" 
+// exists and is pending, it is updated. Otherwise a new message is created.
+id, err := producer.Publish(ctx, "orders", []byte(`{"amount": 150.00}`),
+    queueti.WithKey("order-123"),
+    queueti.WithMetadata(map[string]string{"customer": "acme"}),
+)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println("message id:", id) // same on retry if order-123 is still pending
+```
 
 ---
 
@@ -168,6 +188,39 @@ err := consumer.Consume(ctx, func(ctx context.Context, msg *queueti.Message) err
 
 **Panic recovery:** panics inside the handler are caught, treated as a `Nack`, and logged — they do not crash the consumer.
 
+### `consumer.ConsumeBatch(ctx, topic string, batchSize int, handler) error`
+
+Polls the queue in batches and dispatches each batch to the handler. Returns when `ctx` is cancelled.
+
+```go
+err := consumer.ConsumeBatch(ctx, "orders", 50, func(ctx context.Context, messages []*queueti.Message) error {
+    // Process all messages in the batch.
+    for _, msg := range messages {
+        if err := process(msg); err != nil {
+            // Nack this individual message.
+            if err := msg.Nack(ctx, err.Error()); err != nil {
+                log.Printf("nack failed: %v", err)
+            }
+            continue
+        }
+        // Ack this individual message.
+        if err := msg.Ack(ctx); err != nil {
+            log.Printf("ack failed: %v", err)
+        }
+    }
+    return nil // handler always returns nil; ack/nack per message instead
+})
+```
+
+**Batch semantics:**
+
+- `batchSize`: number of messages to request per poll (valid range 1–1000; behavior is undefined outside this range).
+- **Best-effort:** returns 0–N messages per call, never blocks or waits for a full batch. When the queue is empty, the consumer applies the same exponential backoff as `Consume` (500 ms → 30 s). When messages are returned, backoff resets.
+- **Per-message ack/nack:** each message in the slice has individual `Ack()` and `Nack(reason)` closures. Call them directly to acknowledge or reject each message, rather than returning an error from the handler.
+- **Reconnection & backoff:** network errors are retried with exponential backoff (500 ms → 30 s), same as `Consume`.
+
+Use `ConsumeBatch` when you want to process multiple messages together (e.g. batch writes to a data warehouse) or when you need more control over per-message error handling.
+
 ---
 
 ## The Message Type
@@ -180,8 +233,17 @@ type Message struct {
     Metadata   map[string]string
     CreatedAt  time.Time
     RetryCount int
+    Key        *string  // deduplication key (if message was published with WithKey)
 }
 ```
+
+- `ID`: The assigned message ID.
+- `Topic`: The topic the message was enqueued on.
+- `Payload`: The message body.
+- `Metadata`: Arbitrary key-value metadata attached at publish time.
+- `CreatedAt`: The timestamp when the message was first enqueued.
+- `RetryCount`: The number of times this message has been nacked (0 on first receive).
+- `Key`: The deduplication key (if one was provided at publish time); `nil` if the message was published without a key.
 
 ### `msg.Ack(ctx) error`
 
