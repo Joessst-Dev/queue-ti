@@ -15,7 +15,7 @@ vi.mock('chart.js', () => ({
 }));
 
 import { TestBed } from '@angular/core/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, Component } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { Router } from '@angular/router';
 import { By } from '@angular/platform-browser';
@@ -24,6 +24,10 @@ import { CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Messages } from './messages';
 import { AuthService } from '../services/auth.service';
 import { QueueService, QueueMessage, StatsResponse } from '../services/queue.service';
+import { TopicsSection } from './topics-section';
+
+@Component({ selector: 'app-topics-section', template: '<div>topics</div>', standalone: true })
+class StubTopicsSection {}
 
 const makeMessage = (overrides: Partial<QueueMessage> = {}): QueueMessage => ({
   id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
@@ -113,7 +117,12 @@ const setup = async (opts: {
       { provide: AuthService, useValue: authService },
       { provide: QueueService, useValue: queueService },
     ],
-  }).compileComponents();
+  })
+    .overrideComponent(Messages, {
+      remove: { imports: [TopicsSection] },
+      add: { imports: [StubTopicsSection] },
+    })
+    .compileComponents();
 
   const router = TestBed.inject(Router);
   vi.spyOn(router, 'navigate').mockResolvedValue(true);
@@ -274,6 +283,41 @@ describe('Messages', () => {
 
       expect(queueService.requeueMessage).toHaveBeenCalledWith(dlqMsg.id);
       expect(queueService.listMessages).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('tab list', () => {
+    it('should render exactly 4 tabs for all users', async () => {
+      const { fixture } = await setup();
+      const el: HTMLElement = fixture.nativeElement;
+      const tabButtons = Array.from(el.querySelectorAll('nav[aria-label="Main navigation"] button'));
+      expect(tabButtons.length).toBe(4);
+    });
+
+    it('should include Messages, Enqueue, Stats, and Topics tabs', async () => {
+      const { fixture } = await setup();
+      const el: HTMLElement = fixture.nativeElement;
+      const labels = Array.from(el.querySelectorAll('nav[aria-label="Main navigation"] button')).map(
+        (b) => b.textContent?.trim(),
+      );
+      expect(labels).toEqual(['Messages', 'Enqueue', 'Stats', 'Topics']);
+    });
+  });
+
+  describe('when Topics tab is active', () => {
+    it('should render app-topics-section', async () => {
+      const { fixture } = await setup();
+      const el: HTMLElement = fixture.nativeElement;
+
+      const topicsTab = Array.from(el.querySelectorAll('nav[aria-label="Main navigation"] button')).find(
+        (b) => b.textContent?.trim() === 'Topics',
+      ) as HTMLButtonElement;
+      topicsTab.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(el.querySelector('app-topics-section')).not.toBeNull();
     });
   });
 });

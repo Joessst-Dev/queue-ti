@@ -7,16 +7,12 @@ import {
   QueueService,
   QueueMessage,
   EnqueueRequest,
-  PAGE_SIZE,
 } from '../services/queue.service';
 import { MessagesHeader } from './messages-header';
 import { MessagesTable } from './messages-table';
 import { EnqueueSection } from './enqueue-section';
 import { QueueStatsChart } from './queue-stats-chart';
-import { TopicConfigSection } from './topic-config-section';
-import { TopicSchemaSection } from './topic-schema-section';
-import { UsersSection } from './users-section';
-import { MaintenanceSection } from './maintenance-section';
+import { TopicsSection } from './topics-section';
 
 interface EnqueueState {
   id: string;
@@ -26,7 +22,7 @@ interface EnqueueState {
 
 @Component({
   selector: 'app-messages',
-  imports: [MessagesHeader, MessagesTable, EnqueueSection, QueueStatsChart, TopicConfigSection, TopicSchemaSection, UsersSection, MaintenanceSection],
+  imports: [MessagesHeader, MessagesTable, EnqueueSection, QueueStatsChart, TopicsSection],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -87,17 +83,8 @@ interface EnqueueState {
         @if (activeTab() === 'stats') {
           <app-queue-stats-chart />
         }
-        @if (activeTab() === 'config') {
-          <app-topic-config-section />
-        }
-        @if (activeTab() === 'schemas') {
-          <app-topic-schema-section />
-        }
-        @if (activeTab() === 'users') {
-          <app-users-section />
-        }
-        @if (activeTab() === 'maintenance') {
-          <app-maintenance-section />
+        @if (activeTab() === 'topics') {
+          <app-topics-section />
         }
       </main>
     </div>
@@ -108,25 +95,14 @@ export class Messages {
   private readonly queue = inject(QueueService);
   private readonly router = inject(Router);
 
-  readonly activeTab = signal<'messages' | 'enqueue' | 'stats' | 'config' | 'schemas' | 'users' | 'maintenance'>('messages');
+  readonly activeTab = signal<'messages' | 'enqueue' | 'stats' | 'topics'>('messages');
 
-  readonly tabs = computed(() => {
-    const base = [
-      { id: 'messages' as const, label: 'Messages' },
-      { id: 'enqueue'  as const, label: 'Enqueue'  },
-      { id: 'stats'    as const, label: 'Stats'    },
-      { id: 'config'   as const, label: 'Config'   },
-      { id: 'schemas'  as const, label: 'Schemas'  },
-    ];
-    if (this.auth.isAdmin()) {
-      return [
-        ...base,
-        { id: 'users' as const, label: 'Users' },
-        { id: 'maintenance' as const, label: 'Maintenance' },
-      ];
-    }
-    return base;
-  });
+  readonly tabs = computed(() => [
+    { id: 'messages' as const, label: 'Messages' },
+    { id: 'enqueue'  as const, label: 'Enqueue'  },
+    { id: 'stats'    as const, label: 'Stats'    },
+    { id: 'topics'   as const, label: 'Topics'   },
+  ]);
 
   readonly purgeResult = signal<{ deleted: number } | null>(null);
   readonly purgeError = signal<string | null>(null);
@@ -140,7 +116,6 @@ export class Messages {
   readonly loadingMessages = signal(false);
   readonly messagesError = signal('');
 
-  private readonly PAGE_SIZE = PAGE_SIZE;
   private currentOffset = 0;
   private currentTopic: string | undefined;
 
