@@ -25,6 +25,13 @@ var (
 	ErrInvalidBatchSize    = errors.New("batch size must be between 1 and 1000")
 )
 
+// Advisory lock keys for reaper leader election across instances.
+// These are stable, application-specific int64 values stored per database.
+const (
+	expiryReaperLockKey int64 = 7_000_001
+	deleteReaperLockKey int64 = 7_000_002
+)
+
 type Message struct {
 	ID            string
 	Topic         string
@@ -607,6 +614,31 @@ func (s *Service) TopicForMessage(ctx context.Context, id string) (string, error
 	return topic, err
 }
 
+// tryWithReaperLock acquires a transaction-level PostgreSQL advisory lock for
+// lockKey, then calls fn inside that transaction and commits. Returns nil when
+// fn succeeds. Returns nil (without calling fn) when another instance already
+// holds the lock — the caller should silently skip that tick.
+func (s *Service) tryWithReaperLock(ctx context.Context, lockKey int64, fn func(pgx.Tx) error) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("reaper lock begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var acquired bool
+	if err := tx.QueryRow(ctx, `SELECT pg_try_advisory_xact_lock($1)`, lockKey).Scan(&acquired); err != nil {
+		return fmt.Errorf("reaper advisory lock: %w", err)
+	}
+	if !acquired {
+		slog.Debug("reaper tick skipped: lock held by another instance", "lock_key", lockKey)
+		return nil
+	}
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 // StartExpiryReaper launches a background goroutine that periodically marks
 // expired messages (expires_at < now()) as 'expired'. It runs until ctx is
 // cancelled. The first tick fires immediately (after interval).
@@ -620,21 +652,26 @@ func (s *Service) StartExpiryReaper(ctx context.Context, interval time.Duration)
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				tag, err := s.pool.Exec(ctx, `
-					UPDATE messages
-					SET    status     = 'expired',
-					       updated_at = now()
-					WHERE  expires_at IS NOT NULL
-					  AND  expires_at < now()
-					  AND  status IN ('pending', 'processing')
-				`)
+				err := s.tryWithReaperLock(ctx, expiryReaperLockKey, func(tx pgx.Tx) error {
+					tag, err := tx.Exec(ctx, `
+						UPDATE messages
+						SET    status     = 'expired',
+						       updated_at = now()
+						WHERE  expires_at IS NOT NULL
+						  AND  expires_at < now()
+						  AND  status IN ('pending', 'processing')
+					`)
+					if err != nil {
+						return err
+					}
+					if n := tag.RowsAffected(); n > 0 {
+						s.recorder.RecordExpired(n)
+						slog.Info("expiry reaper expired messages", "count", n)
+					}
+					return nil
+				})
 				if err != nil {
 					slog.Error("expiry reaper failed", "error", err)
-					continue
-				}
-				if n := tag.RowsAffected(); n > 0 {
-					s.recorder.RecordExpired(n)
-					slog.Info("expiry reaper expired messages", "count", n)
 				}
 			}
 		}
@@ -720,13 +757,19 @@ func (s *Service) StartDeleteReaper(ctx context.Context, schedule string) (stop 
 
 	c := cron.New()
 	_, err = c.AddFunc(schedule, func() {
-		n, runErr := s.RunDeleteReaperOnce(ctx)
+		runErr := s.tryWithReaperLock(ctx, deleteReaperLockKey, func(tx pgx.Tx) error {
+			tag, err := tx.Exec(ctx, `DELETE FROM messages WHERE status = 'expired'`)
+			if err != nil {
+				return err
+			}
+			if n := tag.RowsAffected(); n > 0 {
+				s.recorder.RecordDeleted(n)
+				slog.Info("delete reaper (scheduled) removed expired messages", "count", n)
+			}
+			return nil
+		})
 		if runErr != nil {
 			slog.Error("delete reaper failed", "error", runErr)
-			return
-		}
-		if n > 0 {
-			slog.Info("delete reaper (scheduled) removed expired messages", "count", n)
 		}
 	})
 	if err != nil {

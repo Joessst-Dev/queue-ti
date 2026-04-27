@@ -1402,5 +1402,88 @@ var _ = Describe("Queue Service", func() {
 				}, 2*time.Second, 100*time.Millisecond).Should(Equal("expired"))
 			})
 		})
+
+		Context("Given another instance holds the advisory lock", func() {
+			It("should skip all ticks without modifying messages", func() {
+				// Hold the expiry reaper lock from a separate transaction,
+				// simulating another running instance.
+				lockTx, err := pool.Begin(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				defer lockTx.Rollback(ctx) //nolint:errcheck
+
+				var acquired bool
+				err = lockTx.QueryRow(ctx,
+					`SELECT pg_try_advisory_xact_lock($1)`, queue.ExpiryReaperLockKey,
+				).Scan(&acquired)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(acquired).To(BeTrue())
+
+				// Insert an expired message that the reaper would normally process.
+				var messageID string
+				err = pool.QueryRow(ctx, `
+					INSERT INTO messages (topic, payload, max_retries, expires_at)
+					VALUES ('reaper-lock-topic', 'msg', 3, now() - interval '1 second')
+					RETURNING id
+				`).Scan(&messageID)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Run the reaper for several ticks — it should not be able to acquire the lock.
+				reaperCtx, cancel := context.WithCancel(ctx)
+				defer cancel()
+				service.StartExpiryReaper(reaperCtx, 50*time.Millisecond)
+
+				time.Sleep(300 * time.Millisecond)
+
+				// The message must still be 'pending' since the reaper was locked out.
+				var status string
+				err = pool.QueryRow(ctx, `SELECT status FROM messages WHERE id = $1`, messageID).Scan(&status)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(status).To(Equal("pending"))
+			})
+		})
+	})
+
+	Describe("StartDeleteReaper advisory lock", func() {
+		Context("Given another instance holds the advisory lock", func() {
+			It("should skip the cron tick without deleting messages", func() {
+				// Hold the delete reaper lock from a separate transaction.
+				lockTx, err := pool.Begin(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				defer lockTx.Rollback(ctx) //nolint:errcheck
+
+				var acquired bool
+				err = lockTx.QueryRow(ctx,
+					`SELECT pg_try_advisory_xact_lock($1)`, queue.DeleteReaperLockKey,
+				).Scan(&acquired)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(acquired).To(BeTrue())
+
+				// Insert an already-expired message the delete reaper would remove.
+				var messageID string
+				err = pool.QueryRow(ctx, `
+					INSERT INTO messages (topic, payload, status, max_retries)
+					VALUES ('reaper-delete-lock-topic', 'msg', 'expired', 3)
+					RETURNING id
+				`).Scan(&messageID)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Start the delete reaper with a schedule that fires every second.
+				reaperCtx, cancel := context.WithCancel(ctx)
+				defer cancel()
+				stop, err := service.StartDeleteReaper(reaperCtx, "@every 100ms")
+				Expect(err).NotTo(HaveOccurred())
+				defer stop()
+
+				time.Sleep(2500 * time.Millisecond)
+
+				// The message must still exist since the reaper was locked out.
+				var count int
+				err = pool.QueryRow(ctx,
+					`SELECT COUNT(*) FROM messages WHERE id = $1`, messageID,
+				).Scan(&count)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(count).To(Equal(1))
+			})
+		})
 	})
 })
