@@ -39,7 +39,7 @@ import { QueueService, TopicConfig } from '../services/queue.service';
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            Add config
+            New Topic
           </button>
         </div>
       </div>
@@ -55,7 +55,7 @@ import { QueueService, TopicConfig } from '../services/queue.service';
           <p class="text-sm text-gray-500">Loading…</p>
         } @else if (configs().length === 0 && editingTopic() !== '__new__') {
           <p class="text-sm text-gray-500">
-            No topic configurations. Topics without a config use server defaults.
+            No topics registered. Use 'New Topic' to register a topic before messages can be enqueued to it.
           </p>
         } @else {
           <div class="overflow-x-auto">

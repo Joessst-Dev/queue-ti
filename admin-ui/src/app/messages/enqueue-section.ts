@@ -4,10 +4,15 @@ import {
   output,
   signal,
   effect,
+  inject,
+  DestroyRef,
   ChangeDetectionStrategy,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Subject, debounceTime, switchMap, catchError, of } from 'rxjs';
 import { FormField, form, schema, required } from '@angular/forms/signals';
-import { EnqueueRequest } from '../services/queue.service';
+import { EnqueueRequest, QueueService, TopicSchema } from '../services/queue.service';
+import { generateAvroExample } from './avro-example';
 
 interface EnqueueModel {
   topic: string;
@@ -73,6 +78,7 @@ interface MetadataRowModel {
                 id="enqueue-topic"
                 type="text"
                 [formField]="enqueueForm.topic"
+                (input)="onTopicInput($any($event.target).value)"
                 class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="e.g. orders"
               />
@@ -80,12 +86,19 @@ interface MetadataRowModel {
           </div>
 
           <div>
-            <label
-              for="enqueue-payload"
-              class="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Payload
-            </label>
+            <div class="flex items-center justify-between mb-1">
+              <label
+                for="enqueue-payload"
+                class="block text-sm font-medium text-gray-700"
+              >
+                Payload
+              </label>
+              @if (topicSchema()) {
+                <button type="button" (click)="fillExample()" class="text-sm text-indigo-600 hover:text-indigo-800 cursor-pointer">
+                  Fill example
+                </button>
+              }
+            </div>
             <textarea
               id="enqueue-payload"
               [formField]="enqueueForm.payload"
@@ -225,13 +238,28 @@ export class EnqueueSection {
     }[]
   >([]);
 
+  private readonly queue = inject(QueueService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly topicChange$ = new Subject<string>();
+  readonly topicSchema = signal<TopicSchema | null>(null);
+
   constructor() {
     effect(() => {
       if (this.success()) {
         this.enqueueModel.set({ topic: '', payload: '' });
         this.metadataRows.set([]);
+        this.topicSchema.set(null);
       }
     });
+
+    this.topicChange$.pipe(
+      debounceTime(300),
+      switchMap((topic) => {
+        if (!topic.trim()) return of(null);
+        return this.queue.getTopicSchema(topic).pipe(catchError(() => of(null)));
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((schema) => this.topicSchema.set(schema));
   }
 
   addMetadataRow(): void {
@@ -241,6 +269,21 @@ export class EnqueueSection {
 
   removeMetadataRow(index: number): void {
     this.metadataRows.update((rows) => rows.filter((_, i) => i !== index));
+  }
+
+  onTopicInput(value: string): void {
+    this.topicChange$.next(value);
+  }
+
+  fillExample(): void {
+    const schema = this.topicSchema();
+    if (!schema) return;
+    try {
+      const example = generateAvroExample(JSON.parse(schema.schema_json));
+      this.enqueueModel.update((m) => ({ ...m, payload: JSON.stringify(example, null, 2) }));
+    } catch {
+      // malformed schema_json — no-op
+    }
   }
 
   onSubmit(event: Event): void {

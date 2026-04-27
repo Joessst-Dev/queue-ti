@@ -94,7 +94,7 @@ var _ = Describe("HTTP Server", func() {
 		_, err = httpTestPool.Exec(httpTestCtx, "DELETE FROM messages")
 		Expect(err).NotTo(HaveOccurred())
 
-		queueService = queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
+		queueService = queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, false, queue.NoopRecorder{})
 		userStore = users.NewStore(httpTestPool)
 	})
 
@@ -801,6 +801,46 @@ var _ = Describe("HTTP Server", func() {
 				Expect(decodeErrorBody(resp.Body)).To(Equal("missing authorization header"))
 			})
 		})
+
+		Context("when require_topic_registration is enabled and the topic is not registered", func() {
+			It("should return 422", func() {
+				// Given a service with topic registration enforcement and no topic_config row.
+				strictService := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, true, queue.NoopRecorder{})
+				strictServer := server.NewHTTPServer(strictService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+
+				req := httptest.NewRequest("POST", "/api/messages",
+					strings.NewReader(`{"topic":"unknown-topic","payload":"hello"}`))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := strictServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(422))
+			})
+		})
+
+		Context("when require_topic_registration is enabled and the topic is registered", func() {
+			It("should return 201", func() {
+				// Given a service with topic registration enforcement and a registered topic.
+				strictService := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, true, queue.NoopRecorder{})
+				Expect(strictService.UpsertTopicConfig(httpTestCtx, queue.TopicConfig{
+					Topic: "known-topic",
+				})).To(Succeed())
+
+				strictServer := server.NewHTTPServer(strictService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+
+				req := httptest.NewRequest("POST", "/api/messages",
+					strings.NewReader(`{"topic":"known-topic","payload":"hello"}`))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := strictServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(201))
+
+				var body map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&body)).To(Succeed())
+				Expect(body["id"]).NotTo(BeEmpty())
+			})
+		})
 	})
 
 	// ---------------------------------------------------------------------------
@@ -819,7 +859,7 @@ var _ = Describe("HTTP Server", func() {
 
 			BeforeEach(func() {
 				// Use dlqThreshold = 1 so a single nack promotes the message.
-				dlqService := queue.NewService(httpTestPool, 30*time.Second, 5, 0, 1, queue.NoopRecorder{})
+				dlqService := queue.NewService(httpTestPool, 30*time.Second, 5, 0, 1, false, queue.NoopRecorder{})
 				httpServer = server.NewHTTPServer(dlqService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 
 				var err error
@@ -874,7 +914,7 @@ var _ = Describe("HTTP Server", func() {
 		BeforeEach(func() {
 			reg = prometheus.NewRegistry()
 			rec := metrics.New(httpTestPool, reg)
-			svc := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, rec)
+			svc := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, false, rec)
 			httpServer = server.NewHTTPServer(svc, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
@@ -896,7 +936,7 @@ var _ = Describe("HTTP Server", func() {
 				// Enqueue via the service that shares the same recorder.
 				reg2 := prometheus.NewRegistry()
 				rec2 := metrics.New(httpTestPool, reg2)
-				svc2 := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, rec2)
+				svc2 := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, false, rec2)
 				httpServer = server.NewHTTPServer(svc2, config.AuthConfig{Enabled: false}, reg2, nil)
 
 				_, err := svc2.Enqueue(httpTestCtx, "metrics-topic", []byte("hello"), nil)

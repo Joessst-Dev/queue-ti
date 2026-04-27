@@ -85,7 +85,7 @@ describe('TopicConfigSection', () => {
   describe('when configs are empty', () => {
     it('should show the empty-state message', async () => {
       const { el } = await setup({ configs: [] });
-      expect(el.textContent).toContain('No topic configurations');
+      expect(el.textContent).toContain('No topics registered');
     });
 
     it('should not render a table', async () => {
@@ -251,12 +251,12 @@ describe('TopicConfigSection', () => {
     });
   });
 
-  describe('Add config button', () => {
+  describe('New Topic button', () => {
     it('should show a new editable row at the top of the table', async () => {
       const { fixture, el, component } = await setup({ configs: [] });
 
       const addBtn = Array.from(el.querySelectorAll('button')).find(
-        (b) => b.textContent?.trim().includes('Add config'),
+        (b) => b.textContent?.trim().includes('New Topic'),
       ) as HTMLButtonElement;
       addBtn.click();
       await fixture.whenStable();
@@ -271,7 +271,7 @@ describe('TopicConfigSection', () => {
       const { fixture, el, component } = await setup({ configs: [] });
 
       const addBtn = Array.from(el.querySelectorAll('button')).find(
-        (b) => b.textContent?.trim().includes('Add config'),
+        (b) => b.textContent?.trim().includes('New Topic'),
       ) as HTMLButtonElement;
       addBtn.click();
       await fixture.whenStable();

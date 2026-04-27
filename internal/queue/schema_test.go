@@ -45,7 +45,7 @@ var _ = Describe("Topic Schema", func() {
 		_, err = pool.Exec(ctx, "DELETE FROM messages")
 		Expect(err).NotTo(HaveOccurred())
 
-		service = queue.NewService(pool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
+		service = queue.NewService(pool, 30*time.Second, 3, 0, 3, false, queue.NoopRecorder{})
 	})
 
 	AfterEach(func() {

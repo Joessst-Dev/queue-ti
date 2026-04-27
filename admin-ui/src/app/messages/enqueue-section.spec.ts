@@ -1,18 +1,42 @@
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
+import { of, throwError } from 'rxjs';
+import { vi } from 'vitest';
 import { EnqueueSection } from './enqueue-section';
-import { EnqueueRequest } from '../services/queue.service';
+import { EnqueueRequest, QueueService, TopicSchema } from '../services/queue.service';
+
+const makeSchema = (overrides: Partial<TopicSchema> = {}): TopicSchema => ({
+  topic: 'orders',
+  schema_json: '{"type":"record","name":"Order","fields":[{"name":"id","type":"string"}]}',
+  version: 1,
+  updated_at: '2024-01-15T10:30:00Z',
+  ...overrides,
+});
+
+const makeQueueService = (opts: {
+  getTopicSchemaResult?: TopicSchema | 'error';
+} = {}) => ({
+  getTopicSchema: vi.fn().mockReturnValue(
+    opts.getTopicSchemaResult === 'error'
+      ? throwError(() => ({ status: 404 }))
+      : of(opts.getTopicSchemaResult ?? makeSchema()),
+  ),
+}) as unknown as QueueService;
 
 const setup = async (opts: {
   success?: string;
   error?: string;
   loading?: boolean;
+  queueService?: QueueService;
 } = {}) => {
-  const { success = '', error = '', loading = false } = opts;
+  const { success = '', error = '', loading = false, queueService = makeQueueService() } = opts;
 
   await TestBed.configureTestingModule({
     imports: [EnqueueSection],
-    providers: [provideZonelessChangeDetection()],
+    providers: [
+      provideZonelessChangeDetection(),
+      { provide: QueueService, useValue: queueService },
+    ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(EnqueueSection);
@@ -87,6 +111,94 @@ describe('EnqueueSection', () => {
       expect(emitted.length).toBe(1);
       expect(emitted[0].topic).toBe('orders');
       expect(emitted[0].payload).toBe('{"x":1}');
+    });
+  });
+
+  describe('Avro schema example', () => {
+    it('should show "Fill example" button when topic has a schema', async () => {
+      const { fixture, component } = await setup();
+
+      component.topicSchema.set(makeSchema());
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const el: HTMLElement = fixture.nativeElement;
+      const btn = Array.from(el.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Fill example',
+      );
+      expect(btn).not.toBeUndefined();
+    });
+
+    it('should hide "Fill example" button when topic has no schema', async () => {
+      const { fixture, component } = await setup();
+
+      component.topicSchema.set(null);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const el: HTMLElement = fixture.nativeElement;
+      const btn = Array.from(el.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Fill example',
+      );
+      expect(btn).toBeUndefined();
+    });
+
+    it('should hide "Fill example" button when topic field is empty', async () => {
+      const queueService = makeQueueService({ getTopicSchemaResult: 'error' });
+      const { fixture, component } = await setup({ queueService });
+
+      component.enqueueModel.set({ topic: '', payload: '' });
+      component.topicSchema.set(null);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const el: HTMLElement = fixture.nativeElement;
+      const btn = Array.from(el.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Fill example',
+      );
+      expect(btn).toBeUndefined();
+    });
+
+    it('should populate payload textarea with example JSON on button click', async () => {
+      const schema = makeSchema({
+        schema_json: JSON.stringify({
+          type: 'record',
+          name: 'Order',
+          fields: [
+            { name: 'id', type: 'string' },
+            { name: 'amount', type: 'double' },
+          ],
+        }),
+      });
+      const { fixture, component } = await setup();
+
+      component.topicSchema.set(schema);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const el: HTMLElement = fixture.nativeElement;
+      const btn = Array.from(el.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Fill example',
+      ) as HTMLButtonElement;
+      btn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const expected = JSON.stringify({ id: '', amount: 0 }, null, 2);
+      expect(component.enqueueModel().payload).toBe(expected);
+    });
+
+    it('should reset topicSchema on success', async () => {
+      const { fixture, component } = await setup();
+
+      component.topicSchema.set(makeSchema());
+      expect(component.topicSchema()).not.toBeNull();
+
+      fixture.componentRef.setInput('success', 'some-id');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(component.topicSchema()).toBeNull();
     });
   });
 });

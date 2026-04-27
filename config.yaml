@@ -12,6 +12,7 @@ db:
 
 queue:
   visibility_timeout: 30s
+  # require_topic_registration: false  # when true, enqueue rejects unknown topics
 
 auth:
   enabled: false

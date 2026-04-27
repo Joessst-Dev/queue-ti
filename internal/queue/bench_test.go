@@ -36,7 +36,7 @@ func newBenchService(b *testing.B) (*queue.Service, *pgxpool.Pool) {
 
 	b.Cleanup(pool.Close)
 
-	svc := queue.NewService(pool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
+	svc := queue.NewService(pool, 30*time.Second, 3, 0, 3, false, queue.NoopRecorder{})
 	return svc, pool
 }
 

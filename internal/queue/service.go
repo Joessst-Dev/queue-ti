@@ -14,12 +14,13 @@ import (
 )
 
 var (
-	ErrNoMessage     = errors.New("no message available")
-	ErrNotFound      = errors.New("message not found")
-	ErrNotProcessing = errors.New("message is not in processing state")
-	ErrNotDLQ        = errors.New("message is not a dead-letter message")
-	ErrReservedTopic = errors.New("topic name is reserved: topics may not end with .dlq")
-	ErrQueueFull     = errors.New("queue is at maximum depth for this topic")
+	ErrNoMessage           = errors.New("no message available")
+	ErrNotFound            = errors.New("message not found")
+	ErrNotProcessing       = errors.New("message is not in processing state")
+	ErrNotDLQ              = errors.New("message is not a dead-letter message")
+	ErrReservedTopic       = errors.New("topic name is reserved: topics may not end with .dlq")
+	ErrQueueFull           = errors.New("queue is at maximum depth for this topic")
+	ErrTopicNotRegistered  = errors.New("topic is not registered; an admin must create it first")
 )
 
 type Message struct {
@@ -38,12 +39,13 @@ type Message struct {
 }
 
 type Service struct {
-	pool              *pgxpool.Pool
-	visibilityTimeout time.Duration
-	maxRetries        int
-	messageTTL        time.Duration
-	dlqThreshold      int
-	recorder          MetricsRecorder
+	pool                     *pgxpool.Pool
+	visibilityTimeout        time.Duration
+	maxRetries               int
+	messageTTL               time.Duration
+	dlqThreshold             int
+	requireTopicRegistration bool
+	recorder                 MetricsRecorder
 }
 
 // Pool returns the underlying connection pool. It is intentionally narrow —
@@ -53,17 +55,18 @@ func (s *Service) Pool() *pgxpool.Pool {
 	return s.pool
 }
 
-func NewService(pool *pgxpool.Pool, visibilityTimeout time.Duration, maxRetries int, messageTTL time.Duration, dlqThreshold int, recorder MetricsRecorder) *Service {
+func NewService(pool *pgxpool.Pool, visibilityTimeout time.Duration, maxRetries int, messageTTL time.Duration, dlqThreshold int, requireTopicRegistration bool, recorder MetricsRecorder) *Service {
 	if recorder == nil {
 		recorder = NoopRecorder{}
 	}
 	return &Service{
-		pool:              pool,
-		visibilityTimeout: visibilityTimeout,
-		maxRetries:        maxRetries,
-		messageTTL:        messageTTL,
-		dlqThreshold:      dlqThreshold,
-		recorder:          recorder,
+		pool:                     pool,
+		visibilityTimeout:        visibilityTimeout,
+		maxRetries:               maxRetries,
+		messageTTL:               messageTTL,
+		dlqThreshold:             dlqThreshold,
+		requireTopicRegistration: requireTopicRegistration,
+		recorder:                 recorder,
 	}
 }
 
@@ -111,6 +114,16 @@ func (s *Service) resolveEnqueueParams(ctx context.Context, topic string) (maxRe
 func (s *Service) Enqueue(ctx context.Context, topic string, payload []byte, metadata map[string]string) (string, error) {
 	if strings.HasSuffix(topic, ".dlq") {
 		return "", fmt.Errorf("enqueue: %w", ErrReservedTopic)
+	}
+
+	if s.requireTopicRegistration {
+		cfg, err := s.GetTopicConfig(ctx, topic)
+		if err != nil {
+			return "", fmt.Errorf("enqueue topic check: %w", err)
+		}
+		if cfg == nil {
+			return "", fmt.Errorf("enqueue: %w", ErrTopicNotRegistered)
+		}
 	}
 
 	if err := s.validatePayload(ctx, topic, payload); err != nil {

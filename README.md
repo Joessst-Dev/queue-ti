@@ -164,10 +164,11 @@ db:
   sslmode: disable     # Options: disable, require, verify-ca, verify-full
 
 queue:
-  visibility_timeout: 30s  # Time a dequeued message remains invisible to other consumers
-  max_retries: 3           # Maximum number of retries for a failed message
-  message_ttl: 24h         # Time-to-live for messages (0 = no expiry)
-  dlq_threshold: 3         # Retry count at which messages are promoted to DLQ (0 = disabled)
+  visibility_timeout: 30s       # Time a dequeued message remains invisible to other consumers
+  max_retries: 3                # Maximum number of retries for a failed message
+  message_ttl: 24h              # Time-to-live for messages (0 = no expiry)
+  dlq_threshold: 3              # Retry count at which messages are promoted to DLQ (0 = disabled)
+  require_topic_registration: false  # Require explicit topic registration before enqueue (default: false)
 
 auth:
   enabled: false
@@ -195,6 +196,7 @@ Any configuration key can be overridden with an environment variable using the k
 | `QUEUETI_QUEUE_MAX_RETRIES` | Max retry count per message | `3` |
 | `QUEUETI_QUEUE_MESSAGE_TTL` | Message time-to-live (0 = no expiry) | `24h` |
 | `QUEUETI_QUEUE_DLQ_THRESHOLD` | Retry count for DLQ promotion (0 = disabled) | `3` |
+| `QUEUETI_QUEUE_REQUIRE_TOPIC_REGISTRATION` | Require topics to be registered before enqueue | `false` |
 | `QUEUETI_AUTH_ENABLED` | Enable JWT authentication | `true` |
 | `QUEUETI_AUTH_JWT_SECRET` | JWT signing secret (required if auth enabled) | (any string) |
 | `QUEUETI_AUTH_USERNAME` | Default admin username | `admin` |
@@ -268,6 +270,47 @@ curl -u admin:secret -X PUT http://localhost:8080/api/topic-configs/orders \
 Topics ending in `.dlq` (dead-letter queue topics) cannot have configurations set; the API returns HTTP 400 if you attempt to configure a DLQ topic.
 
 The admin UI **Config** tab allows interactive viewing and editing of all topic configurations without server restart.
+
+### Topic Registration
+
+By default, queue-ti allows messages to be enqueued to any topic without prior registration. This is convenient for development but can be risky in production—typos in topic names create silent, unrecoverable message loss.
+
+To require explicit topic registration, enable the `require_topic_registration` flag:
+
+```yaml
+queue:
+  require_topic_registration: true
+```
+
+Or via environment variable:
+```bash
+QUEUETI_QUEUE_REQUIRE_TOPIC_REGISTRATION=true
+```
+
+**Behavior when registration is required:**
+- Enqueue requests to unregistered topics are rejected with HTTP 422 (gRPC `FailedPrecondition`)
+- Topics are registered by creating a configuration entry via `PUT /api/topic-configs/:topic`
+- The admin UI **New Topic** button (in the Topics section) simplifies registration; when enabled, admins must register a topic before producers can enqueue to it
+- The empty-state message in the admin UI changes to: "No topics registered. Use 'New Topic' to register a topic before messages can be enqueued to it."
+
+**Example: Register a topic and enqueue a message**
+
+```bash
+# Register the topic
+curl -u admin:secret -X PUT http://localhost:8080/api/topic-configs/orders \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Now enqueue is allowed
+curl -X POST http://localhost:8080/api/messages \
+  -H "Content-Type: application/json" \
+  -d '{"topic": "orders", "payload": "eyJvcmRlcl9pZCI6IDEyMzQ1fQ=="}'
+```
+
+**When to enable registration:**
+- Production deployments where topic names are fixed and controlled
+- Microservices architectures with schema registries (topics are registered alongside schemas)
+- Teams that want producer errors on typos rather than silent failures
 
 ## Authentication & User Management
 

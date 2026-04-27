@@ -89,7 +89,7 @@ func main() {
 	reg := prometheus.NewRegistry()
 	rec := metrics.New(pool, reg)
 
-	queueService := queue.NewService(pool, cfg.Queue.VisibilityTimeout, cfg.Queue.MaxRetries, cfg.Queue.MessageTTL, cfg.Queue.DLQThreshold, rec)
+	queueService := queue.NewService(pool, cfg.Queue.VisibilityTimeout, cfg.Queue.MaxRetries, cfg.Queue.MessageTTL, cfg.Queue.DLQThreshold, cfg.Queue.RequireTopicRegistration, rec)
 	queueService.StartExpiryReaper(ctx, time.Minute)
 
 	var opts []grpc.ServerOption

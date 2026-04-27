@@ -33,7 +33,8 @@ services:
       QUEUETI_AUTH_USERNAME: "admin"
       QUEUETI_AUTH_PASSWORD: "secret"
       QUEUETI_AUTH_JWT_SECRET: "change-me-in-production-use-a-long-random-string"
-      QUEUETI_LOG_LEVEL: debug
+      QUEUETI_LOG_LEVEL: info
+      QUEUETI_QUEUE_REQUIRE_TOPIC_REGISTRATION: "true"
     healthcheck:
       test: ["CMD", "/healthcheck"]
       interval: 5s

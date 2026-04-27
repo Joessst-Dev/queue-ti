@@ -35,7 +35,7 @@ var _ = Describe("gRPC Server", func() {
 		_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM messages")
 		Expect(err).NotTo(HaveOccurred())
 
-		queueService := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
+		queueService := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, false, queue.NoopRecorder{})
 		grpcServer := server.NewGRPCServer(queueService, nil)
 
 		lis := bufconn.Listen(1024 * 1024)
@@ -300,7 +300,7 @@ var _ = Describe("gRPC Server", func() {
 				// the subscriber is already polling before messages arrive.
 				go func() {
 					time.Sleep(50 * time.Millisecond)
-					for i := 0; i < 3; i++ {
+					for range 3 {
 						_, enqErr := client.Enqueue(ctx, &pb.EnqueueRequest{
 							Topic:   "subscribe-after-topic",
 							Payload: []byte("after-message"),
@@ -309,7 +309,7 @@ var _ = Describe("gRPC Server", func() {
 					}
 				}()
 
-				for i := 0; i < 3; i++ {
+				for range 3 {
 					msg, recvErr := stream.Recv()
 					Expect(recvErr).NotTo(HaveOccurred())
 					Expect(msg.Payload).To(Equal([]byte("after-message")))

@@ -36,7 +36,7 @@ var _ = Describe("Queue Service", func() {
 		_, err = pool.Exec(ctx, "DELETE FROM topic_config")
 		Expect(err).NotTo(HaveOccurred())
 
-		service = queue.NewService(pool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
+		service = queue.NewService(pool, 30*time.Second, 3, 0, 3, false, queue.NoopRecorder{})
 	})
 
 	AfterEach(func() {
@@ -60,7 +60,7 @@ var _ = Describe("Queue Service", func() {
 
 		Context("Given a service configured with max_retries = 5", func() {
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 5, 0, 3, queue.NoopRecorder{})
+				service = queue.NewService(pool, 30*time.Second, 5, 0, 3, false, queue.NoopRecorder{})
 			})
 
 			It("should store the message with retry_count = 0 and max_retries = 5", func() {
@@ -79,7 +79,7 @@ var _ = Describe("Queue Service", func() {
 
 		Context("Given a service with a TTL of 1 hour", func() {
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 3, time.Hour, 3, queue.NoopRecorder{})
+				service = queue.NewService(pool, 30*time.Second, 3, time.Hour, 3, false, queue.NoopRecorder{})
 			})
 
 			It("should set expires_at to approximately now + TTL", func() {
@@ -101,7 +101,7 @@ var _ = Describe("Queue Service", func() {
 
 		Context("Given a service with TTL = 0 (no expiry)", func() {
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
+				service = queue.NewService(pool, 30*time.Second, 3, 0, 3, false, queue.NoopRecorder{})
 			})
 
 			It("should store the message with expires_at = NULL", func() {
@@ -298,7 +298,7 @@ var _ = Describe("Queue Service", func() {
 			var messageID string
 
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
+				service = queue.NewService(pool, 30*time.Second, 3, 0, 3, false, queue.NoopRecorder{})
 				var err error
 				messageID, err = service.Enqueue(ctx, "retry-nack-topic", []byte("retry"), nil)
 				Expect(err).NotTo(HaveOccurred())
@@ -329,7 +329,7 @@ var _ = Describe("Queue Service", func() {
 			var messageID string
 
 			BeforeEach(func() {
-				service = queue.NewService(pool, 30*time.Second, 1, 0, 0, queue.NoopRecorder{})
+				service = queue.NewService(pool, 30*time.Second, 1, 0, 0, false, queue.NoopRecorder{})
 				var err error
 				messageID, err = service.Enqueue(ctx, "final-nack-topic", []byte("one-shot"), nil)
 				Expect(err).NotTo(HaveOccurred())
@@ -426,7 +426,7 @@ var _ = Describe("Queue Service", func() {
 				BeforeEach(func() {
 					// dlqThreshold = 2, maxRetries = 5 so normal retries would
 					// still be available — but DLQ fires first at count 2.
-					service = queue.NewService(pool, 30*time.Second, 5, 0, 2, queue.NoopRecorder{})
+					service = queue.NewService(pool, 30*time.Second, 5, 0, 2, false, queue.NoopRecorder{})
 
 					var err error
 					messageID, err = service.Enqueue(ctx, "orders", []byte("process me"), nil)
@@ -486,7 +486,7 @@ var _ = Describe("Queue Service", func() {
 
 				BeforeEach(func() {
 					// dlqThreshold = 3; after one nack retry_count = 1 < 3, no promotion.
-					service = queue.NewService(pool, 30*time.Second, 5, 0, 3, queue.NoopRecorder{})
+					service = queue.NewService(pool, 30*time.Second, 5, 0, 3, false, queue.NoopRecorder{})
 
 					var err error
 					messageID, err = service.Enqueue(ctx, "invoices", []byte("work"), nil)
@@ -520,7 +520,7 @@ var _ = Describe("Queue Service", func() {
 
 				BeforeEach(func() {
 					// Promote a message to DLQ by exhausting the threshold.
-					service = queue.NewService(pool, 30*time.Second, 5, 0, 1, queue.NoopRecorder{})
+					service = queue.NewService(pool, 30*time.Second, 5, 0, 1, false, queue.NoopRecorder{})
 
 					var err error
 					messageID, err = service.Enqueue(ctx, "shipments", []byte("ship it"), nil)
@@ -822,7 +822,7 @@ var _ = Describe("Queue Service", func() {
 
 		Context("when the topic has MessageTTLSeconds = 0 configured and the service has a global TTL", func() {
 			It("should set expires_at = NULL overriding the global TTL", func() {
-				ttlService := queue.NewService(pool, 30*time.Second, 3, time.Hour, 3, queue.NoopRecorder{})
+				ttlService := queue.NewService(pool, 30*time.Second, 3, time.Hour, 3, false, queue.NoopRecorder{})
 				noTTL := 0
 				Expect(ttlService.UpsertTopicConfig(ctx, queue.TopicConfig{
 					Topic:             "topic-nottl",
@@ -840,7 +840,7 @@ var _ = Describe("Queue Service", func() {
 
 		Context("when no topic_config row exists", func() {
 			It("should fall back to the global service defaults", func() {
-				globalService := queue.NewService(pool, 30*time.Second, 5, 0, 3, queue.NoopRecorder{})
+				globalService := queue.NewService(pool, 30*time.Second, 5, 0, 3, false, queue.NoopRecorder{})
 				id, err := globalService.Enqueue(ctx, "topic-defaults", []byte("payload"), nil)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -858,7 +858,7 @@ var _ = Describe("Queue Service", func() {
 			var depthService *queue.Service
 
 			BeforeEach(func() {
-				depthService = queue.NewService(pool, 30*time.Second, 3, 0, 3, queue.NoopRecorder{})
+				depthService = queue.NewService(pool, 30*time.Second, 3, 0, 3, false, queue.NoopRecorder{})
 				maxDepth := 2
 				Expect(depthService.UpsertTopicConfig(ctx, queue.TopicConfig{
 					Topic:    "topic-depth",
@@ -908,6 +908,54 @@ var _ = Describe("Queue Service", func() {
 				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("three"), nil)
 				Expect(err).To(HaveOccurred())
 				Expect(errors.Is(err, queue.ErrQueueFull)).To(BeTrue())
+			})
+		})
+	})
+
+	// Tests for topic registration enforcement
+	Describe("topic registration enforcement", func() {
+		BeforeEach(func() {
+			_, err := pool.Exec(ctx, "DELETE FROM topic_config")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when require_topic_registration is false (default)", func() {
+			It("should enqueue to any topic regardless of topic_config presence", func() {
+				// Service with registration enforcement off — no topic_config row exists.
+				id, err := service.Enqueue(ctx, "unregistered-topic", []byte("payload"), nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(id).NotTo(BeEmpty())
+			})
+		})
+
+		Context("when require_topic_registration is true", func() {
+			var strictService *queue.Service
+
+			BeforeEach(func() {
+				strictService = queue.NewService(pool, 30*time.Second, 3, 0, 3, true, queue.NoopRecorder{})
+			})
+
+			Context("and the topic has no topic_config row", func() {
+				It("should return ErrTopicNotRegistered", func() {
+					_, err := strictService.Enqueue(ctx, "unregistered-topic", []byte("payload"), nil)
+					Expect(err).To(HaveOccurred())
+					Expect(errors.Is(err, queue.ErrTopicNotRegistered)).To(BeTrue())
+				})
+			})
+
+			Context("and the topic has a topic_config row", func() {
+				BeforeEach(func() {
+					// Register the topic by upserting a config row.
+					Expect(strictService.UpsertTopicConfig(ctx, queue.TopicConfig{
+						Topic: "registered-topic",
+					})).To(Succeed())
+				})
+
+				It("should enqueue successfully", func() {
+					id, err := strictService.Enqueue(ctx, "registered-topic", []byte("payload"), nil)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(id).NotTo(BeEmpty())
+				})
 			})
 		})
 	})

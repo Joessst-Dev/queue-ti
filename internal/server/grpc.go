@@ -67,6 +67,9 @@ func (s *GRPCServer) Enqueue(ctx context.Context, req *pb.EnqueueRequest) (*pb.E
 		if errors.Is(err, queue.ErrSchemaValidation) {
 			return nil, status.Errorf(codes.InvalidArgument, "%s", err)
 		}
+		if errors.Is(err, queue.ErrTopicNotRegistered) {
+			return nil, status.Errorf(codes.FailedPrecondition, "%s", err)
+		}
 		slog.Error("grpc enqueue failed", "topic", req.Topic, "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to enqueue: %v", err)
 	}

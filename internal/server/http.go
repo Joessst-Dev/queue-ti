@@ -519,6 +519,9 @@ func (s *HTTPServer) enqueueMessage(c *fiber.Ctx) error {
 		if errors.Is(err, queue.ErrSchemaValidation) {
 			return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": err.Error()})
 		}
+		if errors.Is(err, queue.ErrTopicNotRegistered) {
+			return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": err.Error()})
+		}
 		if errors.Is(err, queue.ErrQueueFull) {
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{"error": err.Error()})
 		}
