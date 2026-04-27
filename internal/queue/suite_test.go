@@ -3,6 +3,7 @@ package queue_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -14,17 +15,12 @@ import (
 )
 
 var (
-	suiteCtx    context.Context
-	pgContainer *tcpostgres.PostgresContainer
+	suiteCtx     context.Context
+	pgContainer  *tcpostgres.PostgresContainer
 	containerDSN string
 )
 
-func TestQueue(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Queue Suite")
-}
-
-var _ = BeforeSuite(func() {
+func TestMain(m *testing.M) {
 	suiteCtx = context.Background()
 
 	var err error
@@ -39,22 +35,42 @@ var _ = BeforeSuite(func() {
 				WithStartupTimeout(60*time.Second),
 		),
 	)
-	Expect(err).NotTo(HaveOccurred())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to start postgres container: %v\n", err)
+		os.Exit(1)
+	}
 
 	host, err := pgContainer.Host(suiteCtx)
-	Expect(err).NotTo(HaveOccurred())
-
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to get container host: %v\n", err)
+		os.Exit(1)
+	}
 	mappedPort, err := pgContainer.MappedPort(suiteCtx, "5432/tcp")
-	Expect(err).NotTo(HaveOccurred())
-
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to get container port: %v\n", err)
+		os.Exit(1)
+	}
 	containerDSN = fmt.Sprintf(
 		"postgres://postgres:postgres@%s:%d/queueti_test?sslmode=disable",
 		host, mappedPort.Num(),
 	)
+
+	code := m.Run()
+
+	_ = pgContainer.Terminate(suiteCtx)
+	os.Exit(code)
+}
+
+func TestQueue(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Queue Suite")
+}
+
+var _ = BeforeSuite(func() {
+	// Container is already running — nothing to do.
+	Expect(containerDSN).NotTo(BeEmpty())
 })
 
 var _ = AfterSuite(func() {
-	if pgContainer != nil {
-		_ = pgContainer.Terminate(suiteCtx)
-	}
+	// Container is terminated by TestMain.
 })

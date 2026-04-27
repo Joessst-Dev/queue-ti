@@ -1,4 +1,4 @@
-.PHONY: proto deps test run
+.PHONY: proto deps test run bench bench-mem bench-queue bench-loadtest
 
 proto:
 	protoc --go_out=pb --go_opt=paths=source_relative \
@@ -14,4 +14,21 @@ test:
 
 run:
 	go run cmd/server/main.go
+
+# Run all benchmarks (3 s per benchmark, no unit tests)
+bench:
+	go test -bench=. -benchtime=3s -run=^$$ ./internal/queue/...
+
+# Run all benchmarks with memory allocation stats
+bench-mem:
+	go test -bench=. -benchtime=3s -benchmem -run=^$$ ./internal/queue/...
+
+# Run a single named benchmark: make bench-queue BENCH=BenchmarkEnqueue
+bench-queue:
+	go test -bench=$(BENCH) -benchtime=3s -run=^$$ ./internal/queue/...
+
+# Run the end-to-end gRPC load test against a running server
+# Flags can be overridden: make bench-loadtest LOADTEST_FLAGS="--producers=16 --duration=60s"
+bench-loadtest:
+	go run ./cmd/loadtest $(LOADTEST_FLAGS)
 

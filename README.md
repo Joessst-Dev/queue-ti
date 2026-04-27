@@ -1448,6 +1448,142 @@ Check coverage for the backend:
 ginkgo ./... -cover
 ```
 
+## Performance Testing
+
+### Go Benchmarks
+
+The queue package includes `testing.B` benchmarks that exercise the core queue operations directly against a real PostgreSQL instance (spun up via TestContainers — no running server needed).
+
+```bash
+# Run all benchmarks, 3 seconds per benchmark
+go test -bench=. -benchtime=3s -run=^$ ./internal/queue/...
+
+# Run a specific benchmark
+go test -bench=BenchmarkEnqueue -benchtime=5s -run=^$ ./internal/queue/...
+
+# Include memory allocation stats
+go test -bench=. -benchmem -run=^$ ./internal/queue/...
+```
+
+Available benchmarks:
+
+| Benchmark | What it measures |
+|---|---|
+| `BenchmarkEnqueue` | Sequential single-goroutine enqueue throughput |
+| `BenchmarkEnqueueParallel` | Concurrent enqueue across `GOMAXPROCS` goroutines |
+| `BenchmarkDequeueAck` | Dequeue + Ack hot path (pre-seeded queue, no enqueue overhead) |
+| `BenchmarkFullPipeline` | Full Enqueue → Dequeue → Ack round-trip under parallel load |
+
+Example output:
+```
+BenchmarkEnqueue-10               3106   1.15ms/op
+BenchmarkEnqueueParallel-10      18234   192µs/op
+BenchmarkDequeueAck-10            4821   621µs/op
+BenchmarkFullPipeline-10          9344   320µs/op
+```
+
+### End-to-End Load Test
+
+The `cmd/loadtest` binary connects to a running gRPC server and drives configurable numbers of concurrent producers and consumers.
+
+**Start the stack first:**
+```bash
+docker-compose up
+```
+
+**Run the load test:**
+```bash
+go run ./cmd/loadtest [flags]
+```
+
+Available flags:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--addr` | `localhost:50051` | gRPC server address |
+| `--duration` | `30s` | How long to run |
+| `--producers` | `4` | Concurrent enqueue goroutines |
+| `--consumers` | `4` | Concurrent dequeue+ack goroutines |
+| `--topic` | `loadtest` | Topic to use |
+| `--msg-size` | `256` | Payload size in bytes |
+| `--token` | _(empty)_ | Bearer JWT for authenticated servers |
+
+**Examples:**
+
+```bash
+# Default: 4 producers, 4 consumers, 30 seconds
+go run ./cmd/loadtest
+
+# High concurrency, 2-minute run
+go run ./cmd/loadtest --producers=16 --consumers=16 --duration=2m
+
+# Authenticated server
+go run ./cmd/loadtest --token=<jwt>
+
+# Large payloads (1 KB), longer run
+go run ./cmd/loadtest --msg-size=1024 --duration=60s
+```
+
+Progress is printed to stderr every 5 seconds; the final summary goes to stdout:
+
+```
+[5s] enqueue: 7,503 | dequeue+ack: 7,441
+[10s] enqueue: 15,021 | dequeue+ack: 14,899
+...
+
+=== Load Test Results (30s, 4 producers, 4 consumers) ===
+
+Enqueue
+  Total:      45,210 ops
+  Throughput: 1,507 ops/s
+  p50:        2.1ms
+  p95:        5.8ms
+  p99:        12.3ms
+  Errors:     0
+
+Dequeue+Ack
+  Total:      44,987 ops
+  Throughput: 1,499 ops/s
+  p50:        3.4ms
+  p95:        8.1ms
+  p99:        18.2ms
+  Errors:     0
+```
+
+#### Running the Load Test with Authentication Enabled
+
+When `auth.enabled = true` the gRPC server rejects requests without a valid JWT. Obtain a token first via the HTTP login endpoint, then pass it to the load test.
+
+**1. Log in and capture the token:**
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"secret"}' \
+  | jq -r '.token')
+```
+
+**2. Verify the token was captured:**
+```bash
+echo $TOKEN
+```
+
+**3. Run the load test with the token:**
+```bash
+go run ./cmd/loadtest --token=$TOKEN
+```
+
+Or with the Makefile target:
+```bash
+make bench-loadtest LOADTEST_FLAGS="--token=$TOKEN --producers=8 --consumers=8 --duration=60s"
+```
+
+The token is valid for 15 minutes. For runs longer than that, obtain a fresh token before starting or use `POST /api/auth/refresh` to extend it:
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/refresh \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq -r '.token')
+```
+
 ## Development Workflow
 
 ### Regenerating Protobuf
