@@ -20,6 +20,7 @@ queue-ti is designed for teams who want reliable, observable message processing 
 - **gRPC API** — High-performance queue operations (enqueue, dequeue, acknowledge, nack) over gRPC
 - **HTTP Admin API** — REST endpoints for queue inspection, management, user/grant administration, and schema configuration
 - **Topic-based routing** — Multiple independent queues share a single PostgreSQL table, partitioned by topic
+- **Message keys** — Optional deduplication keys allow upsert semantics—enqueuing with the same key updates the pending message rather than creating a duplicate
 - **Automatic retries** — Failed messages are automatically retried up to a configurable limit; consumers call `Nack` to signal failure
 - **Dead-letter queue** — Messages that exhaust their retry limit are automatically promoted to `<topic>.dlq`; can be manually requeued to the original topic
 - **Message TTL** — Messages expire after a configurable duration; an automatic reaper marks expired messages
@@ -133,6 +134,11 @@ defer c.Close()
 // Publish
 producer := c.NewProducer()
 id, _ := producer.Publish(ctx, "orders", []byte(`{"amount":99}`))
+
+// Publish with a deduplication key (upserts pending messages with same key)
+id, _ := producer.Publish(ctx, "orders", []byte(`{"amount":99}`), 
+    queueti.WithKey("order-123"),
+)
 
 // Consume (blocks until ctx cancelled)
 consumer := c.NewConsumer("orders", queueti.WithConcurrency(4))
@@ -807,6 +813,7 @@ Messages are stored in a single `messages` PostgreSQL table with the following c
 | `topic` | TEXT | Topic name (required) |
 | `payload` | BYTEA | Message payload (required) |
 | `metadata` | JSONB | Optional metadata |
+| `key` | TEXT | Optional deduplication key (nullable) |
 | `status` | TEXT | One of `pending`, `processing`, `deleted`, `failed`, `expired` |
 | `retry_count` | INTEGER | Number of times the message has been nacked |
 | `max_retries` | INTEGER | Maximum retries allowed for this message |
@@ -817,7 +824,43 @@ Messages are stored in a single `messages` PostgreSQL table with the following c
 | `dlq_moved_at` | TIMESTAMPTZ | When the message was promoted to DLQ; null otherwise |
 | `created_at`, `updated_at` | TIMESTAMPTZ | Lifecycle timestamps |
 
-**Index**: Composite index on `(topic, status, visibility_timeout, created_at)` for efficient dequeue queries.
+**Indexes**: 
+- Composite index on `(topic, status, visibility_timeout, created_at)` for efficient dequeue queries
+- Unique partial index on `(topic, key)` where `key IS NOT NULL AND status = 'pending'` for key-based upserts
+
+### Message Keys and Upsert Semantics
+
+Messages can have an optional `key` field that enables deduplication and idempotent enqueue operations.
+
+**Key behavior:**
+- **Keyless messages** (`key = null`) always insert a new row; multiple enqueue calls produce multiple messages.
+- **Keyed messages with no conflict** — A message with a key where no other pending message exists for that `(topic, key)` pair inserts a new row as usual.
+- **Keyed messages with pending conflict** — If a pending message already exists for `(topic, key)`, the existing row is **upserted** in place: `payload`, `metadata`, and `updated_at` are replaced, the message ID remains the same, and no new row is created.
+- **Keyed messages with processing conflict** — If the message is already being processed (`status = 'processing'`), it is **never upserted**. A best-effort insertion occurs instead, which may fail with a constraint violation. This prevents interrupting in-flight work. Retry the enqueue after the in-flight message completes.
+
+**Use cases:**
+- **Idempotent producers** — Safely replay enqueue calls without creating duplicate work
+- **State synchronization** — Update a pending order with the latest customer information before a consumer picks it up
+- **Request deduplication** — Associate one message per user request ID, replacing stale entries with new ones
+
+**Example:**
+```bash
+# Enqueue with key
+curl -X POST http://localhost:8080/api/messages \
+  -H "Content-Type: application/json" \
+  -d '{"topic": "orders", "key": "order-42", "payload": "eyJhbW91bnQiOjk5fQ=="}'
+
+# Response (ID is "abc123")
+{"id": "abc123"}
+
+# Enqueue the same key with updated payload
+curl -X POST http://localhost:8080/api/messages \
+  -H "Content-Type: application/json" \
+  -d '{"topic": "orders", "key": "order-42", "payload": "eyJhbW91bnQiOjEwMH0="}'
+
+# Response returns the same ID (upserted, not duplicated)
+{"id": "abc123"}
+```
 
 ### Dequeue Algorithm
 
@@ -885,6 +928,7 @@ cmd/server/main.go
     ├── /api/messages/dequeue                POST   Dequeue up to N messages from a topic
     ├── /api/messages/:id/nack               POST   Nack a processing message
     ├── /api/messages/:id/requeue            POST   Requeue a DLQ message
+    ├── /api/topics/:topic/messages/by-key/:key  DELETE Delete all messages with a key (admin-only)
     ├── /api/stats                           GET    Queue depth statistics
     ├── /api/topic-configs                   GET    List all topic configurations
     ├── /api/topic-configs/:topic            PUT    Create/update topic configuration
@@ -969,12 +1013,15 @@ message EnqueueRequest {
   string topic = 1;                    // Topic name (required)
   bytes payload = 2;                   // Message payload (required)
   map<string, string> metadata = 3;    // Optional metadata
+  optional string key = 4;             // Optional deduplication key
 }
 
 message EnqueueResponse {
   string id = 1;  // UUID of the enqueued message
 }
 ```
+
+**Key behavior** — See [Message Keys and Upsert Semantics](#message-keys-and-upsert-semantics) for details on deduplication and upsert logic.
 
 #### Dequeue
 
@@ -996,6 +1043,7 @@ message DequeueResponse {
   google.protobuf.Timestamp created_at = 5;  // Creation timestamp
   int32 retry_count = 6;                // Current retry count
   int32 max_retries = 7;                // Maximum retries for this message
+  optional string key = 8;              // Deduplication key (if present)
 }
 ```
 
@@ -1036,6 +1084,8 @@ message BatchDequeueResponse {
 - All returned messages are locked with `FOR UPDATE SKIP LOCKED`, preventing concurrent consumers from acquiring the same messages.
 - Returns immediately with available messages even if fewer than requested; never blocks.
 - Efficient for high-throughput batch processing scenarios.
+
+**Key field**: Each message in the response includes its optional `key` field (if present), allowing batch handlers to correlate messages with deduplication keys.
 
 #### Ack
 
@@ -1112,6 +1162,7 @@ curl http://localhost:8080/api/messages?topic=orders
     "topic": "orders",
     "payload": "eyJvcmRlcl9pZCI6IDEyMzQ1fQ==",
     "metadata": {"user_id": "42"},
+    "key": "order-123",
     "status": "pending",
     "retry_count": 0,
     "max_retries": 3,
@@ -1124,13 +1175,40 @@ curl http://localhost:8080/api/messages?topic=orders
 
 Enqueues a message.
 
+**Request body:**
+```json
+{
+  "topic": "orders",
+  "payload": "eyJvcmRlcl9pZCI6IDEyMzQ1fQ==",
+  "metadata": {"user_id": "42"},
+  "key": "order-123"
+}
+```
+
+**Fields:**
+- `topic` (string, required) — Topic name
+- `payload` (string, required) — Base64-encoded message payload
+- `metadata` (object, optional) — Key-value metadata
+- `key` (string, optional) — Deduplication key for upsert semantics; see [Message Keys and Upsert Semantics](#message-keys-and-upsert-semantics)
+
+**Example:**
 ```bash
+# Enqueue without key (always creates new message)
 curl -X POST http://localhost:8080/api/messages \
   -H "Content-Type: application/json" \
   -d '{
     "topic": "orders",
     "payload": "eyJvcmRlcl9pZCI6IDEyMzQ1fQ==",
     "metadata": {"user_id": "42"}
+  }'
+
+# Enqueue with key (upserts pending messages)
+curl -X POST http://localhost:8080/api/messages \
+  -H "Content-Type: application/json" \
+  -d '{
+    "topic": "orders",
+    "payload": "eyJvcmRlcl9pZCI6IDEyMzQ1fQ==",
+    "key": "order-123"
   }'
 ```
 
@@ -1179,6 +1257,7 @@ curl -X POST http://localhost:8080/api/messages/dequeue \
       "topic": "orders",
       "payload": "eyJvcmRlcl9pZCI6IDEyMzQ1fQ==",
       "metadata": {"user_id": "42"},
+      "key": "order-123",
       "created_at": "2025-04-25T12:00:00Z",
       "retry_count": 0,
       "max_retries": 3
@@ -1188,6 +1267,7 @@ curl -X POST http://localhost:8080/api/messages/dequeue \
       "topic": "orders",
       "payload": "eyJvcmRlcl9pZCI6IDEyMzQ2fQ==",
       "metadata": {"user_id": "43"},
+      "key": null,
       "created_at": "2025-04-25T12:01:00Z",
       "retry_count": 0,
       "max_retries": 3
@@ -1200,6 +1280,7 @@ curl -X POST http://localhost:8080/api/messages/dequeue \
 - Returns 0 to N messages depending on availability; never blocks
 - All returned messages transition to `'processing'` status with visibility timeout
 - Each message can be individually acked or nacked via `POST /api/messages/:id/nack` or (for DLQ) `POST /api/messages/:id/requeue`
+- The `key` field is included in each message response (null if not present)
 
 **Errors:**
 - HTTP 400 if `count` is 0 or exceeds 1000
@@ -1235,6 +1316,35 @@ curl -X POST http://localhost:8080/api/messages/:id/requeue
 **Behavior**: Restores the message to its original topic (retrieved from `original_topic`), resets `retry_count` to 0, restores `max_retries` to the configured default, and sets status to `'pending'`.
 
 Returns HTTP 404 if the message is not found or is not a dead-letter message.
+
+#### DELETE /api/topics/:topic/messages/by-key/:key
+
+Deletes all messages with the given key on a topic, regardless of status. This is an administrative operation for purging duplicate or stale keyed messages.
+
+**Request:**
+```bash
+curl -X DELETE -u admin:secret http://localhost:8080/api/topics/orders/messages/by-key/order-123
+```
+
+**Path parameters:**
+- `topic` (string, required) — Topic name
+- `key` (string, required) — Deduplication key to delete
+
+**Response:** HTTP 200 OK
+```json
+{"deleted": 1}
+```
+
+The response indicates how many messages were deleted.
+
+**Behavior:**
+- Deletes **all** messages with the given `(topic, key)` pair regardless of their status (`pending`, `processing`, `expired`, etc.)
+- Returns HTTP 404 if no messages with that key are found on the topic
+- Admin-only endpoint (requires `is_admin=true` or basic auth)
+
+**Use case:**
+- Purge duplicate keyed messages that were created unintentionally
+- Clean up stale state after a key-based upsert pattern is no longer needed
 
 #### GET /api/topic-configs
 
