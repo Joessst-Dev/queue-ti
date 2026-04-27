@@ -10,9 +10,9 @@ import { inject } from '@angular/core';
   template: `
     <header class="bg-white shadow-sm">
       <div
-        class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between"
+        class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
       >
-        <div class="flex items-center gap-6">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
           <div class="flex items-center gap-2">
             <svg
               class="w-6 h-6 text-indigo-600"
@@ -29,31 +29,54 @@ import { inject } from '@angular/core';
             </svg>
             <h1 class="text-xl font-bold text-gray-900">QueueTI Admin</h1>
           </div>
-          <nav class="flex items-center gap-4" aria-label="Site navigation">
-            <a
-              routerLink="/messages"
-              routerLinkActive="text-indigo-600 font-semibold"
-              [routerLinkActiveOptions]="{ exact: false }"
-              class="text-sm text-gray-600 hover:text-gray-900"
-            >
-              Messages
-            </a>
-            @if (auth.isAdmin()) {
+          <div class="flex items-center justify-between sm:justify-start gap-4">
+            <nav class="flex items-center gap-4" aria-label="Site navigation">
               <a
-                routerLink="/admin"
+                routerLink="/messages"
                 routerLinkActive="text-indigo-600 font-semibold"
                 [routerLinkActiveOptions]="{ exact: false }"
                 class="text-sm text-gray-600 hover:text-gray-900"
               >
-                Admin
+                Messages
               </a>
+              @if (auth.isAdmin()) {
+                <a
+                  routerLink="/admin"
+                  routerLinkActive="text-indigo-600 font-semibold"
+                  [routerLinkActiveOptions]="{ exact: false }"
+                  class="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Admin
+                </a>
+              }
+            </nav>
+            @if (isAuthenticated()) {
+              <button
+                (click)="signOut.emit()"
+                class="flex sm:hidden items-center gap-1 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
+              >
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15"
+                  />
+                </svg>
+                Sign out
+              </button>
             }
-          </nav>
+          </div>
         </div>
         @if (isAuthenticated()) {
           <button
             (click)="signOut.emit()"
-            class="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
+            class="hidden sm:flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
           >
             <svg
               class="w-4 h-4"

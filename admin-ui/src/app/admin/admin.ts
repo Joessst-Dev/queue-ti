@@ -13,7 +13,7 @@ import { MaintenanceSection } from '../messages/maintenance-section';
     <div class="min-h-screen bg-gray-50">
       <app-messages-header [isAuthenticated]="auth.isAuthenticated()" (signOut)="onLogout()" />
 
-      <div class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <app-users-section />
         <app-maintenance-section />
       </div>

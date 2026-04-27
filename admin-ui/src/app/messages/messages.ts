@@ -30,19 +30,21 @@ interface EnqueueState {
 
       <div class="bg-white border-b border-gray-200">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav class="-mb-px flex gap-6" aria-label="Main navigation">
-            @for (tab of tabs(); track tab.id) {
-              <button
-                (click)="activeTab.set(tab.id)"
-                [class]="activeTab() === tab.id
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-                class="border-b-2 py-3 px-1 text-sm font-medium whitespace-nowrap cursor-pointer transition-colors"
-              >
-                {{ tab.label }}
-              </button>
-            }
-          </nav>
+          <div class="overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <nav class="-mb-px flex gap-6" aria-label="Main navigation">
+              @for (tab of tabs(); track tab.id) {
+                <button
+                  (click)="activeTab.set(tab.id)"
+                  [class]="activeTab() === tab.id
+                    ? 'border-indigo-500 text-indigo-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                  class="border-b-2 py-3 px-1 text-sm font-medium whitespace-nowrap cursor-pointer transition-colors"
+                >
+                  {{ tab.label }}
+                </button>
+              }
+            </nav>
+          </div>
         </div>
       </div>
 

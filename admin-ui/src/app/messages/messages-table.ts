@@ -130,21 +130,21 @@ import { QueueMessage } from '../services/queue.service';
           [style.width]="'calc(100% - ' + scrollbarWidth() + 'px)'"
         >
           <colgroup>
-            <col style="width: 9%">
+            <col class="hidden lg:table-column" style="width: 9%">
             <col style="width: 11%">
-            <col style="width: 10%">
-            <col style="width: 18%">
+            <col class="hidden md:table-column" style="width: 10%">
+            <col class="hidden md:table-column" style="width: 18%">
             <col style="width: 8%">
-            <col style="width: 7%">
-            <col style="width: 9%">
-            <col style="width: 12%">
-            <col style="width: 9%">
+            <col class="hidden md:table-column" style="width: 7%">
+            <col class="hidden lg:table-column" style="width: 9%">
+            <col class="hidden lg:table-column" style="width: 12%">
+            <col class="hidden md:table-column" style="width: 9%">
             <col style="width: 7%">
           </colgroup>
           <thead class="bg-gray-50">
             <tr>
               <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
               >
                 ID
               </th>
@@ -154,12 +154,12 @@ import { QueueMessage } from '../services/queue.service';
                 Topic
               </th>
               <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
               >
                 Key
               </th>
               <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
               >
                 Payload
               </th>
@@ -169,22 +169,22 @@ import { QueueMessage } from '../services/queue.service';
                 Status
               </th>
               <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
               >
                 Retries
               </th>
               <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
               >
                 Expires
               </th>
               <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
               >
                 Metadata
               </th>
               <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
               >
                 Created
               </th>
@@ -203,20 +203,20 @@ import { QueueMessage } from '../services/queue.service';
         >
           <table class="w-full table-fixed">
             <colgroup>
-              <col style="width: 9%">
+              <col class="hidden lg:table-column" style="width: 9%">
               <col style="width: 11%">
-              <col style="width: 10%">
-              <col style="width: 18%">
+              <col class="hidden md:table-column" style="width: 10%">
+              <col class="hidden md:table-column" style="width: 18%">
               <col style="width: 8%">
-              <col style="width: 7%">
-              <col style="width: 9%">
-              <col style="width: 12%">
-              <col style="width: 9%">
+              <col class="hidden md:table-column" style="width: 7%">
+              <col class="hidden lg:table-column" style="width: 9%">
+              <col class="hidden lg:table-column" style="width: 12%">
+              <col class="hidden md:table-column" style="width: 9%">
               <col style="width: 7%">
             </colgroup>
             <tbody class="divide-y divide-gray-200">
               <tr *cdkVirtualFor="let msg of messages(); trackBy: trackByMsgId" [class]="rowClasses(msg)">
-                <td class="px-6 py-4 text-sm font-mono text-gray-600">
+                <td class="hidden lg:table-cell px-6 py-4 text-sm font-mono text-gray-600">
                   <div class="flex items-center gap-1">
                     <span [title]="msg.id"
                       >{{ msg.id | slice: 0 : 8 }}&hellip;</span
@@ -247,7 +247,7 @@ import { QueueMessage } from '../services/queue.service';
                     </div>
                   }
                 </td>
-                <td class="px-6 py-4 text-sm text-gray-600 font-mono truncate">
+                <td class="hidden md:table-cell px-6 py-4 text-sm text-gray-600 font-mono truncate">
                   @if (msg.key) {
                     {{ msg.key }}
                   } @else {
@@ -255,7 +255,7 @@ import { QueueMessage } from '../services/queue.service';
                   }
                 </td>
                 <td
-                  class="px-6 py-4 text-sm text-gray-600 max-w-xs truncate font-mono"
+                  class="hidden md:table-cell px-6 py-4 text-sm text-gray-600 max-w-xs truncate font-mono"
                 >
                   {{ msg.payload }}
                 </td>
@@ -267,7 +267,7 @@ import { QueueMessage } from '../services/queue.service';
                     {{ msg.status }}
                   </span>
                 </td>
-                <td class="px-6 py-4 text-sm">
+                <td class="hidden md:table-cell px-6 py-4 text-sm">
                   <span
                     [title]="msg.last_error || ''"
                     [class]="retriesExhausted(msg) ? 'text-red-600 font-medium' : 'text-gray-500'"
@@ -275,14 +275,14 @@ import { QueueMessage } from '../services/queue.service';
                     {{ msg.retry_count }} / {{ msg.max_retries }}
                   </span>
                 </td>
-                <td class="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
+                <td class="hidden lg:table-cell px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
                   @if (msg.expires_at) {
                     {{ msg.expires_at | date: 'short' }}
                   } @else {
                     <span class="text-gray-400">&mdash;</span>
                   }
                 </td>
-                <td class="px-6 py-4 text-sm text-gray-500">
+                <td class="hidden lg:table-cell px-6 py-4 text-sm text-gray-500">
                   @if (
                     msg.metadata && objectKeys(msg.metadata).length > 0
                   ) {
@@ -298,7 +298,7 @@ import { QueueMessage } from '../services/queue.service';
                   }
                 </td>
                 <td
-                  class="px-6 py-4 text-sm text-gray-500 whitespace-nowrap"
+                  class="hidden md:table-cell px-6 py-4 text-sm text-gray-500 whitespace-nowrap"
                 >
                   {{ msg.created_at | date: 'short' }}
                 </td>
