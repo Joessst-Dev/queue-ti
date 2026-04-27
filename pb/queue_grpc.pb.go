@@ -19,11 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	QueueService_Enqueue_FullMethodName   = "/queue.QueueService/Enqueue"
-	QueueService_Dequeue_FullMethodName   = "/queue.QueueService/Dequeue"
-	QueueService_Ack_FullMethodName       = "/queue.QueueService/Ack"
-	QueueService_Nack_FullMethodName      = "/queue.QueueService/Nack"
-	QueueService_Subscribe_FullMethodName = "/queue.QueueService/Subscribe"
+	QueueService_Enqueue_FullMethodName      = "/queue.QueueService/Enqueue"
+	QueueService_Dequeue_FullMethodName      = "/queue.QueueService/Dequeue"
+	QueueService_BatchDequeue_FullMethodName = "/queue.QueueService/BatchDequeue"
+	QueueService_Ack_FullMethodName          = "/queue.QueueService/Ack"
+	QueueService_Nack_FullMethodName         = "/queue.QueueService/Nack"
+	QueueService_Subscribe_FullMethodName    = "/queue.QueueService/Subscribe"
 )
 
 // QueueServiceClient is the client API for QueueService service.
@@ -32,6 +33,7 @@ const (
 type QueueServiceClient interface {
 	Enqueue(ctx context.Context, in *EnqueueRequest, opts ...grpc.CallOption) (*EnqueueResponse, error)
 	Dequeue(ctx context.Context, in *DequeueRequest, opts ...grpc.CallOption) (*DequeueResponse, error)
+	BatchDequeue(ctx context.Context, in *BatchDequeueRequest, opts ...grpc.CallOption) (*BatchDequeueResponse, error)
 	Ack(ctx context.Context, in *AckRequest, opts ...grpc.CallOption) (*AckResponse, error)
 	Nack(ctx context.Context, in *NackRequest, opts ...grpc.CallOption) (*NackResponse, error)
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SubscribeResponse], error)
@@ -59,6 +61,16 @@ func (c *queueServiceClient) Dequeue(ctx context.Context, in *DequeueRequest, op
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DequeueResponse)
 	err := c.cc.Invoke(ctx, QueueService_Dequeue_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) BatchDequeue(ctx context.Context, in *BatchDequeueRequest, opts ...grpc.CallOption) (*BatchDequeueResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BatchDequeueResponse)
+	err := c.cc.Invoke(ctx, QueueService_BatchDequeue_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -110,6 +122,7 @@ type QueueService_SubscribeClient = grpc.ServerStreamingClient[SubscribeResponse
 type QueueServiceServer interface {
 	Enqueue(context.Context, *EnqueueRequest) (*EnqueueResponse, error)
 	Dequeue(context.Context, *DequeueRequest) (*DequeueResponse, error)
+	BatchDequeue(context.Context, *BatchDequeueRequest) (*BatchDequeueResponse, error)
 	Ack(context.Context, *AckRequest) (*AckResponse, error)
 	Nack(context.Context, *NackRequest) (*NackResponse, error)
 	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[SubscribeResponse]) error
@@ -128,6 +141,9 @@ func (UnimplementedQueueServiceServer) Enqueue(context.Context, *EnqueueRequest)
 }
 func (UnimplementedQueueServiceServer) Dequeue(context.Context, *DequeueRequest) (*DequeueResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Dequeue not implemented")
+}
+func (UnimplementedQueueServiceServer) BatchDequeue(context.Context, *BatchDequeueRequest) (*BatchDequeueResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BatchDequeue not implemented")
 }
 func (UnimplementedQueueServiceServer) Ack(context.Context, *AckRequest) (*AckResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Ack not implemented")
@@ -195,6 +211,24 @@ func _QueueService_Dequeue_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _QueueService_BatchDequeue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BatchDequeueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).BatchDequeue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_BatchDequeue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).BatchDequeue(ctx, req.(*BatchDequeueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _QueueService_Ack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AckRequest)
 	if err := dec(in); err != nil {
@@ -256,6 +290,10 @@ var QueueService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Dequeue",
 			Handler:    _QueueService_Dequeue_Handler,
+		},
+		{
+			MethodName: "BatchDequeue",
+			Handler:    _QueueService_BatchDequeue_Handler,
 		},
 		{
 			MethodName: "Ack",

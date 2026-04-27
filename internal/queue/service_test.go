@@ -3,6 +3,7 @@ package queue_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -586,6 +587,109 @@ var _ = Describe("Queue Service", func() {
 					Expect(err).To(HaveOccurred())
 					Expect(err).To(MatchError(ContainSubstring(queue.ErrNotDLQ.Error())))
 				})
+			})
+		})
+	})
+
+	// Tests for batch dequeue (DequeueN)
+	Describe("DequeueN", func() {
+		const batchTopic = "batch-topic"
+		const otherTopic = "other-topic"
+		const timeout = 30 * time.Second
+
+		BeforeEach(func() {
+			// Seed 5 pending messages on batchTopic and 1 on otherTopic.
+			for i := range 5 {
+				_, err := service.Enqueue(ctx, batchTopic, fmt.Appendf(nil, "msg-%d", i), nil)
+				Expect(err).NotTo(HaveOccurred())
+			}
+			_, err := service.Enqueue(ctx, otherTopic, []byte("other-msg"), nil)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when count is within the available messages", func() {
+			It("should return exactly N messages all with status processing", func() {
+				msgs, err := service.DequeueN(ctx, batchTopic, 3, timeout)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msgs).To(HaveLen(3))
+
+				for _, m := range msgs {
+					var status string
+					Expect(pool.QueryRow(ctx,
+						`SELECT status FROM messages WHERE id = $1`, m.ID,
+					).Scan(&status)).To(Succeed())
+					Expect(status).To(Equal("processing"))
+				}
+			})
+		})
+
+		Context("when count exceeds available messages", func() {
+			It("should return all available messages without error", func() {
+				msgs, err := service.DequeueN(ctx, batchTopic, 10, timeout)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msgs).To(HaveLen(5))
+			})
+		})
+
+		Context("when no messages are available on the topic", func() {
+			It("should return an empty (non-nil) slice with no error", func() {
+				msgs, err := service.DequeueN(ctx, "empty-topic", 5, timeout)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msgs).NotTo(BeNil())
+				Expect(msgs).To(BeEmpty())
+			})
+		})
+
+		Context("when other topics have messages", func() {
+			It("should not touch messages on other topics", func() {
+				_, err := service.DequeueN(ctx, batchTopic, 5, timeout)
+				Expect(err).NotTo(HaveOccurred())
+
+				// The other-topic message must remain pending.
+				var status string
+				Expect(pool.QueryRow(ctx,
+					`SELECT status FROM messages WHERE topic = $1`, otherTopic,
+				).Scan(&status)).To(Succeed())
+				Expect(status).To(Equal("pending"))
+			})
+		})
+
+		Context("when count is 0", func() {
+			It("should return ErrInvalidBatchSize", func() {
+				_, err := service.DequeueN(ctx, batchTopic, 0, timeout)
+
+				Expect(err).To(MatchError(queue.ErrInvalidBatchSize))
+			})
+		})
+
+		Context("when count is 1001", func() {
+			It("should return ErrInvalidBatchSize", func() {
+				_, err := service.DequeueN(ctx, batchTopic, 1001, timeout)
+
+				Expect(err).To(MatchError(queue.ErrInvalidBatchSize))
+			})
+		})
+
+		Context("when messages are successfully dequeued", func() {
+			It("should set visibility_timeout to approximately now + timeout on each message", func() {
+				before := time.Now()
+				msgs, err := service.DequeueN(ctx, batchTopic, 2, timeout)
+				after := time.Now()
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msgs).To(HaveLen(2))
+
+				for _, m := range msgs {
+					var vt time.Time
+					Expect(pool.QueryRow(ctx,
+						`SELECT visibility_timeout FROM messages WHERE id = $1`, m.ID,
+					).Scan(&vt)).To(Succeed())
+					Expect(vt).To(BeTemporally(">=", before.Add(timeout-time.Second)))
+					Expect(vt).To(BeTemporally("<=", after.Add(timeout+time.Second)))
+				}
 			})
 		})
 	})

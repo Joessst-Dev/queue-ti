@@ -174,6 +174,103 @@ func nextBackoff(b time.Duration) time.Duration {
 	return b
 }
 
+// ConsumeBatch polls the queue in batches, calling handler with each batch.
+// Each message in the batch has Ack and Nack closures that call back to the
+// server. ConsumeBatch returns when ctx is cancelled or a non-retriable error
+// occurs. When the queue is empty it applies the same exponential backoff as
+// Consume (500ms → 30s). When messages are returned the backoff resets.
+func (c *Consumer) ConsumeBatch(ctx context.Context, topic string, batchSize int, handler func(ctx context.Context, messages []*Message) error) error {
+	backoff := backoffStart
+
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		req := &pb.BatchDequeueRequest{
+			Topic: topic,
+			Count: uint32(batchSize),
+		}
+		if c.cfg.visibilityTimeout > 0 {
+			vt := c.cfg.visibilityTimeout
+			req.VisibilityTimeoutSeconds = &vt
+		}
+
+		resp, err := c.client.pb.BatchDequeue(ctx, req)
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			log.Printf("queue-ti consumer: BatchDequeue error (retrying in %s): %v", backoff, err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+			}
+			backoff = nextBackoff(backoff)
+			continue
+		}
+
+		if len(resp.Messages) == 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+			}
+			backoff = nextBackoff(backoff)
+			continue
+		}
+
+		backoff = backoffStart
+
+		msgs := make([]*Message, len(resp.Messages))
+		for i, m := range resp.Messages {
+			msgs[i] = dequeueProtoToMessage(m, c.client)
+		}
+
+		if err := handler(ctx, msgs); err != nil && ctx.Err() == nil {
+			log.Printf("queue-ti consumer: batch handler error: %v", err)
+		}
+	}
+}
+
+// dequeueProtoToMessage converts a DequeueResponse into a Message, wiring in
+// the ack/nack closures that call back to the server.
+func dequeueProtoToMessage(resp *pb.DequeueResponse, c *Client) *Message {
+	var createdAt time.Time
+	if resp.CreatedAt != nil {
+		createdAt = resp.CreatedAt.AsTime()
+	}
+
+	id := resp.Id
+	msg := &Message{
+		ID:         id,
+		Topic:      resp.Topic,
+		Payload:    resp.Payload,
+		Metadata:   resp.Metadata,
+		CreatedAt:  createdAt,
+		RetryCount: int(resp.RetryCount),
+	}
+
+	msg.ack = func(ctx context.Context) error {
+		_, err := c.pb.Ack(ctx, &pb.AckRequest{Id: id})
+		if err != nil {
+			return fmt.Errorf("ack message %s: %w", id, err)
+		}
+		return nil
+	}
+
+	msg.nack = func(ctx context.Context, reason string) error {
+		_, err := c.pb.Nack(ctx, &pb.NackRequest{Id: id, Error: reason})
+		if err != nil {
+			return fmt.Errorf("nack message %s: %w", id, err)
+		}
+		return nil
+	}
+
+	return msg
+}
+
 // protoToMessage converts a SubscribeResponse into a Message, wiring in the
 // ack/nack closures that call back to the server.
 func protoToMessage(resp *pb.SubscribeResponse, c *Client) *Message {

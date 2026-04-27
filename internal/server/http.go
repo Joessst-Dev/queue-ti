@@ -98,6 +98,13 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer promet
 		_ = json.Unmarshal(c.Body(), &peek)
 		return peek.Topic
 	}), s.enqueueMessage)
+	api.Post("/messages/dequeue", jwtAuth, s.requireGrant("write", func(c *fiber.Ctx) string {
+		var peek struct {
+			Topic string `json:"topic"`
+		}
+		_ = json.Unmarshal(c.Body(), &peek)
+		return peek.Topic
+	}), s.batchDequeueMessages)
 	api.Post("/messages/:id/nack", jwtAuth, s.requireWriteOnMsgTopic(), s.nackMessage)
 	api.Post("/messages/:id/requeue", jwtAuth, s.requireWriteOnMsgTopic(), s.requeueMessage)
 	api.Get("/stats", jwtAuth, s.requireAdmin(), s.statsHandler)
@@ -533,6 +540,80 @@ func (s *HTTPServer) enqueueMessage(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"id": id})
+}
+
+// ---------------------------------------------------------------------------
+// Batch dequeue request / response types
+// ---------------------------------------------------------------------------
+
+type batchDequeueRequest struct {
+	Topic                 string `json:"topic"`
+	Count                 int    `json:"count"`
+	VisibilityTimeoutSecs *int   `json:"visibility_timeout_seconds,omitempty"`
+}
+
+type batchDequeueResponse struct {
+	Messages []messageResponse `json:"messages"`
+}
+
+func (s *HTTPServer) batchDequeueMessages(c *fiber.Ctx) error {
+	var req batchDequeueRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+
+	if req.Topic == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "topic is required"})
+	}
+
+	if req.Count == 0 {
+		req.Count = 1
+	}
+
+	if req.Count < 1 || req.Count > 1000 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "count must be between 1 and 1000"})
+	}
+
+	var vt time.Duration
+	if req.VisibilityTimeoutSecs != nil {
+		vt = time.Duration(*req.VisibilityTimeoutSecs) * time.Second
+	}
+
+	batch, err := s.queueService.DequeueN(c.Context(), req.Topic, req.Count, vt)
+	if err != nil {
+		if errors.Is(err, queue.ErrInvalidBatchSize) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		}
+		slog.Error("batch dequeue failed", "topic", req.Topic, "count", req.Count, "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	items := make([]messageResponse, 0, len(batch))
+	for _, m := range batch {
+		r := messageResponse{
+			ID:            m.ID,
+			Topic:         m.Topic,
+			Payload:       string(m.Payload),
+			Metadata:      m.Metadata,
+			Status:        m.Status,
+			RetryCount:    m.RetryCount,
+			MaxRetries:    m.MaxRetries,
+			LastError:     m.LastError,
+			CreatedAt:     m.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			OriginalTopic: m.OriginalTopic,
+		}
+		if m.ExpiresAt != nil {
+			formatted := m.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")
+			r.ExpiresAt = &formatted
+		}
+		if m.DLQMovedAt != nil {
+			formatted := m.DLQMovedAt.Format("2006-01-02T15:04:05Z07:00")
+			r.DLQMovedAt = &formatted
+		}
+		items = append(items, r)
+	}
+
+	return c.JSON(batchDequeueResponse{Messages: items})
 }
 
 func (s *HTTPServer) nackMessage(c *fiber.Ctx) error {

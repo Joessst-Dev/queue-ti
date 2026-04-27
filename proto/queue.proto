@@ -9,6 +9,7 @@ import "google/protobuf/timestamp.proto";
 service QueueService {
   rpc Enqueue(EnqueueRequest) returns (EnqueueResponse);
   rpc Dequeue(DequeueRequest) returns (DequeueResponse);
+  rpc BatchDequeue(BatchDequeueRequest) returns (BatchDequeueResponse);
   rpc Ack(AckRequest) returns (AckResponse);
   rpc Nack(NackRequest) returns (NackResponse);
   rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse);
@@ -37,6 +38,16 @@ message DequeueResponse {
   google.protobuf.Timestamp created_at = 5;
   int32 retry_count = 6;
   int32 max_retries = 7;
+}
+
+message BatchDequeueRequest {
+  string topic = 1;
+  uint32 count = 2;
+  optional uint32 visibility_timeout_seconds = 3;
+}
+
+message BatchDequeueResponse {
+  repeated DequeueResponse messages = 1;
 }
 
 message AckRequest {

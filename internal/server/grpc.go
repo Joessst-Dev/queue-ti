@@ -117,6 +117,53 @@ func (s *GRPCServer) Dequeue(ctx context.Context, req *pb.DequeueRequest) (*pb.D
 	}, nil
 }
 
+func (s *GRPCServer) BatchDequeue(ctx context.Context, req *pb.BatchDequeueRequest) (*pb.BatchDequeueResponse, error) {
+	if req.Topic == "" {
+		return nil, status.Error(codes.InvalidArgument, "topic is required")
+	}
+	if req.Count < 1 || req.Count > 1000 {
+		return nil, status.Error(codes.InvalidArgument, "count must be between 1 and 1000")
+	}
+
+	var vt time.Duration
+	if req.VisibilityTimeoutSeconds != nil {
+		if *req.VisibilityTimeoutSeconds == 0 {
+			return nil, status.Error(codes.InvalidArgument, "visibility_timeout_seconds must be greater than zero")
+		}
+		vt = time.Duration(*req.VisibilityTimeoutSeconds) * time.Second
+	}
+
+	if err := s.checkGrant(ctx, "write", req.Topic); err != nil {
+		return nil, err
+	}
+
+	batch, err := s.queueService.DequeueN(ctx, req.Topic, int(req.Count), vt)
+	if err != nil {
+		if errors.Is(err, queue.ErrInvalidBatchSize) {
+			return nil, status.Errorf(codes.InvalidArgument, "%s", err)
+		}
+		slog.Error("grpc batch dequeue failed", "topic", req.Topic, "count", req.Count, "error", err)
+		return nil, status.Errorf(codes.Internal, "failed to batch dequeue: %v", err)
+	}
+
+	slog.Debug("grpc batch dequeue", "topic", req.Topic, "returned", len(batch))
+
+	msgs := make([]*pb.DequeueResponse, len(batch))
+	for i, msg := range batch {
+		msgs[i] = &pb.DequeueResponse{
+			Id:         msg.ID,
+			Topic:      msg.Topic,
+			Payload:    msg.Payload,
+			Metadata:   msg.Metadata,
+			CreatedAt:  timestamppb.New(msg.CreatedAt),
+			RetryCount: int32(msg.RetryCount),
+			MaxRetries: int32(msg.MaxRetries),
+		}
+	}
+
+	return &pb.BatchDequeueResponse{Messages: msgs}, nil
+}
+
 func (s *GRPCServer) Ack(ctx context.Context, req *pb.AckRequest) (*pb.AckResponse, error) {
 	if req.Id == "" {
 		return nil, status.Error(codes.InvalidArgument, "id is required")
