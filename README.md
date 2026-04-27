@@ -23,8 +23,12 @@ A distributed message queue service built with Go gRPC and PostgreSQL, with an A
 The `client/` package is a Go library for building producers and consumers against queue-ti's gRPC API.
 
 ```go
-// Connect
-c, _ := queueti.Dial("localhost:50051", queueti.WithInsecure())
+// Connect — token refreshes automatically before expiry
+c, _ := queueti.Dial("localhost:50051",
+    queueti.WithInsecure(),
+    queueti.WithBearerToken(initialToken),
+    queueti.WithTokenRefresher(fetchFreshToken),
+)
 defer c.Close()
 
 // Publish

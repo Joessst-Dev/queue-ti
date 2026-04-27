@@ -88,6 +88,7 @@ Always call `client.Close()` when done (typically via `defer`).
 |---|---|
 | `WithInsecure()` | Disable TLS — suitable for local and Docker deployments |
 | `WithBearerToken(token string)` | Attach a JWT Bearer token to every RPC call |
+| `WithTokenRefresher(TokenRefresher)` | Callback the library calls automatically to obtain a fresh token before expiry |
 | `WithGRPCOption(grpc.DialOption)` | Pass a raw gRPC dial option for advanced configuration |
 
 ---
@@ -194,7 +195,9 @@ Returns the message to the queue. `reason` is stored as the failure string and i
 
 ## Authentication
 
-When the server has `auth.enabled = true`, every RPC call requires a valid JWT. Obtain a token from the HTTP login endpoint, then pass it to `WithBearerToken`:
+When the server has `auth.enabled = true`, every RPC call requires a valid JWT. Tokens are issued by the server's HTTP API and expire after 15 minutes.
+
+### Obtaining a token
 
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
@@ -203,23 +206,54 @@ TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   | jq -r '.token')
 ```
 
+### Option 1 — Automatic refresh (recommended)
+
+Pass an initial token and a `TokenRefresher` callback. The library decodes the JWT `exp` claim, sleeps until 60 seconds before expiry, and calls your callback to obtain a fresh token. The new token is applied to the next RPC call — no reconnection needed.
+
+```go
+func fetchToken(ctx context.Context) (string, error) {
+    resp, err := http.PostForm("http://localhost:8080/api/auth/refresh",
+        url.Values{"authorization": {currentToken}})
+    // ... parse and return new token
+}
+
+client, err := queueti.Dial("localhost:50051",
+    queueti.WithInsecure(),
+    queueti.WithBearerToken(initialToken),  // used until first refresh
+    queueti.WithTokenRefresher(fetchToken),
+)
+defer client.Close() // also stops the background refresh goroutine
+```
+
+If the refresher returns an error, the library retries with exponential backoff (5 s → 60 s) and logs each failure. RPCs will start failing with `Unauthenticated` once the token expires, so ensure the refresher can recover.
+
+### Option 2 — Manual update
+
+Call `client.SetToken` to swap the token on a live connection. The new token takes effect on the very next RPC call; no reconnection is needed.
+
+```go
+client, err := queueti.Dial("localhost:50051",
+    queueti.WithInsecure(),
+    queueti.WithBearerToken(initialToken),
+)
+
+// Later, when you have a fresh token:
+if err := client.SetToken(newToken); err != nil {
+    log.Fatal(err) // only errors if WithBearerToken was not used at Dial time
+}
+```
+
+This is useful when token lifecycle is managed externally (e.g. a shared token store, a sidecar, or an existing refresh loop in your application).
+
+### Option 3 — Static token (short-lived processes)
+
+For scripts or batch jobs that complete within the 15-minute token window, a static token is sufficient:
+
 ```go
 client, err := queueti.Dial("localhost:50051",
     queueti.WithInsecure(),
     queueti.WithBearerToken(os.Getenv("QUEUETI_TOKEN")),
 )
-```
-
-Tokens expire after 15 minutes. For long-running consumers, refresh the token before expiry and reconnect:
-
-```go
-// Refresh via the HTTP API
-newToken := refreshToken(httpClient, oldToken)
-
-// Reconnect with a fresh token
-client.Close()
-client, _ = queueti.Dial(addr, queueti.WithInsecure(), queueti.WithBearerToken(newToken))
-consumer = client.NewConsumer(topic)
 ```
 
 ---
@@ -247,8 +281,10 @@ package main
 
 import (
     "context"
+    "encoding/json"
     "fmt"
     "log"
+    "net/http"
     "os"
     "os/signal"
 
@@ -256,9 +292,28 @@ import (
 )
 
 func main() {
+    initialToken := os.Getenv("QUEUETI_TOKEN")
+
     client, err := queueti.Dial("localhost:50051",
         queueti.WithInsecure(),
-        queueti.WithBearerToken(os.Getenv("QUEUETI_TOKEN")),
+        queueti.WithBearerToken(initialToken),
+        queueti.WithTokenRefresher(func(ctx context.Context) (string, error) {
+            req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
+                "http://localhost:8080/api/auth/refresh", nil)
+            req.Header.Set("Authorization", "Bearer "+initialToken)
+            resp, err := http.DefaultClient.Do(req)
+            if err != nil {
+                return "", err
+            }
+            defer resp.Body.Close()
+            var body struct {
+                Token string `json:"token"`
+            }
+            if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+                return "", err
+            }
+            return body.Token, nil
+        }),
     )
     if err != nil {
         log.Fatal(err)
@@ -267,7 +322,9 @@ func main() {
 
     // Publish one message.
     producer := client.NewProducer()
-    id, err := producer.Publish(context.Background(), "orders", []byte(`{"item":"book"}`))
+    id, err := producer.Publish(context.Background(), "orders", []byte(`{"item":"book"}`),
+        queueti.WithMetadata(map[string]string{"source": "example"}),
+    )
     if err != nil {
         log.Fatal(err)
     }
@@ -280,7 +337,7 @@ func main() {
     consumer := client.NewConsumer("orders", queueti.WithConcurrency(4))
     if err := consumer.Consume(ctx, func(ctx context.Context, msg *queueti.Message) error {
         fmt.Printf("[%s] %s\n", msg.ID, msg.Payload)
-        return nil
+        return nil // nil = Ack
     }); err != nil {
         log.Fatal(err)
     }

@@ -55,10 +55,8 @@ func startProducerServer(fake *producerFakeServer) (*queueti.Client, func()) {
 	pb.RegisterQueueServiceServer(srv, fake)
 	go func() { _ = srv.Serve(lis) }()
 
-	dialCtx := context.Background()
-	conn, err := grpc.DialContext( //nolint:staticcheck // bufconn requires DialContext
-		dialCtx,
-		"bufnet",
+	conn, err := grpc.NewClient(
+		"passthrough:///bufnet",
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return lis.DialContext(ctx)
 		}),
