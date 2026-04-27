@@ -51,7 +51,7 @@ var _ = Describe("Queue Service", func() {
 		Context("Given a valid topic and payload", func() {
 			It("should persist the message and return a unique ID", func() {
 				// When we enqueue a message with metadata
-				id, err := service.Enqueue(ctx, "test-topic", []byte("hello"), map[string]string{"key": "value"})
+				id, err := service.Enqueue(ctx, "test-topic", []byte("hello"), map[string]string{"key": "value"}, nil)
 
 				// Then no error occurs and a non-empty ID is returned
 				Expect(err).NotTo(HaveOccurred())
@@ -65,7 +65,7 @@ var _ = Describe("Queue Service", func() {
 			})
 
 			It("should store the message with retry_count = 0 and max_retries = 5", func() {
-				id, err := service.Enqueue(ctx, "retry-topic", []byte("payload"), nil)
+				id, err := service.Enqueue(ctx, "retry-topic", []byte("payload"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				var retryCount, maxRetries int
@@ -85,7 +85,7 @@ var _ = Describe("Queue Service", func() {
 
 			It("should set expires_at to approximately now + TTL", func() {
 				before := time.Now()
-				id, err := service.Enqueue(ctx, "ttl-topic", []byte("payload"), nil)
+				id, err := service.Enqueue(ctx, "ttl-topic", []byte("payload"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 				after := time.Now()
 
@@ -106,7 +106,7 @@ var _ = Describe("Queue Service", func() {
 			})
 
 			It("should store the message with expires_at = NULL", func() {
-				id, err := service.Enqueue(ctx, "no-ttl-topic", []byte("payload"), nil)
+				id, err := service.Enqueue(ctx, "no-ttl-topic", []byte("payload"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				var expiresAt *time.Time
@@ -115,6 +115,87 @@ var _ = Describe("Queue Service", func() {
 				).Scan(&expiresAt)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(expiresAt).To(BeNil())
+			})
+		})
+
+		Context("when a key is provided", func() {
+			It("should enqueue the message and return a non-empty ID", func() {
+				k := "k1"
+				id, err := service.Enqueue(ctx, "key-topic", []byte("payload"), nil, &k)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(id).NotTo(BeEmpty())
+
+				var storedKey *string
+				err = pool.QueryRow(ctx, `SELECT key FROM messages WHERE id = $1`, id).Scan(&storedKey)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(storedKey).NotTo(BeNil())
+				Expect(*storedKey).To(Equal("k1"))
+			})
+		})
+
+		Context("when the same key+topic is enqueued twice while the first is still pending", func() {
+			It("should upsert and return the same ID with the updated payload", func() {
+				k := "k1"
+				id1, err := service.Enqueue(ctx, "upsert-topic", []byte("original"), nil, &k)
+				Expect(err).NotTo(HaveOccurred())
+
+				id2, err := service.Enqueue(ctx, "upsert-topic", []byte("updated"), nil, &k)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Same row — same ID.
+				Expect(id2).To(Equal(id1))
+
+				// Payload was overwritten.
+				var payload []byte
+				err = pool.QueryRow(ctx, `SELECT payload FROM messages WHERE id = $1`, id1).Scan(&payload)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(payload).To(Equal([]byte("updated")))
+
+				// Only one row exists for this key.
+				var count int
+				err = pool.QueryRow(ctx, `SELECT count(*) FROM messages WHERE topic = 'upsert-topic' AND key = 'k1'`).Scan(&count)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(count).To(Equal(1))
+			})
+		})
+
+		Context("when the same key is re-enqueued after the first message has moved to processing", func() {
+			It("should insert a new distinct row", func() {
+				k := "k1"
+				id1, err := service.Enqueue(ctx, "reinsert-topic", []byte("first"), nil, &k)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Dequeue moves the message to 'processing', so the partial index no longer covers it.
+				_, err = service.Dequeue(ctx, "reinsert-topic", 0)
+				Expect(err).NotTo(HaveOccurred())
+
+				id2, err := service.Enqueue(ctx, "reinsert-topic", []byte("second"), nil, &k)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(id2).NotTo(Equal(id1))
+
+				var count int
+				err = pool.QueryRow(ctx, `SELECT count(*) FROM messages WHERE topic = 'reinsert-topic' AND key = 'k1'`).Scan(&count)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(count).To(Equal(2))
+			})
+		})
+
+		Context("when two messages without a key are enqueued on the same topic", func() {
+			It("should create two distinct rows without conflict", func() {
+				id1, err := service.Enqueue(ctx, "keyless-topic", []byte("first"), nil, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				id2, err := service.Enqueue(ctx, "keyless-topic", []byte("second"), nil, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(id1).NotTo(Equal(id2))
+
+				var count int
+				err = pool.QueryRow(ctx, `SELECT count(*) FROM messages WHERE topic = 'keyless-topic'`).Scan(&count)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(count).To(Equal(2))
 			})
 		})
 	})
@@ -127,10 +208,10 @@ var _ = Describe("Queue Service", func() {
 			BeforeEach(func() {
 				// Given two messages are enqueued in order
 				var err error
-				firstID, err = service.Enqueue(ctx, "test-topic", []byte("first"), nil)
+				firstID, err = service.Enqueue(ctx, "test-topic", []byte("first"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				_, err = service.Enqueue(ctx, "test-topic", []byte("second"), nil)
+				_, err = service.Enqueue(ctx, "test-topic", []byte("second"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -158,7 +239,7 @@ var _ = Describe("Queue Service", func() {
 		Context("Given a single message that has already been dequeued", func() {
 			BeforeEach(func() {
 				// Given one message is enqueued and then dequeued
-				_, err := service.Enqueue(ctx, "test-topic", []byte("only-one"), nil)
+				_, err := service.Enqueue(ctx, "test-topic", []byte("only-one"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				msg, err := service.Dequeue(ctx, "test-topic", 0)
@@ -209,7 +290,7 @@ var _ = Describe("Queue Service", func() {
 
 		Context("Given a message with retries remaining and no expiry", func() {
 			BeforeEach(func() {
-				_, err := service.Enqueue(ctx, "available-topic", []byte("work"), nil)
+				_, err := service.Enqueue(ctx, "available-topic", []byte("work"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -230,7 +311,7 @@ var _ = Describe("Queue Service", func() {
 			BeforeEach(func() {
 				// Given a message is enqueued and then dequeued (status = processing)
 				var err error
-				messageID, err = service.Enqueue(ctx, "test-topic", []byte("ack-me"), nil)
+				messageID, err = service.Enqueue(ctx, "test-topic", []byte("ack-me"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				_, err = service.Dequeue(ctx, "test-topic", 0)
@@ -270,7 +351,7 @@ var _ = Describe("Queue Service", func() {
 
 			BeforeEach(func() {
 				var err error
-				messageID, err = service.Enqueue(ctx, "nack-topic", []byte("work"), nil)
+				messageID, err = service.Enqueue(ctx, "nack-topic", []byte("work"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				_, err = service.Dequeue(ctx, "nack-topic", 0)
@@ -301,7 +382,7 @@ var _ = Describe("Queue Service", func() {
 			BeforeEach(func() {
 				service = queue.NewService(pool, 30*time.Second, 3, 0, 3, false, queue.NoopRecorder{})
 				var err error
-				messageID, err = service.Enqueue(ctx, "retry-nack-topic", []byte("retry"), nil)
+				messageID, err = service.Enqueue(ctx, "retry-nack-topic", []byte("retry"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				_, err = service.Dequeue(ctx, "retry-nack-topic", 0)
@@ -332,7 +413,7 @@ var _ = Describe("Queue Service", func() {
 			BeforeEach(func() {
 				service = queue.NewService(pool, 30*time.Second, 1, 0, 0, false, queue.NoopRecorder{})
 				var err error
-				messageID, err = service.Enqueue(ctx, "final-nack-topic", []byte("one-shot"), nil)
+				messageID, err = service.Enqueue(ctx, "final-nack-topic", []byte("one-shot"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				_, err = service.Dequeue(ctx, "final-nack-topic", 0)
@@ -369,7 +450,7 @@ var _ = Describe("Queue Service", func() {
 
 			BeforeEach(func() {
 				var err error
-				messageID, err = service.Enqueue(ctx, "pending-nack-topic", []byte("pending"), nil)
+				messageID, err = service.Enqueue(ctx, "pending-nack-topic", []byte("pending"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 				// Deliberately do NOT dequeue it — it stays 'pending'.
 			})
@@ -390,7 +471,7 @@ var _ = Describe("Queue Service", func() {
 				meta := map[string]string{"env": "test", "priority": "high"}
 
 				// When the message is enqueued and then dequeued
-				_, err := service.Enqueue(ctx, "meta-topic", []byte("data"), meta)
+				_, err := service.Enqueue(ctx, "meta-topic", []byte("data"), meta, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				msg, err := service.Dequeue(ctx, "meta-topic", 0)
@@ -410,7 +491,7 @@ var _ = Describe("Queue Service", func() {
 		Describe("Enqueue", func() {
 			Context("when the topic ends with .dlq", func() {
 				It("should return ErrReservedTopic", func() {
-					_, err := service.Enqueue(ctx, "payments.dlq", []byte("payload"), nil)
+					_, err := service.Enqueue(ctx, "payments.dlq", []byte("payload"), nil, nil)
 
 					Expect(err).To(HaveOccurred())
 					Expect(err).To(MatchError(ContainSubstring(queue.ErrReservedTopic.Error())))
@@ -430,7 +511,7 @@ var _ = Describe("Queue Service", func() {
 					service = queue.NewService(pool, 30*time.Second, 5, 0, 2, false, queue.NoopRecorder{})
 
 					var err error
-					messageID, err = service.Enqueue(ctx, "orders", []byte("process me"), nil)
+					messageID, err = service.Enqueue(ctx, "orders", []byte("process me"), nil, nil)
 					Expect(err).NotTo(HaveOccurred())
 
 					// First nack: retry_count becomes 1, still below threshold (2).
@@ -490,7 +571,7 @@ var _ = Describe("Queue Service", func() {
 					service = queue.NewService(pool, 30*time.Second, 5, 0, 3, false, queue.NoopRecorder{})
 
 					var err error
-					messageID, err = service.Enqueue(ctx, "invoices", []byte("work"), nil)
+					messageID, err = service.Enqueue(ctx, "invoices", []byte("work"), nil, nil)
 					Expect(err).NotTo(HaveOccurred())
 
 					_, err = service.Dequeue(ctx, "invoices", 0)
@@ -524,7 +605,7 @@ var _ = Describe("Queue Service", func() {
 					service = queue.NewService(pool, 30*time.Second, 5, 0, 1, false, queue.NoopRecorder{})
 
 					var err error
-					messageID, err = service.Enqueue(ctx, "shipments", []byte("ship it"), nil)
+					messageID, err = service.Enqueue(ctx, "shipments", []byte("ship it"), nil, nil)
 					Expect(err).NotTo(HaveOccurred())
 
 					_, err = service.Dequeue(ctx, "shipments", 0)
@@ -577,7 +658,7 @@ var _ = Describe("Queue Service", func() {
 
 				BeforeEach(func() {
 					var err error
-					messageID, err = service.Enqueue(ctx, "regular-topic", []byte("normal"), nil)
+					messageID, err = service.Enqueue(ctx, "regular-topic", []byte("normal"), nil, nil)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -600,10 +681,10 @@ var _ = Describe("Queue Service", func() {
 		BeforeEach(func() {
 			// Seed 5 pending messages on batchTopic and 1 on otherTopic.
 			for i := range 5 {
-				_, err := service.Enqueue(ctx, batchTopic, fmt.Appendf(nil, "msg-%d", i), nil)
+				_, err := service.Enqueue(ctx, batchTopic, fmt.Appendf(nil, "msg-%d", i), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 			}
-			_, err := service.Enqueue(ctx, otherTopic, []byte("other-msg"), nil)
+			_, err := service.Enqueue(ctx, otherTopic, []byte("other-msg"), nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -699,7 +780,7 @@ var _ = Describe("Queue Service", func() {
 		Context("when visibility_timeout_seconds is 0 (use server default)", func() {
 			It("should store visibility_timeout close to now() + server default", func() {
 				// Use a 30-second server default (the suite default).
-				id, err := service.Enqueue(ctx, "vt-default-topic", []byte("payload"), nil)
+				id, err := service.Enqueue(ctx, "vt-default-topic", []byte("payload"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				before := time.Now()
@@ -723,7 +804,7 @@ var _ = Describe("Queue Service", func() {
 
 		Context("when a custom visibility_timeout_seconds of 2 is provided", func() {
 			It("should store visibility_timeout close to now() + 2s", func() {
-				id, err := service.Enqueue(ctx, "vt-custom-topic", []byte("payload"), nil)
+				id, err := service.Enqueue(ctx, "vt-custom-topic", []byte("payload"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				before := time.Now()
@@ -750,7 +831,7 @@ var _ = Describe("Queue Service", func() {
 
 		Context("when visibility_timeout_seconds is negative", func() {
 			It("should fall back to the server default and dequeue successfully", func() {
-				id, err := service.Enqueue(ctx, "vt-negative-topic", []byte("payload"), nil)
+				id, err := service.Enqueue(ctx, "vt-negative-topic", []byte("payload"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				before := time.Now()
@@ -894,7 +975,7 @@ var _ = Describe("Queue Service", func() {
 					MaxRetries: &maxRetries,
 				})).To(Succeed())
 
-				id, err := service.Enqueue(ctx, "topic-retries", []byte("payload"), nil)
+				id, err := service.Enqueue(ctx, "topic-retries", []byte("payload"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				var stored int
@@ -912,7 +993,7 @@ var _ = Describe("Queue Service", func() {
 				})).To(Succeed())
 
 				before := time.Now()
-				id, err := service.Enqueue(ctx, "topic-ttl", []byte("payload"), nil)
+				id, err := service.Enqueue(ctx, "topic-ttl", []byte("payload"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 				after := time.Now()
 
@@ -933,7 +1014,7 @@ var _ = Describe("Queue Service", func() {
 					MessageTTLSeconds: &noTTL,
 				})).To(Succeed())
 
-				id, err := ttlService.Enqueue(ctx, "topic-nottl", []byte("payload"), nil)
+				id, err := ttlService.Enqueue(ctx, "topic-nottl", []byte("payload"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				var expiresAt *time.Time
@@ -945,7 +1026,7 @@ var _ = Describe("Queue Service", func() {
 		Context("when no topic_config row exists", func() {
 			It("should fall back to the global service defaults", func() {
 				globalService := queue.NewService(pool, 30*time.Second, 5, 0, 3, false, queue.NoopRecorder{})
-				id, err := globalService.Enqueue(ctx, "topic-defaults", []byte("payload"), nil)
+				id, err := globalService.Enqueue(ctx, "topic-defaults", []byte("payload"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				var maxRetries int
@@ -971,21 +1052,21 @@ var _ = Describe("Queue Service", func() {
 			})
 
 			It("should allow the first two enqueues but reject the third with ErrQueueFull", func() {
-				_, err := depthService.Enqueue(ctx, "topic-depth", []byte("one"), nil)
+				_, err := depthService.Enqueue(ctx, "topic-depth", []byte("one"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("two"), nil)
+				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("two"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("three"), nil)
+				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("three"), nil, nil)
 				Expect(err).To(HaveOccurred())
 				Expect(errors.Is(err, queue.ErrQueueFull)).To(BeTrue())
 			})
 
 			It("should allow a new enqueue after an ack reduces the depth below max", func() {
-				id1, err := depthService.Enqueue(ctx, "topic-depth", []byte("one"), nil)
+				id1, err := depthService.Enqueue(ctx, "topic-depth", []byte("one"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
-				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("two"), nil)
+				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("two"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Dequeue and ack the first message so depth drops to 1.
@@ -993,23 +1074,23 @@ var _ = Describe("Queue Service", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(depthService.Ack(ctx, id1)).To(Succeed())
 
-				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("three"), nil)
+				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("three"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should count both pending AND processing messages toward the depth limit", func() {
-				_, err := depthService.Enqueue(ctx, "topic-depth", []byte("one"), nil)
+				_, err := depthService.Enqueue(ctx, "topic-depth", []byte("one"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Dequeue to move the first message to 'processing' — it still counts.
 				_, err = depthService.Dequeue(ctx, "topic-depth", 0)
 				Expect(err).NotTo(HaveOccurred())
 
-				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("two"), nil)
+				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("two"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Depth is now 2 (1 processing + 1 pending); third enqueue must be rejected.
-				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("three"), nil)
+				_, err = depthService.Enqueue(ctx, "topic-depth", []byte("three"), nil, nil)
 				Expect(err).To(HaveOccurred())
 				Expect(errors.Is(err, queue.ErrQueueFull)).To(BeTrue())
 			})
@@ -1026,7 +1107,7 @@ var _ = Describe("Queue Service", func() {
 		Context("when require_topic_registration is false (default)", func() {
 			It("should enqueue to any topic regardless of topic_config presence", func() {
 				// Service with registration enforcement off — no topic_config row exists.
-				id, err := service.Enqueue(ctx, "unregistered-topic", []byte("payload"), nil)
+				id, err := service.Enqueue(ctx, "unregistered-topic", []byte("payload"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(id).NotTo(BeEmpty())
 			})
@@ -1041,7 +1122,7 @@ var _ = Describe("Queue Service", func() {
 
 			Context("and the topic has no topic_config row", func() {
 				It("should return ErrTopicNotRegistered", func() {
-					_, err := strictService.Enqueue(ctx, "unregistered-topic", []byte("payload"), nil)
+					_, err := strictService.Enqueue(ctx, "unregistered-topic", []byte("payload"), nil, nil)
 					Expect(err).To(HaveOccurred())
 					Expect(errors.Is(err, queue.ErrTopicNotRegistered)).To(BeTrue())
 				})
@@ -1056,7 +1137,7 @@ var _ = Describe("Queue Service", func() {
 				})
 
 				It("should enqueue successfully", func() {
-					id, err := strictService.Enqueue(ctx, "registered-topic", []byte("payload"), nil)
+					id, err := strictService.Enqueue(ctx, "registered-topic", []byte("payload"), nil, nil)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(id).NotTo(BeEmpty())
 				})
@@ -1122,6 +1203,53 @@ var _ = Describe("Queue Service", func() {
 		Context("when the topic does not exist", func() {
 			It("should return 0 without an error", func() {
 				n, err := service.PurgeTopic(ctx, "ghost", []string{"pending"})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(n).To(Equal(int64(0)))
+			})
+		})
+	})
+
+	// Tests for purging messages by key
+	Describe("PurgeByKey", func() {
+		BeforeEach(func() {
+			// Seed two rows with key "k1" on "keyed-topic" — one pending, one processing —
+			// plus one row with a different key that must survive.
+			_, err := pool.Exec(ctx, `
+				INSERT INTO messages (topic, payload, status, max_retries, key)
+				VALUES
+					('keyed-topic', 'pending-msg',    'pending',    3, 'k1'),
+					('keyed-topic', 'processing-msg', 'processing', 3, 'k1'),
+					('keyed-topic', 'other-key-msg',  'pending',    3, 'k2')
+			`)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when messages with the given key exist on the topic", func() {
+			It("should delete all of them regardless of status and leave other-key rows intact", func() {
+				n, err := service.PurgeByKey(ctx, "keyed-topic", "k1")
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(n).To(Equal(int64(2)))
+
+				var remaining int
+				Expect(pool.QueryRow(ctx,
+					`SELECT count(*) FROM messages WHERE topic = 'keyed-topic' AND key = 'k1'`,
+				).Scan(&remaining)).To(Succeed())
+				Expect(remaining).To(Equal(0))
+
+				// Row with key "k2" must survive.
+				var survived int
+				Expect(pool.QueryRow(ctx,
+					`SELECT count(*) FROM messages WHERE topic = 'keyed-topic' AND key = 'k2'`,
+				).Scan(&survived)).To(Succeed())
+				Expect(survived).To(Equal(1))
+			})
+		})
+
+		Context("when no messages exist for the given key", func() {
+			It("should return 0 without an error", func() {
+				n, err := service.PurgeByKey(ctx, "keyed-topic", "nonexistent-key")
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(n).To(Equal(int64(0)))

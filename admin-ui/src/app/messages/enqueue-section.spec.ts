@@ -79,7 +79,7 @@ describe('EnqueueSection', () => {
     it('should reset the enqueue form model', async () => {
       const { fixture, component } = await setup();
 
-      component.enqueueModel.set({ topic: 'orders', payload: '{}' });
+      component.enqueueModel.set({ topic: 'orders', key: 'k', payload: '{}' });
       TestBed.runInInjectionContext(() => component.addMetadataRow());
       expect(component.metadataRows().length).toBe(1);
 
@@ -87,7 +87,7 @@ describe('EnqueueSection', () => {
       fixture.detectChanges();
       await fixture.whenStable();
 
-      expect(component.enqueueModel()).toEqual({ topic: '', payload: '' });
+      expect(component.enqueueModel()).toEqual({ topic: '', key: '', payload: '' });
       expect(component.metadataRows().length).toBe(0);
     });
   });
@@ -99,7 +99,7 @@ describe('EnqueueSection', () => {
       const emitted: EnqueueRequest[] = [];
       component.enqueue.subscribe((req: EnqueueRequest) => emitted.push(req));
 
-      component.enqueueModel.set({ topic: 'orders', payload: '{"x":1}' });
+      component.enqueueModel.set({ topic: 'orders', key: '', payload: '{"x":1}' });
       fixture.detectChanges();
       await fixture.whenStable();
 
@@ -111,6 +111,44 @@ describe('EnqueueSection', () => {
       expect(emitted.length).toBe(1);
       expect(emitted[0].topic).toBe('orders');
       expect(emitted[0].payload).toBe('{"x":1}');
+    });
+
+    it('should include key in enqueue request when key is entered', async () => {
+      const { fixture, component } = await setup();
+
+      const emitted: EnqueueRequest[] = [];
+      component.enqueue.subscribe((req: EnqueueRequest) => emitted.push(req));
+
+      component.enqueueModel.set({ topic: 'orders', key: 'order-123', payload: '{"x":1}' });
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const el: HTMLElement = fixture.nativeElement;
+      const form = el.querySelector('form') as HTMLFormElement;
+      form.dispatchEvent(new Event('submit'));
+      await fixture.whenStable();
+
+      expect(emitted.length).toBe(1);
+      expect(emitted[0].key).toBe('order-123');
+    });
+
+    it('should omit key from enqueue request when key field is empty', async () => {
+      const { fixture, component } = await setup();
+
+      const emitted: EnqueueRequest[] = [];
+      component.enqueue.subscribe((req: EnqueueRequest) => emitted.push(req));
+
+      component.enqueueModel.set({ topic: 'orders', key: '', payload: '{"x":1}' });
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const el: HTMLElement = fixture.nativeElement;
+      const form = el.querySelector('form') as HTMLFormElement;
+      form.dispatchEvent(new Event('submit'));
+      await fixture.whenStable();
+
+      expect(emitted.length).toBe(1);
+      expect(emitted[0].key).toBeUndefined();
     });
   });
 
@@ -147,7 +185,7 @@ describe('EnqueueSection', () => {
       const queueService = makeQueueService({ getTopicSchemaResult: 'error' });
       const { fixture, component } = await setup({ queueService });
 
-      component.enqueueModel.set({ topic: '', payload: '' });
+      component.enqueueModel.set({ topic: '', key: '', payload: '' });
       component.topicSchema.set(null);
       fixture.detectChanges();
       await fixture.whenStable();

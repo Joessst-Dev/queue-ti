@@ -201,6 +201,7 @@ var _ = Describe("Migrate", func() {
 				"dlq_threshold",
 				"expires_at",
 				"id",
+				"key",
 				"last_error",
 				"max_retries",
 				"metadata",

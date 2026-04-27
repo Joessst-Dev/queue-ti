@@ -168,7 +168,7 @@ var _ = Describe("Topic Schema", func() {
 		Context("when no schema is registered for the topic", func() {
 			It("should allow any payload through without validation", func() {
 				// Payload is not valid JSON — but no schema means no validation.
-				id, err := service.Enqueue(ctx, "unschema-topic", []byte(`not even json`), nil)
+				id, err := service.Enqueue(ctx, "unschema-topic", []byte(`not even json`), nil, nil)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(id).NotTo(BeEmpty())
@@ -184,7 +184,7 @@ var _ = Describe("Topic Schema", func() {
 			Context("and the payload is missing a required field", func() {
 				It("should return ErrSchemaValidation", func() {
 					// Valid JSON, but omits the required "value" (int) field.
-					_, err := service.Enqueue(ctx, "schema-topic", []byte(`{"id":"abc"}`), nil)
+					_, err := service.Enqueue(ctx, "schema-topic", []byte(`{"id":"abc"}`), nil, nil)
 
 					Expect(err).To(HaveOccurred())
 					Expect(errors.Is(err, queue.ErrSchemaValidation)).To(BeTrue())
@@ -194,7 +194,7 @@ var _ = Describe("Topic Schema", func() {
 			Context("and the payload has a field with the wrong JSON type", func() {
 				It("should return ErrSchemaValidation", func() {
 					// "value" must be an int, but we send a string.
-					_, err := service.Enqueue(ctx, "schema-topic", []byte(`{"id":"abc","value":"not-an-int"}`), nil)
+					_, err := service.Enqueue(ctx, "schema-topic", []byte(`{"id":"abc","value":"not-an-int"}`), nil, nil)
 
 					Expect(err).To(HaveOccurred())
 					Expect(errors.Is(err, queue.ErrSchemaValidation)).To(BeTrue())
@@ -203,7 +203,7 @@ var _ = Describe("Topic Schema", func() {
 
 			Context("and the payload is valid according to the schema", func() {
 				It("should enqueue the message successfully", func() {
-					id, err := service.Enqueue(ctx, "schema-topic", []byte(`{"id":"abc","value":42}`), nil)
+					id, err := service.Enqueue(ctx, "schema-topic", []byte(`{"id":"abc","value":42}`), nil, nil)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(id).NotTo(BeEmpty())
@@ -221,7 +221,7 @@ var _ = Describe("Topic Schema", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				// First enqueue populates the cache.
-				_, err = service.Enqueue(ctx, "cache-topic", []byte(`{"id":"x","value":1}`), nil)
+				_, err = service.Enqueue(ctx, "cache-topic", []byte(`{"id":"x","value":1}`), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Remove the DB row directly — bypassing DeleteTopicSchema so the
@@ -233,7 +233,7 @@ var _ = Describe("Topic Schema", func() {
 				// GetTopicSchema now returns nil, so validatePayload skips validation —
 				// this is correct and expected behaviour (no schema → accept anything).
 				// The cache is only consulted when a schema row exists.
-				id, err := service.Enqueue(ctx, "cache-topic", []byte(`not valid avro at all`), nil)
+				id, err := service.Enqueue(ctx, "cache-topic", []byte(`not valid avro at all`), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(id).NotTo(BeEmpty())
 			})

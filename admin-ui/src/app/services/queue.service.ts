@@ -18,6 +18,7 @@ export interface QueueMessage {
   id: string;
   topic: string;
   payload: string;
+  key?: string;
   metadata: Record<string, string>;
   status: string;
   created_at: string;
@@ -32,6 +33,7 @@ export interface QueueMessage {
 export interface EnqueueRequest {
   topic: string;
   payload: string;
+  key?: string;
   metadata: Record<string, string>;
 }
 
@@ -125,6 +127,10 @@ export class QueueService {
 
   purgeTopic(topic: string, statuses: string[]): Observable<{ deleted: number }> {
     return this.http.post<{ deleted: number }>(`/api/topics/${topic}/purge`, { statuses });
+  }
+
+  purgeByKey(topic: string, key: string): Observable<{ deleted: number }> {
+    return this.http.delete<{ deleted: number }>(`/api/topics/${topic}/messages/by-key/${encodeURIComponent(key)}`);
   }
 
   runExpiryReaper(): Observable<{ expired: number }> {

@@ -73,6 +73,7 @@ interface EnqueueState {
             (requeue)="onRequeue($event)"
             (nackConfirm)="onNackConfirm($event)"
             (purge)="onPurge($event)"
+            (purgeByKey)="onPurgeByKey($event)"
           />
         }
         @if (activeTab() === 'enqueue') {
@@ -265,6 +266,20 @@ export class Messages {
       },
       error: (err: { error?: { error?: string } }) => {
         this.purgeError.set(err.error?.error ?? 'Failed to purge topic');
+      },
+    });
+  }
+
+  onPurgeByKey({ topic, key }: { topic: string; key: string }): void {
+    this.purgeResult.set(null);
+    this.purgeError.set(null);
+    this.queue.purgeByKey(topic, key).subscribe({
+      next: (res) => {
+        this.purgeResult.set(res);
+        this.loadMessages();
+      },
+      error: (err: { error?: { error?: string } }) => {
+        this.purgeError.set(err.error?.error ?? 'Failed to purge by key');
       },
     });
   }

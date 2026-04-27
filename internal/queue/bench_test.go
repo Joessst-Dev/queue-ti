@@ -46,7 +46,7 @@ func BenchmarkEnqueue(b *testing.B) {
 	ctx := context.Background()
 
 	for b.Loop() {
-		if _, err := svc.Enqueue(ctx, "bench-enqueue", []byte("payload"), nil); err != nil {
+		if _, err := svc.Enqueue(ctx, "bench-enqueue", []byte("payload"), nil, nil); err != nil {
 			b.Fatalf("Enqueue: %v", err)
 		}
 	}
@@ -61,7 +61,7 @@ func BenchmarkEnqueueParallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if _, err := svc.Enqueue(ctx, "bench-enqueue-parallel", []byte("payload"), nil); err != nil {
+			if _, err := svc.Enqueue(ctx, "bench-enqueue-parallel", []byte("payload"), nil, nil); err != nil {
 				b.Errorf("Enqueue: %v", err)
 				return
 			}
@@ -79,7 +79,7 @@ func BenchmarkDequeueAck(b *testing.B) {
 	const seed = 10_000
 	for i := range seed {
 		payload := fmt.Appendf(nil, "seed-%d", i)
-		if _, err := svc.Enqueue(ctx, "bench-dequeue-ack", payload, nil); err != nil {
+		if _, err := svc.Enqueue(ctx, "bench-dequeue-ack", payload, nil, nil); err != nil {
 			b.Fatalf("seed Enqueue: %v", err)
 		}
 	}
@@ -97,7 +97,7 @@ func BenchmarkDequeueAck(b *testing.B) {
 			}
 			for i := range seed {
 				payload := fmt.Appendf(nil, "reseed-%d", i)
-				if _, enqErr := svc.Enqueue(ctx, "bench-dequeue-ack", payload, nil); enqErr != nil {
+				if _, enqErr := svc.Enqueue(ctx, "bench-dequeue-ack", payload, nil, nil); enqErr != nil {
 					b.Fatalf("re-seed Enqueue: %v", enqErr)
 				}
 			}
@@ -122,7 +122,7 @@ func BenchmarkFullPipeline(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		topic := fmt.Sprintf("bench-pipeline-%p", pb)
 		for pb.Next() {
-			id, err := svc.Enqueue(ctx, topic, []byte("payload"), nil)
+			id, err := svc.Enqueue(ctx, topic, []byte("payload"), nil, nil)
 			if err != nil {
 				b.Errorf("Enqueue: %v", err)
 				return

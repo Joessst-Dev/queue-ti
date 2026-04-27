@@ -21,6 +21,10 @@ const makeMessage = (overrides: Partial<QueueMessage> = {}): QueueMessage => ({
   ...overrides,
 });
 
+// Helper: find a cell in a tbody row by column index (0-based)
+const getCellText = (row: Element, colIndex: number): string =>
+  (row.querySelectorAll('td')[colIndex] as HTMLElement | undefined)?.textContent?.trim() ?? '';
+
 const setup = async (opts: {
   messages?: QueueMessage[];
   loading?: boolean;
@@ -297,6 +301,87 @@ describe('MessagesTable', () => {
         await fixture.whenStable();
 
         expect(emitted[0].statuses).toEqual(['pending', 'processing']);
+      });
+    });
+  });
+
+  describe('Key column', () => {
+    // Key column is index 2 (ID=0, Topic=1, Key=2, ...)
+    const KEY_COL = 2;
+
+    describe('when message has a key', () => {
+      it('should show the key value in the key column', async () => {
+        const messages = [makeMessage({ key: 'order-123' })];
+        const { fixture } = await setup({ messages });
+
+        const el: HTMLElement = fixture.nativeElement;
+        const row = el.querySelector('tbody tr') as HTMLTableRowElement;
+        expect(getCellText(row, KEY_COL)).toBe('order-123');
+      });
+    });
+
+    describe('when message has no key', () => {
+      it('should show an empty cell (em dash) in the key column', async () => {
+        const messages = [makeMessage()];
+        const { fixture } = await setup({ messages });
+
+        const el: HTMLElement = fixture.nativeElement;
+        const row = el.querySelector('tbody tr') as HTMLTableRowElement;
+        const cell = row.querySelectorAll('td')[KEY_COL] as HTMLElement;
+        // The cell contains an em dash span when key is absent
+        expect(cell.querySelector('span')).not.toBeNull();
+      });
+    });
+  });
+
+  describe('Purge key button', () => {
+    describe('when message has a key', () => {
+      it('should show the "Purge key" button', async () => {
+        const messages = [makeMessage({ key: 'order-123' })];
+        const { fixture } = await setup({ messages });
+
+        const el: HTMLElement = fixture.nativeElement;
+        const purgeKeyBtn = Array.from(el.querySelectorAll('button')).find(
+          (b) => b.textContent?.trim() === 'Purge key',
+        );
+        expect(purgeKeyBtn).not.toBeUndefined();
+      });
+
+      it('should emit purgeByKey output with the correct topic and key on confirm', async () => {
+        const messages = [makeMessage({ topic: 'orders', key: 'order-123' })];
+        const { fixture, component } = await setup({ messages });
+
+        const emitted: { topic: string; key: string }[] = [];
+        component.purgeByKey.subscribe((v: { topic: string; key: string }) => emitted.push(v));
+
+        // Stub window.confirm to return true
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        const el: HTMLElement = fixture.nativeElement;
+        const purgeKeyBtn = Array.from(el.querySelectorAll('button')).find(
+          (b) => b.textContent?.trim() === 'Purge key',
+        ) as HTMLButtonElement;
+        purgeKeyBtn.click();
+        await fixture.whenStable();
+
+        expect(emitted.length).toBe(1);
+        expect(emitted[0].topic).toBe('orders');
+        expect(emitted[0].key).toBe('order-123');
+
+        vi.restoreAllMocks();
+      });
+    });
+
+    describe('when message has no key', () => {
+      it('should not show the "Purge key" button', async () => {
+        const messages = [makeMessage()];
+        const { fixture } = await setup({ messages });
+
+        const el: HTMLElement = fixture.nativeElement;
+        const purgeKeyBtn = Array.from(el.querySelectorAll('button')).find(
+          (b) => b.textContent?.trim() === 'Purge key',
+        );
+        expect(purgeKeyBtn).toBeUndefined();
       });
     });
   });

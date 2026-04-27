@@ -532,9 +532,9 @@ var _ = Describe("HTTP Server", func() {
 		Context("Given messages exist across multiple topics", func() {
 			BeforeEach(func() {
 				// Given messages are enqueued on two different topics
-				_, err := queueService.Enqueue(httpTestCtx, "topic-alpha", []byte("msg-alpha"), nil)
+				_, err := queueService.Enqueue(httpTestCtx, "topic-alpha", []byte("msg-alpha"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
-				_, err = queueService.Enqueue(httpTestCtx, "topic-beta", []byte("msg-beta"), nil)
+				_, err = queueService.Enqueue(httpTestCtx, "topic-beta", []byte("msg-beta"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -572,7 +572,7 @@ var _ = Describe("HTTP Server", func() {
 		Context("Given a message with metadata is enqueued", func() {
 			It("should return a response with all expected fields", func() {
 				// Given a message with metadata
-				id, err := queueService.Enqueue(httpTestCtx, "topic-fields", []byte("hello"), map[string]string{"key": "value"})
+				id, err := queueService.Enqueue(httpTestCtx, "topic-fields", []byte("hello"), map[string]string{"key": "value"}, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				// When we list messages for that topic
@@ -610,7 +610,7 @@ var _ = Describe("HTTP Server", func() {
 					Enabled:   true,
 					JWTSecret: testJWTSecret,
 				}, prometheus.NewRegistry(), us)
-				_, err = queueService.Enqueue(httpTestCtx, "auth-topic", []byte("secure-msg"), nil)
+				_, err = queueService.Enqueue(httpTestCtx, "auth-topic", []byte("secure-msg"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				token, err := users.IssueToken([]byte(testJWTSecret), admin.ID, admin.Username, admin.IsAdmin)
@@ -841,6 +841,150 @@ var _ = Describe("HTTP Server", func() {
 				Expect(body["id"]).NotTo(BeEmpty())
 			})
 		})
+
+		Context("when a key is provided in the request body", func() {
+			It("should return 201 and expose the key when listing the message", func() {
+				req := httptest.NewRequest("POST", "/api/messages",
+					strings.NewReader(`{"topic":"key-http-topic","payload":"hello","key":"k1"}`))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(201))
+
+				listReq := httptest.NewRequest("GET", "/api/messages?topic=key-http-topic", nil)
+				listResp, err := httpServer.App.Test(listReq)
+				Expect(err).NotTo(HaveOccurred())
+
+				var result listResult
+				Expect(json.NewDecoder(listResp.Body).Decode(&result)).To(Succeed())
+				Expect(result.Items).To(HaveLen(1))
+				Expect(result.Items[0]["key"]).To(Equal("k1"))
+			})
+		})
+
+		Context("when key is omitted from the request body", func() {
+			It("should return 201 and the message should have no key field in the list response", func() {
+				req := httptest.NewRequest("POST", "/api/messages",
+					strings.NewReader(`{"topic":"keyless-http-topic","payload":"no-key"}`))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(201))
+
+				listReq := httptest.NewRequest("GET", "/api/messages?topic=keyless-http-topic", nil)
+				listResp, err := httpServer.App.Test(listReq)
+				Expect(err).NotTo(HaveOccurred())
+
+				var result listResult
+				Expect(json.NewDecoder(listResp.Body).Decode(&result)).To(Succeed())
+				Expect(result.Items).To(HaveLen(1))
+				_, hasKey := result.Items[0]["key"]
+				Expect(hasKey).To(BeFalse())
+			})
+		})
+
+		Context("when the same key+topic is posted twice", func() {
+			It("should return the same message ID on the second post", func() {
+				body := `{"topic":"upsert-http-topic","payload":"first","key":"dup-key"}`
+
+				req1 := httptest.NewRequest("POST", "/api/messages", strings.NewReader(body))
+				req1.Header.Set("Content-Type", "application/json")
+				resp1, err := httpServer.App.Test(req1)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp1.StatusCode).To(Equal(201))
+
+				var body1 map[string]any
+				Expect(json.NewDecoder(resp1.Body).Decode(&body1)).To(Succeed())
+				id1 := body1["id"].(string)
+
+				req2 := httptest.NewRequest("POST", "/api/messages",
+					strings.NewReader(`{"topic":"upsert-http-topic","payload":"second","key":"dup-key"}`))
+				req2.Header.Set("Content-Type", "application/json")
+				resp2, err := httpServer.App.Test(req2)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp2.StatusCode).To(Equal(201))
+
+				var body2 map[string]any
+				Expect(json.NewDecoder(resp2.Body).Decode(&body2)).To(Succeed())
+				Expect(body2["id"].(string)).To(Equal(id1))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
+	// DELETE /api/topics/:topic/messages/by-key/:key
+	// ---------------------------------------------------------------------------
+
+	Describe("DELETE /api/topics/:topic/messages/by-key/:key", func() {
+		var (
+			httpServer *server.HTTPServer
+			adminToken string
+			userToken  string
+		)
+
+		BeforeEach(func() {
+			admin, err := userStore.Create(httpTestCtx, "bykey-admin", "secret", true)
+			Expect(err).NotTo(HaveOccurred())
+			adminToken, err = users.IssueToken([]byte(testJWTSecret), admin.ID, admin.Username, admin.IsAdmin)
+			Expect(err).NotTo(HaveOccurred())
+
+			nonAdmin, err := userStore.Create(httpTestCtx, "bykey-user", "secret", false)
+			Expect(err).NotTo(HaveOccurred())
+			userToken, err = users.IssueToken([]byte(testJWTSecret), nonAdmin.ID, nonAdmin.Username, nonAdmin.IsAdmin)
+			Expect(err).NotTo(HaveOccurred())
+
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{
+				Enabled:   true,
+				JWTSecret: testJWTSecret,
+			}, prometheus.NewRegistry(), userStore)
+		})
+
+		Context("when a message with the given key exists on the topic", func() {
+			It("should return 200 with deleted = 1", func() {
+				k := "target-key"
+				_, err := queueService.Enqueue(httpTestCtx, "bykey-topic", []byte("hello"), nil, &k)
+				Expect(err).NotTo(HaveOccurred())
+
+				req := httptest.NewRequest("DELETE", "/api/topics/bykey-topic/messages/by-key/target-key", nil)
+				req.Header.Set("Authorization", "Bearer "+adminToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var result map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result["deleted"]).To(BeEquivalentTo(1))
+			})
+		})
+
+		Context("when no messages exist for the given key", func() {
+			It("should return 200 with deleted = 0", func() {
+				req := httptest.NewRequest("DELETE", "/api/topics/bykey-topic/messages/by-key/ghost-key", nil)
+				req.Header.Set("Authorization", "Bearer "+adminToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var result map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result["deleted"]).To(BeEquivalentTo(0))
+			})
+		})
+
+		Context("when the caller is not an admin", func() {
+			It("should return 403", func() {
+				req := httptest.NewRequest("DELETE", "/api/topics/bykey-topic/messages/by-key/k1", nil)
+				req.Header.Set("Authorization", "Bearer "+userToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(403))
+			})
+		})
 	})
 
 	// ---------------------------------------------------------------------------
@@ -863,7 +1007,7 @@ var _ = Describe("HTTP Server", func() {
 				httpServer = server.NewHTTPServer(dlqService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
 
 				var err error
-				dlqMessageID, err = dlqService.Enqueue(httpTestCtx, "payments", []byte("charge"), nil)
+				dlqMessageID, err = dlqService.Enqueue(httpTestCtx, "payments", []byte("charge"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				_, err = dlqService.Dequeue(httpTestCtx, "payments", 0)
@@ -887,7 +1031,7 @@ var _ = Describe("HTTP Server", func() {
 
 			BeforeEach(func() {
 				var err error
-				regularMessageID, err = queueService.Enqueue(httpTestCtx, "regular-http-topic", []byte("normal"), nil)
+				regularMessageID, err = queueService.Enqueue(httpTestCtx, "regular-http-topic", []byte("normal"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -939,7 +1083,7 @@ var _ = Describe("HTTP Server", func() {
 				svc2 := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, false, rec2)
 				httpServer = server.NewHTTPServer(svc2, config.AuthConfig{Enabled: false}, reg2, nil)
 
-				_, err := svc2.Enqueue(httpTestCtx, "metrics-topic", []byte("hello"), nil)
+				_, err := svc2.Enqueue(httpTestCtx, "metrics-topic", []byte("hello"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -983,7 +1127,7 @@ var _ = Describe("HTTP Server", func() {
 			// Given 5 messages are enqueued on the same topic
 			for i := range 5 {
 				payload := fmt.Sprintf("msg-%d", i)
-				_, err := queueService.Enqueue(httpTestCtx, paginationTopic, []byte(payload), nil)
+				_, err := queueService.Enqueue(httpTestCtx, paginationTopic, []byte(payload), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 			}
 		})
@@ -1053,7 +1197,7 @@ var _ = Describe("HTTP Server", func() {
 		Context("When a topic filter is applied alongside pagination", func() {
 			BeforeEach(func() {
 				// Enqueue an extra message on a different topic to confirm the count is scoped
-				_, err := queueService.Enqueue(httpTestCtx, "other-topic", []byte("noise"), nil)
+				_, err := queueService.Enqueue(httpTestCtx, "other-topic", []byte("noise"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -1297,9 +1441,9 @@ var _ = Describe("HTTP Server", func() {
 			}, prometheus.NewRegistry(), userStore)
 
 			// Seed 2 pending messages on "purge-http-topic"
-			_, err = queueService.Enqueue(httpTestCtx, "purge-http-topic", []byte("msg-1"), nil)
+			_, err = queueService.Enqueue(httpTestCtx, "purge-http-topic", []byte("msg-1"), nil, nil)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = queueService.Enqueue(httpTestCtx, "purge-http-topic", []byte("msg-2"), nil)
+			_, err = queueService.Enqueue(httpTestCtx, "purge-http-topic", []byte("msg-2"), nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -1509,9 +1653,9 @@ var _ = Describe("HTTP Server", func() {
 		Context("with messages across two topics", func() {
 			BeforeEach(func() {
 				// Enqueue 2 pending on "orders"
-				_, err := queueService.Enqueue(httpTestCtx, "orders", []byte("order-1"), nil)
+				_, err := queueService.Enqueue(httpTestCtx, "orders", []byte("order-1"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
-				_, err = queueService.Enqueue(httpTestCtx, "orders", []byte("order-2"), nil)
+				_, err = queueService.Enqueue(httpTestCtx, "orders", []byte("order-2"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Dequeue 1 from "orders" to put it into processing state
@@ -1519,7 +1663,7 @@ var _ = Describe("HTTP Server", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				// Enqueue 1 pending on "payments"
-				_, err = queueService.Enqueue(httpTestCtx, "payments", []byte("payment-1"), nil)
+				_, err = queueService.Enqueue(httpTestCtx, "payments", []byte("payment-1"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 			})
 

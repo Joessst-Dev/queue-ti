@@ -62,7 +62,7 @@ func (s *GRPCServer) Enqueue(ctx context.Context, req *pb.EnqueueRequest) (*pb.E
 		return nil, err
 	}
 
-	id, err := s.queueService.Enqueue(ctx, req.Topic, req.Payload, req.Metadata)
+	id, err := s.queueService.Enqueue(ctx, req.Topic, req.Payload, req.Metadata, req.Key)
 	if err != nil {
 		if errors.Is(err, queue.ErrSchemaValidation) {
 			return nil, status.Errorf(codes.InvalidArgument, "%s", err)
@@ -114,6 +114,7 @@ func (s *GRPCServer) Dequeue(ctx context.Context, req *pb.DequeueRequest) (*pb.D
 		CreatedAt:  timestamppb.New(msg.CreatedAt),
 		RetryCount: int32(msg.RetryCount),
 		MaxRetries: int32(msg.MaxRetries),
+		Key:        msg.Key,
 	}, nil
 }
 
@@ -158,6 +159,7 @@ func (s *GRPCServer) BatchDequeue(ctx context.Context, req *pb.BatchDequeueReque
 			CreatedAt:  timestamppb.New(msg.CreatedAt),
 			RetryCount: int32(msg.RetryCount),
 			MaxRetries: int32(msg.MaxRetries),
+			Key:        msg.Key,
 		}
 	}
 

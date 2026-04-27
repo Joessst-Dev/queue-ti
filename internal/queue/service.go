@@ -28,6 +28,7 @@ var (
 type Message struct {
 	ID            string
 	Topic         string
+	Key           *string
 	Payload       []byte
 	Metadata      map[string]string
 	Status        string
@@ -113,7 +114,13 @@ func (s *Service) resolveEnqueueParams(ctx context.Context, topic string) (maxRe
 // are reserved for the dead-letter mechanism and are rejected with ErrReservedTopic.
 // Per-topic configuration (max_retries, TTL, max_depth) overrides global defaults
 // when a topic_config row exists for the topic.
-func (s *Service) Enqueue(ctx context.Context, topic string, payload []byte, metadata map[string]string) (string, error) {
+//
+// When key is non-nil and a pending message with the same (topic, key) already
+// exists, the INSERT is converted to an upsert: payload, metadata, max_retries,
+// and updated_at are overwritten and the existing message ID is returned.
+// When key is nil the ON CONFLICT clause never fires (NULLs do not match the
+// partial unique index), so regular INSERT semantics are preserved.
+func (s *Service) Enqueue(ctx context.Context, topic string, payload []byte, metadata map[string]string, key *string) (string, error) {
 	if strings.HasSuffix(topic, ".dlq") {
 		return "", fmt.Errorf("enqueue: %w", ErrReservedTopic)
 	}
@@ -159,10 +166,16 @@ func (s *Service) Enqueue(ctx context.Context, topic string, payload []byte, met
 
 	var id string
 	err = s.pool.QueryRow(ctx,
-		`INSERT INTO messages (topic, payload, metadata, max_retries, expires_at)
-		 VALUES ($1, $2, $3, $4, $5)
+		`INSERT INTO messages (topic, payload, metadata, max_retries, expires_at, key)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 ON CONFLICT (topic, key) WHERE key IS NOT NULL AND status = 'pending'
+		 DO UPDATE SET
+		     payload     = EXCLUDED.payload,
+		     metadata    = EXCLUDED.metadata,
+		     max_retries = EXCLUDED.max_retries,
+		     updated_at  = now()
 		 RETURNING id`,
-		topic, payload, metaJSON, maxRetries, expiresAt,
+		topic, payload, metaJSON, maxRetries, expiresAt, key,
 	).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("enqueue: %w", err)
@@ -196,7 +209,7 @@ func (s *Service) Dequeue(ctx context.Context, topic string, visibilityTimeout t
 			FOR UPDATE SKIP LOCKED
 		)
 		RETURNING id, topic, payload, metadata, retry_count, max_retries, last_error, expires_at, created_at,
-		          COALESCE(original_topic, ''), dlq_moved_at
+		          COALESCE(original_topic, ''), dlq_moved_at, key
 	`
 
 	var msg Message
@@ -209,7 +222,7 @@ func (s *Service) Dequeue(ctx context.Context, topic string, visibilityTimeout t
 		&msg.ID, &msg.Topic, &msg.Payload, &metaJSON,
 		&msg.RetryCount, &msg.MaxRetries, &lastError,
 		&msg.ExpiresAt, &msg.CreatedAt,
-		&msg.OriginalTopic, &msg.DLQMovedAt,
+		&msg.OriginalTopic, &msg.DLQMovedAt, &msg.Key,
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -266,7 +279,7 @@ func (s *Service) DequeueN(ctx context.Context, topic string, n int, visibilityT
 		    FOR UPDATE SKIP LOCKED
 		)
 		RETURNING id, topic, payload, metadata, retry_count, max_retries, last_error, expires_at, created_at,
-		          COALESCE(original_topic, ''), dlq_moved_at
+		          COALESCE(original_topic, ''), dlq_moved_at, key
 	`
 
 	rows, err := s.pool.Query(ctx, query,
@@ -288,7 +301,7 @@ func (s *Service) DequeueN(ctx context.Context, topic string, n int, visibilityT
 			&msg.ID, &msg.Topic, &msg.Payload, &metaJSON,
 			&msg.RetryCount, &msg.MaxRetries, &lastError,
 			&msg.ExpiresAt, &msg.CreatedAt,
-			&msg.OriginalTopic, &msg.DLQMovedAt,
+			&msg.OriginalTopic, &msg.DLQMovedAt, &msg.Key,
 		); err != nil {
 			return nil, fmt.Errorf("dequeue batch scan: %w", err)
 		}
@@ -500,13 +513,13 @@ func (s *Service) List(ctx context.Context, topic string, limit, offset int) ([]
 	if topic != "" {
 		countQuery = `SELECT COUNT(*) FROM messages WHERE topic = $1`
 		selectQuery = `SELECT id, topic, payload, metadata, status, retry_count, max_retries, last_error,
-		                      expires_at, created_at, COALESCE(original_topic, ''), dlq_moved_at
+		                      expires_at, created_at, COALESCE(original_topic, ''), dlq_moved_at, key
 		               FROM messages WHERE topic = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`
 		args = []any{topic, limit, offset}
 	} else {
 		countQuery = `SELECT COUNT(*) FROM messages`
 		selectQuery = `SELECT id, topic, payload, metadata, status, retry_count, max_retries, last_error,
-		                      expires_at, created_at, COALESCE(original_topic, ''), dlq_moved_at
+		                      expires_at, created_at, COALESCE(original_topic, ''), dlq_moved_at, key
 		               FROM messages ORDER BY created_at DESC LIMIT $1 OFFSET $2`
 		args = []any{limit, offset}
 	}
@@ -535,7 +548,7 @@ func (s *Service) List(ctx context.Context, topic string, limit, offset int) ([]
 			&msg.ID, &msg.Topic, &msg.Payload, &metaJSON, &msg.Status,
 			&msg.RetryCount, &msg.MaxRetries, &lastError,
 			&msg.ExpiresAt, &msg.CreatedAt,
-			&msg.OriginalTopic, &msg.DLQMovedAt,
+			&msg.OriginalTopic, &msg.DLQMovedAt, &msg.Key,
 		); err != nil {
 			return nil, 0, fmt.Errorf("list scan: %w", err)
 		}
@@ -682,6 +695,19 @@ func (s *Service) PurgeTopic(ctx context.Context, topic string, statuses []strin
 		slog.Info("purged messages from topic", "topic", topic, "statuses", statuses, "count", n)
 	}
 	return n, nil
+}
+
+// PurgeByKey hard-deletes all messages for the given topic with the given key,
+// regardless of status. Returns the number of rows deleted.
+func (s *Service) PurgeByKey(ctx context.Context, topic, key string) (int64, error) {
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM messages WHERE topic = $1 AND key = $2`,
+		topic, key,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("purge by key: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 // StartDeleteReaper schedules RunDeleteReaperOnce using the given cron

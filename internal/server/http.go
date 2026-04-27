@@ -116,6 +116,7 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer promet
 	api.Delete("/topic-schemas/:topic", jwtAuth, s.requireAdmin(), s.deleteTopicSchema)
 	api.Get("/topic-schemas/:topic", jwtAuth, s.requireAdmin(), s.getTopicSchema)
 	api.Post("/topics/:topic/purge", jwtAuth, s.requireAdmin(), s.purgeTopicMessages)
+	api.Delete("/topics/:topic/messages/by-key/:key", jwtAuth, s.requireAdmin(), s.purgeByKeyMessages)
 	api.Post("/admin/expiry-reaper/run", jwtAuth, s.requireAdmin(), s.runExpiryReaperOnce)
 	api.Post("/admin/delete-reaper/run", jwtAuth, s.requireAdmin(), s.runDeleteReaperOnce)
 
@@ -435,6 +436,7 @@ type enqueueRequest struct {
 	Topic    string            `json:"topic"`
 	Payload  string            `json:"payload"`
 	Metadata map[string]string `json:"metadata"`
+	Key      *string           `json:"key,omitempty"`
 }
 
 type nackRequest struct {
@@ -444,6 +446,7 @@ type nackRequest struct {
 type messageResponse struct {
 	ID            string            `json:"id"`
 	Topic         string            `json:"topic"`
+	Key           *string           `json:"key,omitempty"`
 	Payload       string            `json:"payload"`
 	Metadata      map[string]string `json:"metadata"`
 	Status        string            `json:"status"`
@@ -486,6 +489,7 @@ func (s *HTTPServer) listMessages(c *fiber.Ctx) error {
 		r := messageResponse{
 			ID:            m.ID,
 			Topic:         m.Topic,
+			Key:           m.Key,
 			Payload:       string(m.Payload),
 			Metadata:      m.Metadata,
 			Status:        m.Status,
@@ -524,7 +528,7 @@ func (s *HTTPServer) enqueueMessage(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "topic and payload are required"})
 	}
 
-	id, err := s.queueService.Enqueue(c.Context(), req.Topic, []byte(req.Payload), req.Metadata)
+	id, err := s.queueService.Enqueue(c.Context(), req.Topic, []byte(req.Payload), req.Metadata, req.Key)
 	if err != nil {
 		if errors.Is(err, queue.ErrSchemaValidation) {
 			return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": err.Error()})
@@ -593,6 +597,7 @@ func (s *HTTPServer) batchDequeueMessages(c *fiber.Ctx) error {
 		r := messageResponse{
 			ID:            m.ID,
 			Topic:         m.Topic,
+			Key:           m.Key,
 			Payload:       string(m.Payload),
 			Metadata:      m.Metadata,
 			Status:        m.Status,
@@ -870,6 +875,20 @@ func (s *HTTPServer) purgeTopicMessages(c *fiber.Ctx) error {
 	n, err := s.queueService.PurgeTopic(c.Context(), topic, statuses)
 	if err != nil {
 		slog.Error("purge topic failed", "topic", topic, "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{"deleted": n})
+}
+
+func (s *HTTPServer) purgeByKeyMessages(c *fiber.Ctx) error {
+	topic := c.Params("topic")
+	key := c.Params("key")
+	if key == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "key is required"})
+	}
+	n, err := s.queueService.PurgeByKey(c.Context(), topic, key)
+	if err != nil {
+		slog.Error("purge by key failed", "topic", topic, "key", key, "error", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 	return c.JSON(fiber.Map{"deleted": n})

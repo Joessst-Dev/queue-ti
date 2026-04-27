@@ -27,6 +27,7 @@ type EnqueueRequest struct {
 	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
 	Payload       []byte                 `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
 	Metadata      map[string]string      `protobuf:"bytes,3,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Key           *string                `protobuf:"bytes,4,opt,name=key,proto3,oneof" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -80,6 +81,13 @@ func (x *EnqueueRequest) GetMetadata() map[string]string {
 		return x.Metadata
 	}
 	return nil
+}
+
+func (x *EnqueueRequest) GetKey() string {
+	if x != nil && x.Key != nil {
+		return *x.Key
+	}
+	return ""
 }
 
 type EnqueueResponse struct {
@@ -187,6 +195,7 @@ type DequeueResponse struct {
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	RetryCount    int32                  `protobuf:"varint,6,opt,name=retry_count,json=retryCount,proto3" json:"retry_count,omitempty"`
 	MaxRetries    int32                  `protobuf:"varint,7,opt,name=max_retries,json=maxRetries,proto3" json:"max_retries,omitempty"`
+	Key           *string                `protobuf:"bytes,8,opt,name=key,proto3,oneof" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -268,6 +277,13 @@ func (x *DequeueResponse) GetMaxRetries() int32 {
 		return x.MaxRetries
 	}
 	return 0
+}
+
+func (x *DequeueResponse) GetKey() string {
+	if x != nil && x.Key != nil {
+		return *x.Key
+	}
+	return ""
 }
 
 type BatchDequeueRequest struct {
@@ -682,20 +698,22 @@ var File_queue_proto protoreflect.FileDescriptor
 
 const file_queue_proto_rawDesc = "" +
 	"\n" +
-	"\vqueue.proto\x12\x05queue\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbe\x01\n" +
+	"\vqueue.proto\x12\x05queue\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdd\x01\n" +
 	"\x0eEnqueueRequest\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x18\n" +
 	"\apayload\x18\x02 \x01(\fR\apayload\x12?\n" +
-	"\bmetadata\x18\x03 \x03(\v2#.queue.EnqueueRequest.MetadataEntryR\bmetadata\x1a;\n" +
+	"\bmetadata\x18\x03 \x03(\v2#.queue.EnqueueRequest.MetadataEntryR\bmetadata\x12\x15\n" +
+	"\x03key\x18\x04 \x01(\tH\x00R\x03key\x88\x01\x01\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"!\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x06\n" +
+	"\x04_key\"!\n" +
 	"\x0fEnqueueResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x88\x01\n" +
 	"\x0eDequeueRequest\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12A\n" +
 	"\x1avisibility_timeout_seconds\x18\x02 \x01(\rH\x00R\x18visibilityTimeoutSeconds\x88\x01\x01B\x1d\n" +
-	"\x1b_visibility_timeout_seconds\"\xcd\x02\n" +
+	"\x1b_visibility_timeout_seconds\"\xec\x02\n" +
 	"\x0fDequeueResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05topic\x18\x02 \x01(\tR\x05topic\x12\x18\n" +
@@ -706,10 +724,12 @@ const file_queue_proto_rawDesc = "" +
 	"\vretry_count\x18\x06 \x01(\x05R\n" +
 	"retryCount\x12\x1f\n" +
 	"\vmax_retries\x18\a \x01(\x05R\n" +
-	"maxRetries\x1a;\n" +
+	"maxRetries\x12\x15\n" +
+	"\x03key\x18\b \x01(\tH\x00R\x03key\x88\x01\x01\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa3\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x06\n" +
+	"\x04_key\"\xa3\x01\n" +
 	"\x13BatchDequeueRequest\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\rR\x05count\x12A\n" +
@@ -811,7 +831,9 @@ func file_queue_proto_init() {
 	if File_queue_proto != nil {
 		return
 	}
+	file_queue_proto_msgTypes[0].OneofWrappers = []any{}
 	file_queue_proto_msgTypes[2].OneofWrappers = []any{}
+	file_queue_proto_msgTypes[3].OneofWrappers = []any{}
 	file_queue_proto_msgTypes[4].OneofWrappers = []any{}
 	file_queue_proto_msgTypes[10].OneofWrappers = []any{}
 	type x struct{}

@@ -130,14 +130,15 @@ import { QueueMessage } from '../services/queue.service';
           [style.width]="'calc(100% - ' + scrollbarWidth() + 'px)'"
         >
           <colgroup>
-            <col style="width: 10%">
-            <col style="width: 13%">
-            <col style="width: 20%">
             <col style="width: 9%">
+            <col style="width: 11%">
+            <col style="width: 10%">
+            <col style="width: 18%">
             <col style="width: 8%">
-            <col style="width: 10%">
-            <col style="width: 13%">
-            <col style="width: 10%">
+            <col style="width: 7%">
+            <col style="width: 9%">
+            <col style="width: 12%">
+            <col style="width: 9%">
             <col style="width: 7%">
           </colgroup>
           <thead class="bg-gray-50">
@@ -151,6 +152,11 @@ import { QueueMessage } from '../services/queue.service';
                 class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
               >
                 Topic
+              </th>
+              <th
+                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+              >
+                Key
               </th>
               <th
                 class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
@@ -197,14 +203,15 @@ import { QueueMessage } from '../services/queue.service';
         >
           <table class="w-full table-fixed">
             <colgroup>
-              <col style="width: 10%">
-              <col style="width: 13%">
-              <col style="width: 20%">
               <col style="width: 9%">
+              <col style="width: 11%">
+              <col style="width: 10%">
+              <col style="width: 18%">
               <col style="width: 8%">
-              <col style="width: 10%">
-              <col style="width: 13%">
-              <col style="width: 10%">
+              <col style="width: 7%">
+              <col style="width: 9%">
+              <col style="width: 12%">
+              <col style="width: 9%">
               <col style="width: 7%">
             </colgroup>
             <tbody class="divide-y divide-gray-200">
@@ -238,6 +245,13 @@ import { QueueMessage } from '../services/queue.service';
                     <div class="text-xs text-gray-400 mt-0.5">
                       from: {{ msg.original_topic }}
                     </div>
+                  }
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-600 font-mono truncate">
+                  @if (msg.key) {
+                    {{ msg.key }}
+                  } @else {
+                    <span class="text-gray-400">&mdash;</span>
                   }
                 </td>
                 <td
@@ -289,53 +303,64 @@ import { QueueMessage } from '../services/queue.service';
                   {{ msg.created_at | date: 'short' }}
                 </td>
                 <td class="px-6 py-4 text-sm whitespace-nowrap">
-                  @if (isDlq(msg)) {
-                    <button
-                      (click)="requeue.emit(msg.id)"
-                      class="px-3 py-1 text-xs font-medium bg-amber-100 text-amber-800 rounded hover:bg-amber-200 cursor-pointer"
-                    >
-                      Requeue
-                    </button>
-                  } @else if (msg.status === 'processing') {
-                    @if (nackOpenId() === msg.id) {
-                      <div class="flex flex-col gap-1">
-                        <input
-                          type="text"
-                          [value]="nackError()"
-                          (input)="nackError.set($any($event.target).value)"
-                          placeholder="Error reason (optional)"
-                          class="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-red-400 w-full"
-                        />
-                        <div class="flex items-center gap-1">
-                          <button
-                            (click)="onNackConfirm(msg.id)"
-                            class="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer"
-                          >
-                            Confirm
-                          </button>
-                          <button
-                            (click)="nackOpenId.set(null)"
-                            class="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    } @else {
+                  <div class="flex flex-col gap-1">
+                    @if (isDlq(msg)) {
                       <button
-                        (click)="nackOpenId.set(msg.id); nackError.set('')"
-                        class="px-3 py-1 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer"
+                        (click)="requeue.emit(msg.id)"
+                        class="px-3 py-1 text-xs font-medium bg-amber-100 text-amber-800 rounded hover:bg-amber-200 cursor-pointer"
                       >
-                        Nack
+                        Requeue
+                      </button>
+                    } @else if (msg.status === 'processing') {
+                      @if (nackOpenId() === msg.id) {
+                        <div class="flex flex-col gap-1">
+                          <input
+                            type="text"
+                            [value]="nackError()"
+                            (input)="nackError.set($any($event.target).value)"
+                            placeholder="Error reason (optional)"
+                            class="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-red-400 w-full"
+                          />
+                          <div class="flex items-center gap-1">
+                            <button
+                              (click)="onNackConfirm(msg.id)"
+                              class="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              (click)="nackOpenId.set(null)"
+                              class="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      } @else {
+                        <button
+                          (click)="nackOpenId.set(msg.id); nackError.set('')"
+                          class="px-3 py-1 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer"
+                        >
+                          Nack
+                        </button>
+                      }
+                    }
+                    @if (msg.key) {
+                      <button
+                        type="button"
+                        (click)="onPurgeByKey(msg)"
+                        class="px-3 py-1 text-xs font-medium text-red-600 border border-red-300 rounded hover:bg-red-50 focus:outline-none focus:ring-1 focus:ring-red-400 cursor-pointer"
+                      >
+                        Purge key
                       </button>
                     }
-                  }
+                  </div>
                 </td>
               </tr>
               @if (messages().length === 0 && !loading()) {
                 <tr>
                   <td
-                    colspan="9"
+                    colspan="10"
                     class="px-6 py-12 text-center text-sm text-gray-500"
                   >
                     No messages found
@@ -345,7 +370,7 @@ import { QueueMessage } from '../services/queue.service';
               @if (messages().length === 0 && loading()) {
                 <tr>
                   <td
-                    colspan="9"
+                    colspan="10"
                     class="px-6 py-12 text-center text-sm text-gray-500"
                   >
                     Loading messages...
@@ -369,6 +394,7 @@ export class MessagesTable {
   readonly requeue = output<string>();
   readonly nackConfirm = output<{ id: string; error: string }>();
   readonly purge = output<{ topic: string; statuses: string[] }>();
+  readonly purgeByKey = output<{ topic: string; key: string }>();
 
   private readonly viewport = viewChild(CdkVirtualScrollViewport);
 
@@ -447,5 +473,13 @@ export class MessagesTable {
     const topic = this.filterForm().value() ?? '';
     this.purge.emit({ topic, statuses: this.purgeStatuses() });
     this.showPurgeConfirm.set(false);
+  }
+
+  onPurgeByKey(msg: QueueMessage): void {
+    if (!msg.key) return;
+    const confirmed = confirm(`Purge all messages with key "${msg.key}" from topic "${msg.topic}"?`);
+    if (confirmed) {
+      this.purgeByKey.emit({ topic: msg.topic, key: msg.key });
+    }
   }
 }

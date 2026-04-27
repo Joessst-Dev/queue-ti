@@ -16,6 +16,7 @@ import { generateAvroExample } from './avro-example';
 
 interface EnqueueModel {
   topic: string;
+  key: string;
   payload: string;
 }
 
@@ -81,6 +82,21 @@ interface MetadataRowModel {
                 (input)="onTopicInput($any($event.target).value)"
                 class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="e.g. orders"
+              />
+            </div>
+            <div>
+              <label
+                for="enqueue-key"
+                class="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Key <span class="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <input
+                id="enqueue-key"
+                type="text"
+                [formField]="enqueueForm.key"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="e.g. order-123"
               />
             </div>
           </div>
@@ -221,13 +237,15 @@ export class EnqueueSection {
 
   readonly enqueue = output<EnqueueRequest>();
 
-  readonly enqueueModel = signal<EnqueueModel>({ topic: '', payload: '' });
+  readonly enqueueModel = signal<EnqueueModel>({ topic: '', key: '', payload: '' });
 
   readonly enqueueForm = form(
     this.enqueueModel,
     schema<EnqueueModel>((root) => {
       required(root.topic);
       required(root.payload);
+      // key is optional — no validators
+      void root.key;
     }),
   );
 
@@ -246,7 +264,7 @@ export class EnqueueSection {
   constructor() {
     effect(() => {
       if (this.success()) {
-        this.enqueueModel.set({ topic: '', payload: '' });
+        this.enqueueModel.set({ topic: '', key: '', payload: '' });
         this.metadataRows.set([]);
         this.topicSchema.set(null);
       }
@@ -295,9 +313,11 @@ export class EnqueueSection {
         metadata[key] = row.form.value().value();
       }
     }
+    const key = this.enqueueForm.key().value().trim();
     this.enqueue.emit({
       topic: this.enqueueForm.topic().value(),
       payload: this.enqueueForm.payload().value(),
+      ...(key ? { key } : {}),
       metadata,
     });
   }

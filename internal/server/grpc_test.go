@@ -96,6 +96,27 @@ var _ = Describe("gRPC Server", func() {
 				Expect(st.Code()).To(Equal(codes.InvalidArgument))
 			})
 		})
+
+		Context("when the same key+topic is enqueued twice", func() {
+			It("should return the same message ID on both calls", func() {
+				key := "dedup-key"
+				resp1, err := client.Enqueue(ctx, &pb.EnqueueRequest{
+					Topic:   "grpc-key-topic",
+					Payload: []byte("first"),
+					Key:     &key,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				resp2, err := client.Enqueue(ctx, &pb.EnqueueRequest{
+					Topic:   "grpc-key-topic",
+					Payload: []byte("second"),
+					Key:     &key,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(resp2.Id).To(Equal(resp1.Id))
+			})
+		})
 	})
 
 	// Tests for the Dequeue RPC endpoint
