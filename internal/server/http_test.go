@@ -1270,6 +1270,216 @@ var _ = Describe("HTTP Server", func() {
 	})
 
 	// ---------------------------------------------------------------------------
+	// POST /api/topics/:topic/purge
+	// ---------------------------------------------------------------------------
+
+	Describe("POST /api/topics/:topic/purge", func() {
+		var (
+			httpServer *server.HTTPServer
+			adminToken string
+			userToken  string
+		)
+
+		BeforeEach(func() {
+			admin, err := userStore.Create(httpTestCtx, "purge-admin", "secret", true)
+			Expect(err).NotTo(HaveOccurred())
+			adminToken, err = users.IssueToken([]byte(testJWTSecret), admin.ID, admin.Username, admin.IsAdmin)
+			Expect(err).NotTo(HaveOccurred())
+
+			nonAdmin, err := userStore.Create(httpTestCtx, "purge-user", "secret", false)
+			Expect(err).NotTo(HaveOccurred())
+			userToken, err = users.IssueToken([]byte(testJWTSecret), nonAdmin.ID, nonAdmin.Username, nonAdmin.IsAdmin)
+			Expect(err).NotTo(HaveOccurred())
+
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{
+				Enabled:   true,
+				JWTSecret: testJWTSecret,
+			}, prometheus.NewRegistry(), userStore)
+
+			// Seed 2 pending messages on "purge-http-topic"
+			_, err = queueService.Enqueue(httpTestCtx, "purge-http-topic", []byte("msg-1"), nil)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = queueService.Enqueue(httpTestCtx, "purge-http-topic", []byte("msg-2"), nil)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when an admin sends a valid purge request", func() {
+			It("should return 200 with the number of deleted messages", func() {
+				body := `{"statuses":["pending"]}`
+				req := httptest.NewRequest("POST", "/api/topics/purge-http-topic/purge", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+adminToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var result map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result["deleted"]).To(BeEquivalentTo(2))
+			})
+		})
+
+		Context("when the request body omits statuses", func() {
+			It("should default to all statuses and return 200 with deleted >= 0", func() {
+				req := httptest.NewRequest("POST", "/api/topics/purge-http-topic/purge", strings.NewReader(`{}`))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+adminToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var result map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				deleted, ok := result["deleted"].(float64)
+				Expect(ok).To(BeTrue())
+				Expect(deleted).To(BeNumerically(">=", 0))
+			})
+		})
+
+		Context("when the request contains an invalid status value", func() {
+			It("should return 400", func() {
+				body := `{"statuses":["invalid"]}`
+				req := httptest.NewRequest("POST", "/api/topics/purge-http-topic/purge", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+adminToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(400))
+			})
+		})
+
+		Context("when the caller is not an admin", func() {
+			It("should return 403", func() {
+				body := `{"statuses":["pending"]}`
+				req := httptest.NewRequest("POST", "/api/topics/purge-http-topic/purge", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+userToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(403))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
+	// POST /api/admin/expiry-reaper/run
+	// ---------------------------------------------------------------------------
+
+	Describe("POST /api/admin/expiry-reaper/run", func() {
+		var (
+			httpServer *server.HTTPServer
+			adminToken string
+			userToken  string
+		)
+
+		BeforeEach(func() {
+			admin, err := userStore.Create(httpTestCtx, "expiry-admin", "secret", true)
+			Expect(err).NotTo(HaveOccurred())
+			adminToken, err = users.IssueToken([]byte(testJWTSecret), admin.ID, admin.Username, admin.IsAdmin)
+			Expect(err).NotTo(HaveOccurred())
+
+			nonAdmin, err := userStore.Create(httpTestCtx, "expiry-user", "secret", false)
+			Expect(err).NotTo(HaveOccurred())
+			userToken, err = users.IssueToken([]byte(testJWTSecret), nonAdmin.ID, nonAdmin.Username, nonAdmin.IsAdmin)
+			Expect(err).NotTo(HaveOccurred())
+
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{
+				Enabled:   true,
+				JWTSecret: testJWTSecret,
+			}, prometheus.NewRegistry(), userStore)
+		})
+
+		Context("when an admin triggers the expiry reaper", func() {
+			It("should return 200 with an expired count >= 0", func() {
+				req := httptest.NewRequest("POST", "/api/admin/expiry-reaper/run", nil)
+				req.Header.Set("Authorization", "Bearer "+adminToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var result map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				expired, ok := result["expired"].(float64)
+				Expect(ok).To(BeTrue())
+				Expect(expired).To(BeNumerically(">=", 0))
+			})
+		})
+
+		Context("when the caller is not an admin", func() {
+			It("should return 403", func() {
+				req := httptest.NewRequest("POST", "/api/admin/expiry-reaper/run", nil)
+				req.Header.Set("Authorization", "Bearer "+userToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(403))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
+	// POST /api/admin/delete-reaper/run
+	// ---------------------------------------------------------------------------
+
+	Describe("POST /api/admin/delete-reaper/run", func() {
+		var (
+			httpServer *server.HTTPServer
+			adminToken string
+			userToken  string
+		)
+
+		BeforeEach(func() {
+			admin, err := userStore.Create(httpTestCtx, "delete-admin", "secret", true)
+			Expect(err).NotTo(HaveOccurred())
+			adminToken, err = users.IssueToken([]byte(testJWTSecret), admin.ID, admin.Username, admin.IsAdmin)
+			Expect(err).NotTo(HaveOccurred())
+
+			nonAdmin, err := userStore.Create(httpTestCtx, "delete-user", "secret", false)
+			Expect(err).NotTo(HaveOccurred())
+			userToken, err = users.IssueToken([]byte(testJWTSecret), nonAdmin.ID, nonAdmin.Username, nonAdmin.IsAdmin)
+			Expect(err).NotTo(HaveOccurred())
+
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{
+				Enabled:   true,
+				JWTSecret: testJWTSecret,
+			}, prometheus.NewRegistry(), userStore)
+		})
+
+		Context("when an admin triggers the delete reaper", func() {
+			It("should return 200 with a deleted count >= 0", func() {
+				req := httptest.NewRequest("POST", "/api/admin/delete-reaper/run", nil)
+				req.Header.Set("Authorization", "Bearer "+adminToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var result map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				deleted, ok := result["deleted"].(float64)
+				Expect(ok).To(BeTrue())
+				Expect(deleted).To(BeNumerically(">=", 0))
+			})
+		})
+
+		Context("when the caller is not an admin", func() {
+			It("should return 403", func() {
+				req := httptest.NewRequest("POST", "/api/admin/delete-reaper/run", nil)
+				req.Header.Set("Authorization", "Bearer "+userToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(403))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
 	// GET /api/stats
 	// ---------------------------------------------------------------------------
 

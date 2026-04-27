@@ -960,6 +960,184 @@ var _ = Describe("Queue Service", func() {
 		})
 	})
 
+	// Tests for purging messages from a topic by status
+	Describe("PurgeTopic", func() {
+		BeforeEach(func() {
+			// Insert 3 pending + 2 expired messages on "purge-topic", and 1 pending on "other-topic"
+			_, err := pool.Exec(ctx, `
+				INSERT INTO messages (topic, payload, status, max_retries)
+				VALUES
+					('purge-topic', 'p1', 'pending', 3),
+					('purge-topic', 'p2', 'pending', 3),
+					('purge-topic', 'p3', 'pending', 3),
+					('purge-topic', 'e1', 'expired', 3),
+					('purge-topic', 'e2', 'expired', 3),
+					('other-topic', 'o1', 'pending', 3)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when purging only the pending status from the topic", func() {
+			It("should delete 3 rows and leave the expired and other-topic rows intact", func() {
+				n, err := service.PurgeTopic(ctx, "purge-topic", []string{"pending"})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(n).To(Equal(int64(3)))
+
+				// 2 expired rows on purge-topic must still exist
+				var expiredCount int
+				Expect(pool.QueryRow(ctx,
+					`SELECT count(*) FROM messages WHERE topic = 'purge-topic' AND status = 'expired'`,
+				).Scan(&expiredCount)).To(Succeed())
+				Expect(expiredCount).To(Equal(2))
+
+				// The other-topic row must still exist
+				var otherCount int
+				Expect(pool.QueryRow(ctx,
+					`SELECT count(*) FROM messages WHERE topic = 'other-topic'`,
+				).Scan(&otherCount)).To(Succeed())
+				Expect(otherCount).To(Equal(1))
+			})
+		})
+
+		Context("when purging both pending and expired statuses from the topic", func() {
+			It("should delete all 5 rows belonging to that topic", func() {
+				n, err := service.PurgeTopic(ctx, "purge-topic", []string{"pending", "expired"})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(n).To(Equal(int64(5)))
+
+				var remaining int
+				Expect(pool.QueryRow(ctx,
+					`SELECT count(*) FROM messages WHERE topic = 'purge-topic'`,
+				).Scan(&remaining)).To(Succeed())
+				Expect(remaining).To(Equal(0))
+			})
+		})
+
+		Context("when the topic does not exist", func() {
+			It("should return 0 without an error", func() {
+				n, err := service.PurgeTopic(ctx, "ghost", []string{"pending"})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(n).To(Equal(int64(0)))
+			})
+		})
+	})
+
+	// Tests for the manual expiry reaper
+	Describe("RunExpiryReaperOnce", func() {
+		var pastExpiryID string
+
+		BeforeEach(func() {
+			// A pending message whose expires_at is already in the past — must be expired
+			err := pool.QueryRow(ctx, `
+				INSERT INTO messages (topic, payload, max_retries, expires_at)
+				VALUES ('reaper-expiry-topic', 'past', 3, now() - interval '1 minute')
+				RETURNING id
+			`).Scan(&pastExpiryID)
+			Expect(err).NotTo(HaveOccurred())
+
+			// A pending message whose expires_at is well in the future — must be left alone
+			_, err = pool.Exec(ctx, `
+				INSERT INTO messages (topic, payload, max_retries, expires_at)
+				VALUES ('reaper-expiry-topic', 'future', 3, now() + interval '1 hour')
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			// A pending message with no expires_at — must never be touched by the reaper
+			_, err = pool.Exec(ctx, `
+				INSERT INTO messages (topic, payload, max_retries)
+				VALUES ('reaper-expiry-topic', 'no-expiry', 3)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return 1 — only the already-past message is transitioned", func() {
+			n, err := service.RunExpiryReaperOnce(ctx)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(1)))
+		})
+
+		It("should mark only the past-expiry message as expired", func() {
+			_, err := service.RunExpiryReaperOnce(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			var status string
+			Expect(pool.QueryRow(ctx,
+				`SELECT status FROM messages WHERE id = $1`, pastExpiryID,
+			).Scan(&status)).To(Succeed())
+			Expect(status).To(Equal("expired"))
+		})
+
+		It("should leave the future-expiry and no-expiry messages as pending", func() {
+			_, err := service.RunExpiryReaperOnce(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			var pendingCount int
+			Expect(pool.QueryRow(ctx, `
+				SELECT count(*) FROM messages
+				WHERE topic = 'reaper-expiry-topic' AND status = 'pending'
+			`).Scan(&pendingCount)).To(Succeed())
+			Expect(pendingCount).To(Equal(2))
+		})
+	})
+
+	// Tests for the manual delete reaper
+	Describe("RunDeleteReaperOnce", func() {
+		var expiredID, pendingID string
+
+		BeforeEach(func() {
+			err := pool.QueryRow(ctx, `
+				INSERT INTO messages (topic, payload, status, max_retries)
+				VALUES ('reaper-delete-topic', 'expired-msg', 'expired', 3)
+				RETURNING id
+			`).Scan(&expiredID)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = pool.QueryRow(ctx, `
+				INSERT INTO messages (topic, payload, max_retries)
+				VALUES ('reaper-delete-topic', 'pending-msg', 3)
+				RETURNING id
+			`).Scan(&pendingID)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return 1 and permanently remove only the expired row", func() {
+			n, err := service.RunDeleteReaperOnce(ctx)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(1)))
+
+			var count int
+			Expect(pool.QueryRow(ctx,
+				`SELECT count(*) FROM messages WHERE id = $1`, expiredID,
+			).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(0))
+		})
+
+		It("should leave the pending row intact", func() {
+			_, err := service.RunDeleteReaperOnce(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			var status string
+			Expect(pool.QueryRow(ctx,
+				`SELECT status FROM messages WHERE id = $1`, pendingID,
+			).Scan(&status)).To(Succeed())
+			Expect(status).To(Equal("pending"))
+		})
+
+		It("should return 0 when called again — the operation is idempotent", func() {
+			_, err := service.RunDeleteReaperOnce(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			n, err := service.RunDeleteReaperOnce(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(0)))
+		})
+	})
+
 	// Tests for the background expiry reaper
 	Describe("StartExpiryReaper", func() {
 		Context("Given a message that is already expired", func() {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/robfig/cron/v3"
 )
 
 var (
@@ -547,4 +548,87 @@ func (s *Service) StartExpiryReaper(ctx context.Context, interval time.Duration)
 			}
 		}
 	}()
+}
+
+// RunExpiryReaperOnce marks all eligible expired messages as 'expired' in a
+// single pass and returns the number of rows affected. It is the one-shot
+// equivalent of the background StartExpiryReaper ticker.
+func (s *Service) RunExpiryReaperOnce(ctx context.Context) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE messages
+		SET    status     = 'expired',
+		       updated_at = now()
+		WHERE  expires_at IS NOT NULL
+		  AND  expires_at < now()
+		  AND  status IN ('pending', 'processing')
+	`)
+	if err != nil {
+		return 0, fmt.Errorf("run expiry reaper: %w", err)
+	}
+	n := tag.RowsAffected()
+	if n > 0 {
+		s.recorder.RecordExpired(n)
+		slog.Info("expiry reaper (manual) expired messages", "count", n)
+	}
+	return n, nil
+}
+
+// RunDeleteReaperOnce permanently deletes all messages with status 'expired'
+// and returns the number of rows deleted.
+func (s *Service) RunDeleteReaperOnce(ctx context.Context) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM messages WHERE status = 'expired'`)
+	if err != nil {
+		return 0, fmt.Errorf("run delete reaper: %w", err)
+	}
+	n := tag.RowsAffected()
+	if n > 0 {
+		s.recorder.RecordDeleted(n)
+		slog.Info("delete reaper removed expired messages", "count", n)
+	}
+	return n, nil
+}
+
+// PurgeTopic permanently deletes messages belonging to the given topic whose
+// status is one of the provided statuses. It returns the number of deleted
+// rows. Validation of status values is the caller's responsibility.
+func (s *Service) PurgeTopic(ctx context.Context, topic string, statuses []string) (int64, error) {
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM messages WHERE topic = $1 AND status = ANY($2)`,
+		topic, statuses,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("purge topic: %w", err)
+	}
+	n := tag.RowsAffected()
+	if n > 0 {
+		slog.Info("purged messages from topic", "topic", topic, "statuses", statuses, "count", n)
+	}
+	return n, nil
+}
+
+// StartDeleteReaper schedules RunDeleteReaperOnce using the given cron
+// expression. If schedule is empty it is a no-op and returns a no-op stop
+// function. The stop function stops the cron scheduler gracefully.
+func (s *Service) StartDeleteReaper(ctx context.Context, schedule string) (stop func(), err error) {
+	if schedule == "" {
+		return func() {}, nil
+	}
+
+	c := cron.New()
+	_, err = c.AddFunc(schedule, func() {
+		n, runErr := s.RunDeleteReaperOnce(ctx)
+		if runErr != nil {
+			slog.Error("delete reaper failed", "error", runErr)
+			return
+		}
+		if n > 0 {
+			slog.Info("delete reaper (scheduled) removed expired messages", "count", n)
+		}
+	})
+	if err != nil {
+		return nil, fmt.Errorf("start delete reaper: invalid schedule %q: %w", schedule, err)
+	}
+
+	c.Start()
+	return func() { c.Stop() }, nil
 }

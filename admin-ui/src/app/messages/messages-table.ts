@@ -70,8 +70,52 @@ import { QueueMessage } from '../services/queue.service';
             </svg>
             Refresh
           </button>
+          @if (filterForm().value()) {
+            <button
+              type="button"
+              (click)="showPurgeConfirm.set(true)"
+              class="px-3 py-1.5 text-sm font-medium text-red-600 border border-red-300 rounded-md hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-400 cursor-pointer"
+            >
+              Purge
+            </button>
+          }
         </div>
       </div>
+
+      @if (showPurgeConfirm()) {
+        <div class="px-6 py-3 border-b border-red-200 bg-red-50 space-y-2">
+          <p class="text-sm font-medium text-red-800">Purge messages from "{{ filterForm().value() }}"</p>
+          <div class="flex gap-3 text-sm">
+            @for (status of ['pending', 'processing', 'expired']; track status) {
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  [checked]="purgeStatuses().includes(status)"
+                  (change)="togglePurgeStatus(status)"
+                />
+                {{ status }}
+              </label>
+            }
+          </div>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              [disabled]="purgeStatuses().length === 0"
+              (click)="confirmPurge()"
+              class="px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Confirm purge
+            </button>
+            <button
+              type="button"
+              (click)="showPurgeConfirm.set(false)"
+              class="px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      }
 
       @if (error()) {
         <div class="px-6 py-4 text-sm text-red-600">
@@ -324,6 +368,7 @@ export class MessagesTable {
   readonly scrollIndexChange = output<number>();
   readonly requeue = output<string>();
   readonly nackConfirm = output<{ id: string; error: string }>();
+  readonly purge = output<{ topic: string; statuses: string[] }>();
 
   private readonly viewport = viewChild(CdkVirtualScrollViewport);
 
@@ -331,6 +376,8 @@ export class MessagesTable {
   readonly nackOpenId = signal<string | null>(null);
   readonly nackError = signal('');
   readonly copiedId = signal<string | null>(null);
+  readonly purgeStatuses = signal<string[]>(['pending', 'processing', 'expired']);
+  readonly showPurgeConfirm = signal(false);
 
   private readonly filterModel = signal('');
   readonly filterForm = form(this.filterModel);
@@ -386,5 +433,19 @@ export class MessagesTable {
       this.copiedId.set(id);
       setTimeout(() => this.copiedId.set(null), 1500);
     });
+  }
+
+  togglePurgeStatus(status: string): void {
+    this.purgeStatuses.update((current) =>
+      current.includes(status)
+        ? current.filter((s) => s !== status)
+        : [...current, status],
+    );
+  }
+
+  confirmPurge(): void {
+    const topic = this.filterForm().value() ?? '';
+    this.purge.emit({ topic, statuses: this.purgeStatuses() });
+    this.showPurgeConfirm.set(false);
   }
 }

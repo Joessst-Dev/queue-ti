@@ -169,6 +169,7 @@ queue:
   message_ttl: 24h              # Time-to-live for messages (0 = no expiry)
   dlq_threshold: 3              # Retry count at which messages are promoted to DLQ (0 = disabled)
   require_topic_registration: false  # Require explicit topic registration before enqueue (default: false)
+  delete_reaper_schedule: ""    # Cron schedule for automatic expired message deletion (empty = disabled)
 
 auth:
   enabled: false
@@ -197,6 +198,7 @@ Any configuration key can be overridden with an environment variable using the k
 | `QUEUETI_QUEUE_MESSAGE_TTL` | Message time-to-live (0 = no expiry) | `24h` |
 | `QUEUETI_QUEUE_DLQ_THRESHOLD` | Retry count for DLQ promotion (0 = disabled) | `3` |
 | `QUEUETI_QUEUE_REQUIRE_TOPIC_REGISTRATION` | Require topics to be registered before enqueue | `false` |
+| `QUEUETI_QUEUE_DELETE_REAPER_SCHEDULE` | Cron schedule for automatic expired message deletion (empty = disabled) | (empty) |
 | `QUEUETI_AUTH_ENABLED` | Enable JWT authentication | `true` |
 | `QUEUETI_AUTH_JWT_SECRET` | JWT signing secret (required if auth enabled) | (any string) |
 | `QUEUETI_AUTH_USERNAME` | Default admin username | `admin` |
@@ -693,6 +695,72 @@ Common validation error messages:
 - `field "fieldname": expected string, got number` — A field has the wrong JSON type
 - `payload is not a valid JSON object` — The payload is not valid JSON or is not an object for a record schema
 
+## System Architecture
+
+```mermaid
+graph TD
+    subgraph "External Clients"
+        Browser["Browser<br/>(Admin UI)"]
+        GRPCClients["gRPC Clients<br/>(Producers/Consumers)"]
+    end
+
+    subgraph "Frontend Layer"
+        Nginx["Nginx<br/>(Reverse Proxy)"]
+        AdminUI["Angular SPA<br/>Port 8081<br/><br/>Components:<br/>MessagesTable<br/>EnqueueSection<br/>MaintenanceSection<br/>TopicConfigSection<br/>TopicSchemaSection<br/>UsersSection"]
+        AuthInterceptor["Auth Interceptor"]
+    end
+
+    subgraph "Backend Layer - Single Go Process"
+        HTTPServer["HTTP Server<br/>Port 8080<br/><br/>Routes:<br/>Auth: /api/auth/*<br/>Queue: /api/messages*<br/>Topics: /api/topic-*<br/>Users: /api/users*<br/>Admin: /api/admin/*<br/>Metrics: /metrics"]
+        GRPCServer["gRPC Server<br/>Port 50051<br/><br/>Methods:<br/>Enqueue<br/>Dequeue<br/>Ack<br/>Nack"]
+        QueueService["Queue Service<br/><br/>Operations:<br/>Enqueue<br/>Dequeue<br/>Ack/Nack<br/>Requeue<br/>PurgeTopic<br/>GetTopicConfig<br/>GetTopicSchema"]
+        ExpiryReaper["Expiry Reaper<br/>60s ticker<br/><br/>Marks messages<br/>as expired"]
+        DeleteReaper["Delete Reaper<br/>Cron schedule<br/>optional<br/><br/>Permanently<br/>deletes expired<br/>messages"]
+        AuthModule["Auth Module<br/><br/>JWT validation<br/>User grants<br/>Admin checks"]
+    end
+
+    subgraph "Data Layer"
+        PostgreSQL["PostgreSQL<br/><br/>Tables:<br/>messages<br/>topic_config<br/>topic_schemas<br/>users<br/>user_grants"]
+    end
+
+    Browser -->|HTTP requests<br/>with JWT token| Nginx
+    Nginx --> AdminUI
+    AdminUI --> AuthInterceptor
+    AuthInterceptor --> HTTPServer
+
+    GRPCClients -->|gRPC calls<br/>with JWT token| GRPCServer
+    GRPCServer --> AuthModule
+    AuthModule -->|permission check| QueueService
+
+    HTTPServer --> AuthModule
+    AuthModule --> QueueService
+
+    QueueService --> PostgreSQL
+    ExpiryReaper --> PostgreSQL
+    DeleteReaper --> PostgreSQL
+
+    HTTPServer -->|scrape /metrics| Prometheus["Prometheus<br/>(optional)"]
+
+    style Browser fill:#e1f5ff
+    style GRPCClients fill:#e1f5ff
+    style AdminUI fill:#fff3e0
+    style HTTPServer fill:#f3e5f5
+    style GRPCServer fill:#f3e5f5
+    style QueueService fill:#f3e5f5
+    style ExpiryReaper fill:#f3e5f5
+    style DeleteReaper fill:#f3e5f5
+    style AuthModule fill:#f3e5f5
+    style PostgreSQL fill:#e8f5e9
+```
+
+**Architecture Overview:**
+
+- **Frontend** (port 8081): Angular SPA served by Nginx, communicates exclusively with the HTTP API
+- **Backend** (single Go process): Exposes two concurrent servers—gRPC (port 50051) for clients and HTTP (port 8080) for admin operations
+- **Queue Service** (core): Shared by both servers; implements enqueue, dequeue, ack, nack, and administrative operations
+- **Reapers**: Background goroutines that manage message lifecycle—expiry reaper marks old messages, delete reaper permanently removes them
+- **PostgreSQL** (single table design): All messages stored in one table with composite indexes for efficient concurrent access
+
 ## Queue Mechanics
 
 ### Data Model
@@ -790,6 +858,9 @@ cmd/server/main.go
     ├── /api/topic-schemas/:topic            PUT    Register or update a schema
     ├── /api/topic-schemas/:topic            DELETE Delete a registered schema
     ├── /api/topic-schemas/:topic            GET    Fetch a single schema
+    ├── /api/topics/:topic/purge             POST   Purge messages from a topic (admin-only)
+    ├── /api/admin/expiry-reaper/run         POST   Manually trigger expiry reaper (admin-only)
+    ├── /api/admin/delete-reaper/run         POST   Manually trigger delete reaper (admin-only)
     ├── /api/users                           GET    List all users (admin-only)
     ├── /api/users                           POST   Create new user (admin-only)
     ├── /api/users/:id                       PUT    Update user (admin-only)
@@ -1097,6 +1168,155 @@ curl -u admin:secret http://localhost:8080/api/stats
   ]
 }
 ```
+
+### Admin Operations
+
+#### POST /api/topics/:topic/purge
+
+Permanently deletes messages from a topic, optionally filtered by status.
+
+**Request body:**
+```json
+{
+  "statuses": ["pending", "processing", "expired"]
+}
+```
+
+The `statuses` array specifies which message statuses to delete. Omitting `statuses` or sending an empty array defaults to all three: `["pending", "processing", "expired"]`. The only valid status values for purge are `pending`, `processing`, and `expired`; the statuses `deleted`, `failed`, and `processing` cannot be purged in isolation (only alongside the allowed statuses).
+
+**Example:**
+
+```bash
+# Purge all pending, processing, and expired messages in orders topic
+curl -X POST -u admin:secret http://localhost:8080/api/topics/orders/purge \
+  -H "Content-Type: application/json" \
+  -d '{"statuses": ["pending", "processing", "expired"]}'
+
+# Purge only expired messages
+curl -X POST -u admin:secret http://localhost:8080/api/topics/orders/purge \
+  -H "Content-Type: application/json" \
+  -d '{"statuses": ["expired"]}'
+```
+
+**Response:** HTTP 200 OK
+```json
+{"deleted": 42}
+```
+
+**Errors:**
+- HTTP 400 — Invalid status value or invalid request body
+- HTTP 403 — Admin access required
+
+#### POST /api/admin/expiry-reaper/run
+
+Manually triggers the expiry reaper, which marks all messages with a passed `expires_at` timestamp as `expired`. This is the same operation that runs automatically every 60 seconds (if `queue.message_ttl` is not 0). Expired messages are **marked** but not deleted; use the delete reaper to permanently remove them.
+
+**Request body:** None (empty POST body)
+
+**Example:**
+```bash
+curl -X POST -u admin:secret http://localhost:8080/api/admin/expiry-reaper/run
+```
+
+**Response:** HTTP 200 OK
+```json
+{"expired": 12}
+```
+
+The response indicates how many messages were marked as expired by this run.
+
+**Errors:**
+- HTTP 403 — Admin access required
+
+#### POST /api/admin/delete-reaper/run
+
+Manually triggers the delete reaper, which permanently deletes all messages with `status = 'expired'`. This is the same operation that runs on the automatic schedule configured by `queue.delete_reaper_schedule` (if set). Messages are **permanently deleted** and cannot be recovered.
+
+**Request body:** None (empty POST body)
+
+**Example:**
+```bash
+curl -X POST -u admin:secret http://localhost:8080/api/admin/delete-reaper/run
+```
+
+**Response:** HTTP 200 OK
+```json
+{"deleted": 12}
+```
+
+The response indicates how many expired messages were permanently deleted by this run.
+
+**Errors:**
+- HTTP 403 — Admin access required
+
+### Maintenance
+
+#### Understanding the Reapers
+
+queue-ti uses two independent reaper processes to manage message expiry:
+
+**Expiry Reaper** — Marks messages as `expired` when their TTL has elapsed.
+- Runs automatically every 60 seconds (if `queue.message_ttl` is not 0)
+- Does not delete messages, only marks them with `status = 'expired'`
+- Can be triggered manually via `POST /api/admin/expiry-reaper/run`
+- Use this to identify and inspect expired messages before permanent deletion
+
+**Delete Reaper** — Permanently deletes messages with `status = 'expired'`.
+- Runs on a cron schedule configured by `queue.delete_reaper_schedule` (if set; default is empty/disabled)
+- Does not mark messages, only deletes those already marked as expired by the expiry reaper
+- Can be triggered manually via `POST /api/admin/delete-reaper/run`
+- Use this to permanently free up database space
+
+#### Configuring the Delete Reaper Schedule
+
+The delete reaper runs automatically on a configurable cron schedule. Use standard 5-field cron syntax (minute, hour, day, month, day-of-week):
+
+```yaml
+queue:
+  delete_reaper_schedule: "0 2 * * *"  # 2:00 AM every day
+```
+
+Or via environment variable:
+```bash
+QUEUETI_QUEUE_DELETE_REAPER_SCHEDULE="0 2 * * *"
+```
+
+**Common schedules:**
+
+| Schedule | When it runs |
+|----------|--------------|
+| `""` (empty) | Disabled (default) |
+| `0 2 * * *` | Daily at 2:00 AM |
+| `0 */6 * * *` | Every 6 hours |
+| `0 0 1 * *` | First day of each month |
+| `0 */2 * * *` | Every 2 hours |
+
+When the schedule is empty or disabled, the delete reaper only runs when triggered manually via `POST /api/admin/delete-reaper/run`.
+
+#### Typical Maintenance Workflow
+
+1. **Enable message TTL** in configuration (e.g., `queue.message_ttl: 24h`)
+   - Messages automatically expire after the configured duration
+   - Expiry reaper marks them as `expired` every 60 seconds
+2. **Set a delete reaper schedule** for your environment (e.g., `0 2 * * *` for nightly cleanup)
+   - Expired messages are permanently deleted according to the schedule
+   - This frees database space and keeps the queue table lean
+3. **Monitor** using the admin UI or `/api/stats` endpoint to track expired message accumulation
+4. **Manually trigger** either reaper via the admin UI Maintenance tab if immediate cleanup is needed (e.g., to handle an unexpected surge of expired messages)
+
+**Example: Daily cleanup at 2 AM with 24-hour TTL**
+
+```yaml
+queue:
+  message_ttl: 24h
+  delete_reaper_schedule: "0 2 * * *"
+```
+
+With this configuration:
+- Messages enqueued at 10:00 AM on Monday expire at 10:00 AM on Tuesday
+- Expiry reaper marks them as `expired` within 60 seconds of their expiry time
+- Delete reaper permanently removes them at 2:00 AM on Wednesday
+- The UI Maintenance tab shows current schedule and allows manual trigger for testing
 
 ## Observability
 

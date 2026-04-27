@@ -31,11 +31,12 @@ type DBConfig struct {
 }
 
 type QueueConfig struct {
-	VisibilityTimeout          time.Duration `mapstructure:"visibility_timeout"`
-	MaxRetries                 int           `mapstructure:"max_retries"`
-	MessageTTL                 time.Duration `mapstructure:"message_ttl"`
-	DLQThreshold               int           `mapstructure:"dlq_threshold"`
-	RequireTopicRegistration   bool          `mapstructure:"require_topic_registration"`
+	VisibilityTimeout        time.Duration `mapstructure:"visibility_timeout"`
+	MaxRetries               int           `mapstructure:"max_retries"`
+	MessageTTL               time.Duration `mapstructure:"message_ttl"`
+	DLQThreshold             int           `mapstructure:"dlq_threshold"`
+	RequireTopicRegistration bool          `mapstructure:"require_topic_registration"`
+	DeleteReaperSchedule     string        `mapstructure:"delete_reaper_schedule"`
 }
 
 type AuthConfig struct {
@@ -68,6 +69,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("queue.message_ttl", "24h")
 	viper.SetDefault("queue.dlq_threshold", 3)
 	viper.SetDefault("queue.require_topic_registration", false)
+	viper.SetDefault("queue.delete_reaper_schedule", "")
 	viper.SetDefault("auth.enabled", false)
 	viper.SetDefault("auth.username", "")
 	viper.SetDefault("auth.password", "")
@@ -88,6 +90,7 @@ func Load() (*Config, error) {
 	_ = viper.BindEnv("queue.message_ttl")
 	_ = viper.BindEnv("queue.dlq_threshold")
 	_ = viper.BindEnv("queue.require_topic_registration")
+	_ = viper.BindEnv("queue.delete_reaper_schedule")
 	_ = viper.BindEnv("auth.enabled")
 	_ = viper.BindEnv("auth.username")
 	_ = viper.BindEnv("auth.password")

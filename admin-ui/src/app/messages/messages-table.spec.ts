@@ -132,4 +132,172 @@ describe('MessagesTable', () => {
       expect(rows.length).toBe(3);
     });
   });
+
+  describe('Purge button', () => {
+    const typeInFilter = async (
+      fixture: Awaited<ReturnType<typeof setup>>['fixture'],
+      value: string,
+    ) => {
+      const el: HTMLElement = fixture.nativeElement;
+      const input = el.querySelector('input[type="text"]') as HTMLInputElement;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+    };
+
+    describe('when no topic filter is active', () => {
+      it('should not show the Purge button', async () => {
+        const { fixture } = await setup({ messages: [] });
+
+        const el: HTMLElement = fixture.nativeElement;
+        const purgeBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+          b.textContent?.trim() === 'Purge',
+        );
+        expect(purgeBtn).toBeUndefined();
+      });
+    });
+
+    describe('when a topic filter is active', () => {
+      it('should show the Purge button', async () => {
+        const { fixture } = await setup({ messages: [] });
+        await typeInFilter(fixture, 'orders');
+
+        const el: HTMLElement = fixture.nativeElement;
+        const purgeBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+          b.textContent?.trim() === 'Purge',
+        );
+        expect(purgeBtn).not.toBeUndefined();
+      });
+
+      it('should show the confirm panel when Purge is clicked', async () => {
+        const { fixture } = await setup({ messages: [] });
+        await typeInFilter(fixture, 'orders');
+
+        const el: HTMLElement = fixture.nativeElement;
+        const purgeBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+          b.textContent?.trim() === 'Purge',
+        ) as HTMLButtonElement;
+        purgeBtn.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(el.textContent).toContain('Purge messages from "orders"');
+        const confirmBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+          b.textContent?.trim() === 'Confirm purge',
+        );
+        expect(confirmBtn).not.toBeUndefined();
+      });
+
+      it('should hide the confirm panel when Cancel is clicked', async () => {
+        const { fixture } = await setup({ messages: [] });
+        await typeInFilter(fixture, 'orders');
+
+        const el: HTMLElement = fixture.nativeElement;
+        const purgeBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+          b.textContent?.trim() === 'Purge',
+        ) as HTMLButtonElement;
+        purgeBtn.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const cancelBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+          b.textContent?.trim() === 'Cancel',
+        ) as HTMLButtonElement;
+        cancelBtn.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const confirmBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+          b.textContent?.trim() === 'Confirm purge',
+        );
+        expect(confirmBtn).toBeUndefined();
+      });
+
+      it('should emit purge output with the correct topic and statuses when confirmed', async () => {
+        const { fixture } = await setup({ messages: [] });
+        await typeInFilter(fixture, 'orders');
+
+        const el: HTMLElement = fixture.nativeElement;
+        const emitted: { topic: string; statuses: string[] }[] = [];
+        fixture.componentInstance.purge.subscribe((v: { topic: string; statuses: string[] }) =>
+          emitted.push(v),
+        );
+
+        const purgeBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+          b.textContent?.trim() === 'Purge',
+        ) as HTMLButtonElement;
+        purgeBtn.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const confirmBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+          b.textContent?.trim() === 'Confirm purge',
+        ) as HTMLButtonElement;
+        confirmBtn.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(emitted.length).toBe(1);
+        expect(emitted[0].topic).toBe('orders');
+        expect(emitted[0].statuses).toEqual(['pending', 'processing', 'expired']);
+      });
+
+      it('should close the confirm panel after confirming', async () => {
+        const { fixture } = await setup({ messages: [] });
+        await typeInFilter(fixture, 'orders');
+
+        const el: HTMLElement = fixture.nativeElement;
+        const purgeBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+          b.textContent?.trim() === 'Purge',
+        ) as HTMLButtonElement;
+        purgeBtn.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const confirmBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+          b.textContent?.trim() === 'Confirm purge',
+        ) as HTMLButtonElement;
+        confirmBtn.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(
+          Array.from(el.querySelectorAll('button')).find((b) =>
+            b.textContent?.trim() === 'Confirm purge',
+          ),
+        ).toBeUndefined();
+      });
+
+      it('should emit only the checked statuses when a status is unchecked', async () => {
+        const { fixture, component } = await setup({ messages: [] });
+        await typeInFilter(fixture, 'orders');
+
+        // Uncheck 'expired'
+        component.togglePurgeStatus('expired');
+
+        const el: HTMLElement = fixture.nativeElement;
+        const emitted: { topic: string; statuses: string[] }[] = [];
+        fixture.componentInstance.purge.subscribe((v: { topic: string; statuses: string[] }) =>
+          emitted.push(v),
+        );
+
+        const purgeBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+          b.textContent?.trim() === 'Purge',
+        ) as HTMLButtonElement;
+        purgeBtn.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const confirmBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+          b.textContent?.trim() === 'Confirm purge',
+        ) as HTMLButtonElement;
+        confirmBtn.click();
+        await fixture.whenStable();
+
+        expect(emitted[0].statuses).toEqual(['pending', 'processing']);
+      });
+    });
+  });
 });

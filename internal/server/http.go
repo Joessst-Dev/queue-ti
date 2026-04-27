@@ -108,6 +108,9 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer promet
 	api.Put("/topic-schemas/:topic", jwtAuth, s.requireAdmin(), s.upsertTopicSchema)
 	api.Delete("/topic-schemas/:topic", jwtAuth, s.requireAdmin(), s.deleteTopicSchema)
 	api.Get("/topic-schemas/:topic", jwtAuth, s.requireAdmin(), s.getTopicSchema)
+	api.Post("/topics/:topic/purge", jwtAuth, s.requireAdmin(), s.purgeTopicMessages)
+	api.Post("/admin/expiry-reaper/run", jwtAuth, s.requireAdmin(), s.runExpiryReaperOnce)
+	api.Post("/admin/delete-reaper/run", jwtAuth, s.requireAdmin(), s.runDeleteReaperOnce)
 
 	s.App = app
 	return s
@@ -746,4 +749,65 @@ func (s *HTTPServer) getTopicSchema(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "schema not found"})
 	}
 	return c.JSON(toTopicSchemaResponse(*ts))
+}
+
+// ---------------------------------------------------------------------------
+// Admin operation handlers
+// ---------------------------------------------------------------------------
+
+var validPurgeStatuses = map[string]bool{
+	"pending":    true,
+	"processing": true,
+	"expired":    true,
+}
+
+type purgeTopicRequest struct {
+	Statuses []string `json:"statuses"`
+}
+
+func (s *HTTPServer) purgeTopicMessages(c *fiber.Ctx) error {
+	topic := c.Params("topic")
+
+	var req purgeTopicRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+
+	statuses := req.Statuses
+	if len(statuses) == 0 {
+		statuses = []string{"pending", "processing", "expired"}
+	}
+
+	for _, s := range statuses {
+		if !validPurgeStatuses[s] {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "invalid status: " + s + "; allowed values are pending, processing, expired",
+			})
+		}
+	}
+
+	n, err := s.queueService.PurgeTopic(c.Context(), topic, statuses)
+	if err != nil {
+		slog.Error("purge topic failed", "topic", topic, "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{"deleted": n})
+}
+
+func (s *HTTPServer) runExpiryReaperOnce(c *fiber.Ctx) error {
+	n, err := s.queueService.RunExpiryReaperOnce(c.Context())
+	if err != nil {
+		slog.Error("expiry reaper (manual) failed", "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{"expired": n})
+}
+
+func (s *HTTPServer) runDeleteReaperOnce(c *fiber.Ctx) error {
+	n, err := s.queueService.RunDeleteReaperOnce(c.Context())
+	if err != nil {
+		slog.Error("delete reaper (manual) failed", "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{"deleted": n})
 }

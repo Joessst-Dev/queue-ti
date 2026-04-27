@@ -16,6 +16,7 @@ import { QueueStatsChart } from './queue-stats-chart';
 import { TopicConfigSection } from './topic-config-section';
 import { TopicSchemaSection } from './topic-schema-section';
 import { UsersSection } from './users-section';
+import { MaintenanceSection } from './maintenance-section';
 
 interface EnqueueState {
   id: string;
@@ -25,7 +26,7 @@ interface EnqueueState {
 
 @Component({
   selector: 'app-messages',
-  imports: [MessagesHeader, MessagesTable, EnqueueSection, QueueStatsChart, TopicConfigSection, TopicSchemaSection, UsersSection],
+  imports: [MessagesHeader, MessagesTable, EnqueueSection, QueueStatsChart, TopicConfigSection, TopicSchemaSection, UsersSection, MaintenanceSection],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -51,6 +52,18 @@ interface EnqueueState {
 
       <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         @if (activeTab() === 'messages') {
+          @if (purgeResult()) {
+            <div class="mb-4 flex items-center justify-between p-3 bg-green-50 border border-green-200 text-green-800 rounded text-sm">
+              <span>{{ purgeResult()!.deleted }} messages purged successfully.</span>
+              <button type="button" (click)="purgeResult.set(null)" class="text-green-600 hover:text-green-800 cursor-pointer" aria-label="Dismiss purge result">&times;</button>
+            </div>
+          }
+          @if (purgeError()) {
+            <div class="mb-4 flex items-center justify-between p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+              <span>{{ purgeError() }}</span>
+              <button type="button" (click)="purgeError.set(null)" class="text-red-500 hover:text-red-700 cursor-pointer" aria-label="Dismiss purge error">&times;</button>
+            </div>
+          }
           <app-messages-table
             [messages]="allMessages()"
             [loading]="loadingMessages()"
@@ -59,6 +72,7 @@ interface EnqueueState {
             (scrollIndexChange)="onScrollIndexChange($event)"
             (requeue)="onRequeue($event)"
             (nackConfirm)="onNackConfirm($event)"
+            (purge)="onPurge($event)"
           />
         }
         @if (activeTab() === 'enqueue') {
@@ -81,6 +95,9 @@ interface EnqueueState {
         @if (activeTab() === 'users') {
           <app-users-section />
         }
+        @if (activeTab() === 'maintenance') {
+          <app-maintenance-section />
+        }
       </main>
     </div>
   `,
@@ -90,7 +107,7 @@ export class Messages {
   private readonly queue = inject(QueueService);
   private readonly router = inject(Router);
 
-  readonly activeTab = signal<'messages' | 'enqueue' | 'stats' | 'config' | 'schemas' | 'users'>('messages');
+  readonly activeTab = signal<'messages' | 'enqueue' | 'stats' | 'config' | 'schemas' | 'users' | 'maintenance'>('messages');
 
   readonly tabs = computed(() => {
     const base = [
@@ -101,10 +118,17 @@ export class Messages {
       { id: 'schemas'  as const, label: 'Schemas'  },
     ];
     if (this.auth.isAdmin()) {
-      return [...base, { id: 'users' as const, label: 'Users' }];
+      return [
+        ...base,
+        { id: 'users' as const, label: 'Users' },
+        { id: 'maintenance' as const, label: 'Maintenance' },
+      ];
     }
     return base;
   });
+
+  readonly purgeResult = signal<{ deleted: number } | null>(null);
+  readonly purgeError = signal<string | null>(null);
 
   private readonly requeueTrigger$ = new Subject<string>();
   private readonly nackTrigger$ = new Subject<{ id: string; error: string }>();
@@ -229,6 +253,20 @@ export class Messages {
 
   onEnqueueRequest(req: EnqueueRequest): void {
     this.enqueueTrigger$.next(req);
+  }
+
+  onPurge({ topic, statuses }: { topic: string; statuses: string[] }): void {
+    this.purgeResult.set(null);
+    this.purgeError.set(null);
+    this.queue.purgeTopic(topic, statuses).subscribe({
+      next: (res) => {
+        this.purgeResult.set(res);
+        this.loadMessages();
+      },
+      error: (err: { error?: { error?: string } }) => {
+        this.purgeError.set(err.error?.error ?? 'Failed to purge topic');
+      },
+    });
   }
 
   onLogout(): void {

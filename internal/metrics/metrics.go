@@ -18,6 +18,7 @@ type Recorder struct {
 	nacked   *prometheus.CounterVec
 	requeued *prometheus.CounterVec
 	expired  prometheus.Counter
+	deleted  prometheus.Counter
 }
 
 // New creates a Recorder and a DepthCollector, registers both with reg.
@@ -61,8 +62,13 @@ func newRecorder(reg prometheus.Registerer) *Recorder {
 			Name:      "expired_total",
 			Help:      "Total messages expired by the reaper.",
 		}),
+		deleted: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: ns,
+			Name:      "messages_deleted_total",
+			Help:      "Total messages permanently deleted by the delete reaper.",
+		}),
 	}
-	reg.MustRegister(r.enqueued, r.dequeued, r.acked, r.nacked, r.requeued, r.expired)
+	reg.MustRegister(r.enqueued, r.dequeued, r.acked, r.nacked, r.requeued, r.expired, r.deleted)
 	return r
 }
 
@@ -72,6 +78,7 @@ func (r *Recorder) RecordAck(topic string)           { r.acked.WithLabelValues(t
 func (r *Recorder) RecordNack(topic, outcome string) { r.nacked.WithLabelValues(topic, outcome).Inc() }
 func (r *Recorder) RecordRequeue(topic string)       { r.requeued.WithLabelValues(topic).Inc() }
 func (r *Recorder) RecordExpired(n int64)            { r.expired.Add(float64(n)) }
+func (r *Recorder) RecordDeleted(n int64)            { r.deleted.Add(float64(n)) }
 
 type depthCollector struct {
 	pool *pgxpool.Pool

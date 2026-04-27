@@ -9,6 +9,7 @@ type MetricsRecorder interface {
 	RecordNack(topic, outcome string) // outcome: "retry" | "failed" | "dlq"
 	RecordRequeue(topic string)
 	RecordExpired(n int64)
+	RecordDeleted(n int64)
 }
 
 // NoopRecorder is a MetricsRecorder that discards all observations.
@@ -21,3 +22,4 @@ func (NoopRecorder) RecordAck(string)       {}
 func (NoopRecorder) RecordNack(_, _ string) {}
 func (NoopRecorder) RecordRequeue(string)   {}
 func (NoopRecorder) RecordExpired(int64)    {}
+func (NoopRecorder) RecordDeleted(int64)    {}

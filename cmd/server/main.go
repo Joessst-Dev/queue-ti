@@ -48,6 +48,7 @@ func main() {
 		"dlq_threshold", cfg.Queue.DLQThreshold,
 		"message_ttl", cfg.Queue.MessageTTL,
 		"auth_enabled", cfg.Auth.Enabled,
+		"delete_reaper_schedule", cfg.Queue.DeleteReaperSchedule,
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -91,6 +92,12 @@ func main() {
 
 	queueService := queue.NewService(pool, cfg.Queue.VisibilityTimeout, cfg.Queue.MaxRetries, cfg.Queue.MessageTTL, cfg.Queue.DLQThreshold, cfg.Queue.RequireTopicRegistration, rec)
 	queueService.StartExpiryReaper(ctx, time.Minute)
+	stopDeleteReaper, err := queueService.StartDeleteReaper(ctx, cfg.Queue.DeleteReaperSchedule)
+	if err != nil {
+		slog.Error("failed to start delete reaper", "error", err)
+		os.Exit(1)
+	}
+	defer stopDeleteReaper()
 
 	var opts []grpc.ServerOption
 	if cfg.Auth.Enabled {

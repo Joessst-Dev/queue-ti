@@ -122,4 +122,16 @@ export class QueueService {
   deleteTopicSchema(topic: string): Observable<void> {
     return this.http.delete<void>(`/api/topic-schemas/${topic}`);
   }
+
+  purgeTopic(topic: string, statuses: string[]): Observable<{ deleted: number }> {
+    return this.http.post<{ deleted: number }>(`/api/topics/${topic}/purge`, { statuses });
+  }
+
+  runExpiryReaper(): Observable<{ expired: number }> {
+    return this.http.post<{ expired: number }>('/api/admin/expiry-reaper/run', {});
+  }
+
+  runDeleteReaper(): Observable<{ deleted: number }> {
+    return this.http.post<{ deleted: number }>('/api/admin/delete-reaper/run', {});
+  }
 }
