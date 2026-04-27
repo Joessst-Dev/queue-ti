@@ -217,6 +217,107 @@ var _ = Describe("gRPC Server", func() {
 		})
 	})
 
+	// Tests for the Subscribe server-streaming RPC endpoint
+	Describe("Subscribe", func() {
+		Context("given an empty topic in the request", func() {
+			It("returns InvalidArgument", func() {
+				stream, err := client.Subscribe(ctx, &pb.SubscribeRequest{Topic: ""})
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = stream.Recv()
+				Expect(err).To(HaveOccurred())
+				st, _ := status.FromError(err)
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+			})
+		})
+
+		Context("given an invalid visibility_timeout_seconds of 0", func() {
+			It("returns InvalidArgument", func() {
+				timeout := uint32(0)
+				stream, err := client.Subscribe(ctx, &pb.SubscribeRequest{
+					Topic:                    "subscribe-topic",
+					VisibilityTimeoutSeconds: &timeout,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = stream.Recv()
+				Expect(err).To(HaveOccurred())
+				st, _ := status.FromError(err)
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+			})
+		})
+
+		Context("given a topic with no messages", func() {
+			It("blocks and does not send any message within a short window", func() {
+				shortCtx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+				defer cancel()
+
+				stream, err := client.Subscribe(shortCtx, &pb.SubscribeRequest{Topic: "empty-subscribe-topic"})
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = stream.Recv()
+				Expect(err).To(HaveOccurred())
+				// Expect a deadline/cancellation error, not a real message
+				st, _ := status.FromError(err)
+				Expect(st.Code()).To(Or(
+					Equal(codes.DeadlineExceeded),
+					Equal(codes.Canceled),
+				))
+			})
+		})
+
+		Context("given a message is enqueued before subscribing", func() {
+			It("delivers the message over the stream", func() {
+				_, err := client.Enqueue(ctx, &pb.EnqueueRequest{
+					Topic:   "subscribe-before-topic",
+					Payload: []byte("before-subscribe"),
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				recvCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				defer cancel()
+
+				stream, err := client.Subscribe(recvCtx, &pb.SubscribeRequest{Topic: "subscribe-before-topic"})
+				Expect(err).NotTo(HaveOccurred())
+
+				msg, err := stream.Recv()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msg.Payload).To(Equal([]byte("before-subscribe")))
+				Expect(msg.Topic).To(Equal("subscribe-before-topic"))
+				Expect(msg.Id).NotTo(BeEmpty())
+			})
+		})
+
+		Context("given messages are enqueued after the stream is open", func() {
+			It("delivers each message as it arrives", func() {
+				recvCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				defer cancel()
+
+				stream, err := client.Subscribe(recvCtx, &pb.SubscribeRequest{Topic: "subscribe-after-topic"})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Enqueue 3 messages in a goroutine after a brief pause to ensure
+				// the subscriber is already polling before messages arrive.
+				go func() {
+					time.Sleep(50 * time.Millisecond)
+					for i := 0; i < 3; i++ {
+						_, enqErr := client.Enqueue(ctx, &pb.EnqueueRequest{
+							Topic:   "subscribe-after-topic",
+							Payload: []byte("after-message"),
+						})
+						Expect(enqErr).NotTo(HaveOccurred())
+					}
+				}()
+
+				for i := 0; i < 3; i++ {
+					msg, recvErr := stream.Recv()
+					Expect(recvErr).NotTo(HaveOccurred())
+					Expect(msg.Payload).To(Equal([]byte("after-message")))
+				}
+			})
+		})
+	})
+
 	// Tests for the Nack RPC endpoint
 	Describe("Nack", func() {
 		Context("Given a message that is currently being processed", func() {

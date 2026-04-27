@@ -19,10 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	QueueService_Enqueue_FullMethodName = "/queue.QueueService/Enqueue"
-	QueueService_Dequeue_FullMethodName = "/queue.QueueService/Dequeue"
-	QueueService_Ack_FullMethodName     = "/queue.QueueService/Ack"
-	QueueService_Nack_FullMethodName    = "/queue.QueueService/Nack"
+	QueueService_Enqueue_FullMethodName   = "/queue.QueueService/Enqueue"
+	QueueService_Dequeue_FullMethodName   = "/queue.QueueService/Dequeue"
+	QueueService_Ack_FullMethodName       = "/queue.QueueService/Ack"
+	QueueService_Nack_FullMethodName      = "/queue.QueueService/Nack"
+	QueueService_Subscribe_FullMethodName = "/queue.QueueService/Subscribe"
 )
 
 // QueueServiceClient is the client API for QueueService service.
@@ -33,6 +34,7 @@ type QueueServiceClient interface {
 	Dequeue(ctx context.Context, in *DequeueRequest, opts ...grpc.CallOption) (*DequeueResponse, error)
 	Ack(ctx context.Context, in *AckRequest, opts ...grpc.CallOption) (*AckResponse, error)
 	Nack(ctx context.Context, in *NackRequest, opts ...grpc.CallOption) (*NackResponse, error)
+	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SubscribeResponse], error)
 }
 
 type queueServiceClient struct {
@@ -83,6 +85,25 @@ func (c *queueServiceClient) Nack(ctx context.Context, in *NackRequest, opts ...
 	return out, nil
 }
 
+func (c *queueServiceClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SubscribeResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &QueueService_ServiceDesc.Streams[0], QueueService_Subscribe_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SubscribeRequest, SubscribeResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type QueueService_SubscribeClient = grpc.ServerStreamingClient[SubscribeResponse]
+
 // QueueServiceServer is the server API for QueueService service.
 // All implementations must embed UnimplementedQueueServiceServer
 // for forward compatibility.
@@ -91,6 +112,7 @@ type QueueServiceServer interface {
 	Dequeue(context.Context, *DequeueRequest) (*DequeueResponse, error)
 	Ack(context.Context, *AckRequest) (*AckResponse, error)
 	Nack(context.Context, *NackRequest) (*NackResponse, error)
+	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[SubscribeResponse]) error
 	mustEmbedUnimplementedQueueServiceServer()
 }
 
@@ -112,6 +134,9 @@ func (UnimplementedQueueServiceServer) Ack(context.Context, *AckRequest) (*AckRe
 }
 func (UnimplementedQueueServiceServer) Nack(context.Context, *NackRequest) (*NackResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Nack not implemented")
+}
+func (UnimplementedQueueServiceServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[SubscribeResponse]) error {
+	return status.Error(codes.Unimplemented, "method Subscribe not implemented")
 }
 func (UnimplementedQueueServiceServer) mustEmbedUnimplementedQueueServiceServer() {}
 func (UnimplementedQueueServiceServer) testEmbeddedByValue()                      {}
@@ -206,6 +231,17 @@ func _QueueService_Nack_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _QueueService_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SubscribeRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(QueueServiceServer).Subscribe(m, &grpc.GenericServerStream[SubscribeRequest, SubscribeResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type QueueService_SubscribeServer = grpc.ServerStreamingServer[SubscribeResponse]
+
 // QueueService_ServiceDesc is the grpc.ServiceDesc for QueueService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -230,6 +266,12 @@ var QueueService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _QueueService_Nack_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Subscribe",
+			Handler:       _QueueService_Subscribe_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "queue.proto",
 }

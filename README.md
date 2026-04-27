@@ -16,6 +16,30 @@ A distributed message queue service built with Go gRPC and PostgreSQL, with an A
 - **Avro schema validation** — Optional per-topic Avro schema registration; payloads are validated at enqueue time with compiled schemas cached in memory
 - **Admin UI** — Angular-based web interface to list messages with detailed status, retry counts, and expiry information; filter by topic; manually enqueue test messages; inspect dead-letter queue messages; requeue or inline-nack processing messages; configure per-topic settings
 - **Configuration** — YAML-based global configuration with environment variable overrides via `QUEUETI_` prefix; per-topic overrides for retry count, TTL, and queue depth limits via HTTP API or admin UI
+- **Go client library** — `github.com/Joessst-Dev/queue-ti/client` provides a high-level Producer/Consumer API with automatic reconnection, concurrency control, and ack/nack handling
+
+## Go Client Library
+
+The `client/` package is a Go library for building producers and consumers against queue-ti's gRPC API.
+
+```go
+// Connect
+c, _ := queueti.Dial("localhost:50051", queueti.WithInsecure())
+defer c.Close()
+
+// Publish
+producer := c.NewProducer()
+id, _ := producer.Publish(ctx, "orders", []byte(`{"amount":99}`))
+
+// Consume (blocks until ctx cancelled)
+consumer := c.NewConsumer("orders", queueti.WithConcurrency(4))
+consumer.Consume(ctx, func(ctx context.Context, msg *queueti.Message) error {
+    fmt.Println(string(msg.Payload))
+    return nil // nil = Ack, error = Nack
+})
+```
+
+See [client/README.md](client/README.md) for the full API reference, authentication setup, error handling, and complete examples.
 
 ## Quick Start
 
@@ -1617,7 +1641,16 @@ queue-ti/
 ├── Dockerfile               Containerizes the backend
 ├── docker-compose.yaml      Multi-container setup (PostgreSQL + backend + frontend)
 ├── config.yaml              Default configuration (overridable via env vars)
-├── go.mod, go.sum           Go module definition
+├── go.mod, go.sum           Go module definition (root module)
+├── go.work                  Go workspace — includes root and client/ modules
+├── client/                  Go client library (separate module)
+│   ├── go.mod               Module: github.com/Joessst-Dev/queue-ti/client
+│   ├── client.go            Dial, NewProducer, NewConsumer
+│   ├── producer.go          Producer.Publish
+│   ├── consumer.go          Consumer.Consume with auto-reconnect
+│   ├── message.go           Message type with Ack/Nack methods
+│   ├── options.go           Dial and consumer functional options
+│   └── README.md            Full library documentation
 ├── proto/
 │   └── queue.proto          gRPC service definition
 ├── pb/                      Generated protobuf Go bindings (read-only)

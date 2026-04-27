@@ -139,6 +139,72 @@ func (s *GRPCServer) Ack(ctx context.Context, req *pb.AckRequest) (*pb.AckRespon
 	return &pb.AckResponse{}, nil
 }
 
+func (s *GRPCServer) Subscribe(req *pb.SubscribeRequest, stream pb.QueueService_SubscribeServer) error {
+	if req.Topic == "" {
+		return status.Error(codes.InvalidArgument, "topic is required")
+	}
+
+	var vt time.Duration
+	if req.VisibilityTimeoutSeconds != nil {
+		if *req.VisibilityTimeoutSeconds == 0 {
+			return status.Error(codes.InvalidArgument, "visibility_timeout_seconds must be greater than zero")
+		}
+		vt = time.Duration(*req.VisibilityTimeoutSeconds) * time.Second
+	}
+
+	if err := s.checkGrant(stream.Context(), "write", req.Topic); err != nil {
+		return err
+	}
+
+	const (
+		minBackoff = 250 * time.Millisecond
+		maxBackoff = 2 * time.Second
+	)
+	backoff := minBackoff
+
+	for {
+		if stream.Context().Err() != nil {
+			return nil
+		}
+
+		msg, err := s.queueService.Dequeue(stream.Context(), req.Topic, vt)
+		if err != nil {
+			if stream.Context().Err() != nil {
+				return nil
+			}
+			if errors.Is(err, queue.ErrNoMessage) {
+				select {
+				case <-time.After(backoff):
+				case <-stream.Context().Done():
+					return nil
+				}
+				if backoff < maxBackoff {
+					backoff *= 2
+					if backoff > maxBackoff {
+						backoff = maxBackoff
+					}
+				}
+				continue
+			}
+			slog.Error("grpc subscribe dequeue failed", "topic", req.Topic, "error", err)
+			return status.Errorf(codes.Internal, "failed to dequeue: %v", err)
+		}
+
+		backoff = minBackoff
+
+		if err := stream.Send(&pb.SubscribeResponse{
+			Id:        msg.ID,
+			Topic:     msg.Topic,
+			Payload:   msg.Payload,
+			Metadata:  msg.Metadata,
+			CreatedAt: timestamppb.New(msg.CreatedAt),
+			RetryCount: int32(msg.RetryCount),
+		}); err != nil {
+			return err
+		}
+	}
+}
+
 func (s *GRPCServer) Nack(ctx context.Context, req *pb.NackRequest) (*pb.NackResponse, error) {
 	if req.Id == "" {
 		return nil, status.Error(codes.InvalidArgument, "id is required")
