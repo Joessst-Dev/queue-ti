@@ -92,7 +92,13 @@ func main() {
 
 	queueService := queue.NewService(pool, cfg.Queue.VisibilityTimeout, cfg.Queue.MaxRetries, cfg.Queue.MessageTTL, cfg.Queue.DLQThreshold, cfg.Queue.RequireTopicRegistration, rec)
 	queueService.StartExpiryReaper(ctx, time.Minute)
-	stopDeleteReaper, err := queueService.StartDeleteReaper(ctx, cfg.Queue.DeleteReaperSchedule)
+
+	reaperSchedule := cfg.Queue.DeleteReaperSchedule
+	if dbSchedule, dbErr := queueService.GetDeleteReaperSchedule(ctx); dbErr == nil && dbSchedule != "" {
+		reaperSchedule = dbSchedule
+		slog.Info("delete reaper schedule loaded from database", "schedule", reaperSchedule)
+	}
+	stopDeleteReaper, err := queueService.StartDeleteReaper(ctx, reaperSchedule)
 	if err != nil {
 		slog.Error("failed to start delete reaper", "error", err)
 		os.Exit(1)

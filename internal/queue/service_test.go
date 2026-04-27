@@ -1443,6 +1443,97 @@ var _ = Describe("Queue Service", func() {
 		})
 	})
 
+	Describe("GetDeleteReaperSchedule", func() {
+		Context("when no schedule has been persisted", func() {
+			It("should return an empty string", func() {
+				schedule, err := service.GetDeleteReaperSchedule(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(schedule).To(Equal(""))
+			})
+		})
+
+		Context("when a schedule has been persisted", func() {
+			It("should return the stored schedule", func() {
+				_, err := pool.Exec(ctx, `
+					INSERT INTO system_settings (key, value) VALUES ('delete_reaper_schedule', '0 3 * * *')
+					ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+				`)
+				Expect(err).NotTo(HaveOccurred())
+
+				schedule, err := service.GetDeleteReaperSchedule(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(schedule).To(Equal("0 3 * * *"))
+			})
+		})
+	})
+
+	Describe("UpdateDeleteReaperSchedule", func() {
+		BeforeEach(func() {
+			_, err := pool.Exec(ctx, "DELETE FROM system_settings")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when given a valid cron expression", func() {
+			It("should persist the schedule to the database", func() {
+				err := service.UpdateDeleteReaperSchedule(ctx, "0 4 * * *")
+				Expect(err).NotTo(HaveOccurred())
+
+				schedule, err := service.GetDeleteReaperSchedule(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(schedule).To(Equal("0 4 * * *"))
+			})
+
+			It("should start the new cron", func() {
+				var messageID string
+				err := pool.QueryRow(ctx, `
+					INSERT INTO messages (topic, payload, status, max_retries)
+					VALUES ('update-sched-topic', 'msg', 'expired', 3)
+					RETURNING id
+				`).Scan(&messageID)
+				Expect(err).NotTo(HaveOccurred())
+
+				err = service.UpdateDeleteReaperSchedule(ctx, "@every 50ms")
+				Expect(err).NotTo(HaveOccurred())
+
+				Eventually(func() int {
+					var count int
+					_ = pool.QueryRow(ctx,
+						`SELECT COUNT(*) FROM messages WHERE id = $1`, messageID,
+					).Scan(&count)
+					return count
+				}, "2s", "50ms").Should(Equal(0))
+			})
+		})
+
+		Context("when given an invalid cron expression", func() {
+			It("should return an error and not modify the database", func() {
+				err := service.UpdateDeleteReaperSchedule(ctx, "not-a-cron")
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("invalid cron schedule"))
+
+				schedule, _ := service.GetDeleteReaperSchedule(ctx)
+				Expect(schedule).To(Equal(""))
+			})
+		})
+
+		Context("when given an empty schedule", func() {
+			It("should persist empty and not start a cron", func() {
+				_, err := pool.Exec(ctx, `
+					INSERT INTO system_settings (key, value) VALUES ('delete_reaper_schedule', '0 5 * * *')
+					ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+				`)
+				Expect(err).NotTo(HaveOccurred())
+
+				err = service.UpdateDeleteReaperSchedule(ctx, "")
+				Expect(err).NotTo(HaveOccurred())
+
+				schedule, err := service.GetDeleteReaperSchedule(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(schedule).To(Equal(""))
+			})
+		})
+	})
+
 	Describe("StartDeleteReaper advisory lock", func() {
 		Context("Given another instance holds the advisory lock", func() {
 			It("should skip the cron tick without deleting messages", func() {

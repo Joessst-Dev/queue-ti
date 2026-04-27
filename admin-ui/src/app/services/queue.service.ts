@@ -65,6 +65,11 @@ export interface TopicConfigsResponse {
   items: TopicConfig[];
 }
 
+export interface DeleteReaperSchedule {
+  schedule: string;
+  active: boolean;
+}
+
 export const PAGE_SIZE = 50;
 
 @Injectable({ providedIn: 'root' })
@@ -139,5 +144,13 @@ export class QueueService {
 
   runDeleteReaper(): Observable<{ deleted: number }> {
     return this.http.post<{ deleted: number }>('/api/admin/delete-reaper/run', {});
+  }
+
+  getDeleteReaperSchedule(): Observable<DeleteReaperSchedule> {
+    return this.http.get<DeleteReaperSchedule>('/api/admin/delete-reaper/schedule');
+  }
+
+  updateDeleteReaperSchedule(schedule: string): Observable<DeleteReaperSchedule> {
+    return this.http.put<DeleteReaperSchedule>('/api/admin/delete-reaper/schedule', { schedule });
   }
 }

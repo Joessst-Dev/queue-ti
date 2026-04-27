@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -56,6 +57,9 @@ type Service struct {
 	dlqThreshold             int
 	requireTopicRegistration bool
 	recorder                 MetricsRecorder
+
+	deleteReaperMu   sync.Mutex
+	deleteReaperStop func()
 }
 
 // Pool returns the underlying connection pool. It is intentionally narrow —
@@ -747,12 +751,18 @@ func (s *Service) PurgeByKey(ctx context.Context, topic, key string) (int64, err
 	return tag.RowsAffected(), nil
 }
 
-// StartDeleteReaper schedules RunDeleteReaperOnce using the given cron
+// StartDeleteReaper schedules the delete reaper using the given cron
 // expression. If schedule is empty it is a no-op and returns a no-op stop
 // function. The stop function stops the cron scheduler gracefully.
+// The stop func is also stored internally so UpdateDeleteReaperSchedule can
+// swap the cron at runtime.
 func (s *Service) StartDeleteReaper(ctx context.Context, schedule string) (stop func(), err error) {
 	if schedule == "" {
-		return func() {}, nil
+		noop := func() {}
+		s.deleteReaperMu.Lock()
+		s.deleteReaperStop = noop
+		s.deleteReaperMu.Unlock()
+		return noop, nil
 	}
 
 	c := cron.New()
@@ -777,5 +787,56 @@ func (s *Service) StartDeleteReaper(ctx context.Context, schedule string) (stop 
 	}
 
 	c.Start()
-	return func() { c.Stop() }, nil
+	stopFn := func() { c.Stop() }
+	s.deleteReaperMu.Lock()
+	s.deleteReaperStop = stopFn
+	s.deleteReaperMu.Unlock()
+	return stopFn, nil
+}
+
+// GetDeleteReaperSchedule returns the cron schedule stored in system_settings.
+// Returns "" if no schedule has been persisted.
+func (s *Service) GetDeleteReaperSchedule(ctx context.Context) (string, error) {
+	var schedule string
+	err := s.pool.QueryRow(ctx,
+		`SELECT value FROM system_settings WHERE key = 'delete_reaper_schedule'`,
+	).Scan(&schedule)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get delete reaper schedule: %w", err)
+	}
+	return schedule, nil
+}
+
+// UpdateDeleteReaperSchedule validates schedule, persists it to system_settings,
+// stops the current cron, and starts a new one. An empty schedule disables the cron.
+func (s *Service) UpdateDeleteReaperSchedule(ctx context.Context, schedule string) error {
+	if schedule != "" {
+		if _, parseErr := cron.ParseStandard(schedule); parseErr != nil {
+			return fmt.Errorf("invalid cron schedule: %w", parseErr)
+		}
+	}
+
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO system_settings (key, value) VALUES ('delete_reaper_schedule', $1)
+		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+	`, schedule)
+	if err != nil {
+		return fmt.Errorf("persist delete reaper schedule: %w", err)
+	}
+
+	s.deleteReaperMu.Lock()
+	if s.deleteReaperStop != nil {
+		s.deleteReaperStop()
+		s.deleteReaperStop = nil
+	}
+	s.deleteReaperMu.Unlock()
+
+	if schedule == "" {
+		return nil
+	}
+	_, err = s.StartDeleteReaper(ctx, schedule)
+	return err
 }

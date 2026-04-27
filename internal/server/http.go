@@ -119,6 +119,8 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer promet
 	api.Delete("/topics/:topic/messages/by-key/:key", jwtAuth, s.requireAdmin(), s.purgeByKeyMessages)
 	api.Post("/admin/expiry-reaper/run", jwtAuth, s.requireAdmin(), s.runExpiryReaperOnce)
 	api.Post("/admin/delete-reaper/run", jwtAuth, s.requireAdmin(), s.runDeleteReaperOnce)
+	api.Get("/admin/delete-reaper/schedule", jwtAuth, s.requireAdmin(), s.getDeleteReaperSchedule)
+	api.Put("/admin/delete-reaper/schedule", jwtAuth, s.requireAdmin(), s.updateDeleteReaperSchedule)
 
 	s.App = app
 	return s
@@ -910,4 +912,25 @@ func (s *HTTPServer) runDeleteReaperOnce(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 	return c.JSON(fiber.Map{"deleted": n})
+}
+
+func (s *HTTPServer) getDeleteReaperSchedule(c *fiber.Ctx) error {
+	schedule, err := s.queueService.GetDeleteReaperSchedule(c.Context())
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{"schedule": schedule, "active": schedule != ""})
+}
+
+func (s *HTTPServer) updateDeleteReaperSchedule(c *fiber.Ctx) error {
+	var req struct {
+		Schedule string `json:"schedule"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+	if err := s.queueService.UpdateDeleteReaperSchedule(c.Context(), req.Schedule); err != nil {
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{"schedule": req.Schedule, "active": req.Schedule != ""})
 }

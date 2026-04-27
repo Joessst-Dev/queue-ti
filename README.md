@@ -1492,6 +1492,73 @@ The response indicates how many expired messages were permanently deleted by thi
 **Errors:**
 - HTTP 403 — Admin access required
 
+#### GET /api/admin/delete-reaper/schedule
+
+Returns the current delete reaper cron schedule and activation status.
+
+**Request:**
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:8080/api/admin/delete-reaper/schedule
+```
+
+**Response:** HTTP 200 OK
+```json
+{
+  "schedule": "0 2 * * *",
+  "active": true
+}
+```
+
+**Fields:**
+- `schedule` (string) — The cron expression (e.g., `"0 2 * * *"` for 2 AM daily; empty string if disabled)
+- `active` (boolean) — Whether the delete reaper is currently active (true if schedule is non-empty)
+
+**Errors:**
+- HTTP 403 — Admin access required
+
+#### PUT /api/admin/delete-reaper/schedule
+
+Updates the delete reaper cron schedule. The new schedule is persisted to the database, applied immediately to the running instance, and will be used on future server restarts.
+
+**Request body:**
+```json
+{
+  "schedule": "0 */6 * * *"
+}
+```
+
+**Fields:**
+- `schedule` (string) — A valid 5-field cron expression; pass empty string to disable the delete reaper
+
+**Example:**
+```bash
+# Change to every 6 hours
+curl -X PUT -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"schedule": "0 */6 * * *"}' \
+  http://localhost:8080/api/admin/delete-reaper/schedule
+
+# Disable the delete reaper
+curl -X PUT -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"schedule": ""}' \
+  http://localhost:8080/api/admin/delete-reaper/schedule
+```
+
+**Response:** HTTP 200 OK
+```json
+{
+  "schedule": "0 */6 * * *",
+  "active": true
+}
+```
+
+The response echoes back the newly stored schedule and updated activation status.
+
+**Errors:**
+- HTTP 403 — Admin access required
+- HTTP 422 — Invalid cron expression (e.g., `"not a cron"`)
+
 ### Maintenance
 
 #### Understanding the Reapers
@@ -1512,7 +1579,13 @@ queue-ti uses two independent reaper processes to manage message expiry:
 
 #### Configuring the Delete Reaper Schedule
 
-The delete reaper runs automatically on a configurable cron schedule. Use standard 5-field cron syntax (minute, hour, day, month, day-of-week):
+The delete reaper runs automatically on a configurable cron schedule. Use standard 5-field cron syntax (minute, hour, day, month, day-of-week). The schedule can be configured in three ways:
+
+1. **Static configuration** — Set at startup via `config.yaml` or `QUEUETI_QUEUE_DELETE_REAPER_SCHEDULE` env var
+2. **Database storage** — The schedule is persisted in the `system_settings` table; this takes precedence over static config on subsequent restarts
+3. **Runtime configuration** — Change the schedule live from the admin UI without restarting; the change applies immediately to the running instance
+
+**Static configuration (config.yaml):**
 
 ```yaml
 queue:
@@ -1534,7 +1607,24 @@ QUEUETI_QUEUE_DELETE_REAPER_SCHEDULE="0 2 * * *"
 | `0 0 1 * *` | First day of each month |
 | `0 */2 * * *` | Every 2 hours |
 
+**Runtime configuration (Admin UI):**
+
+The admin UI's **Admin → Delete Reaper** section displays the current schedule and allows you to change it without restarting the server:
+- Shows the active schedule and a status badge (Active / Not configured)
+- Edit the cron expression in the input field
+- Click **Save** to validate the cron syntax and apply the new schedule immediately
+- A feedback message indicates success or displays the validation error
+
+**How precedence works:**
+
+On server startup:
+1. If a schedule exists in the `system_settings` database table (from a prior Admin UI change), that schedule is used
+2. Otherwise, the `QUEUETI_QUEUE_DELETE_REAPER_SCHEDULE` env var / `config.yaml` value is used
+3. If both are absent or empty, the delete reaper is disabled
+
 When the schedule is empty or disabled, the delete reaper only runs when triggered manually via `POST /api/admin/delete-reaper/run`.
+
+**Multi-instance note:** When using multiple queue-ti instances behind a load balancer, a schedule change via the Admin UI updates the database and restarts the cron only on the instance that received the API request. Other instances will pick up the new schedule on their next restart. For immediate consistency across all instances, restart them after changing the schedule via the Admin UI.
 
 #### Typical Maintenance Workflow
 
@@ -1542,10 +1632,12 @@ When the schedule is empty or disabled, the delete reaper only runs when trigger
    - Messages automatically expire after the configured duration
    - Expiry reaper marks them as `expired` every 60 seconds
 2. **Set a delete reaper schedule** for your environment (e.g., `0 2 * * *` for nightly cleanup)
+   - Configure via `config.yaml` / env var at startup, or change live from the admin UI
    - Expired messages are permanently deleted according to the schedule
    - This frees database space and keeps the queue table lean
 3. **Monitor** using the admin UI or `/api/stats` endpoint to track expired message accumulation
 4. **Manually trigger** either reaper via the admin UI Maintenance tab if immediate cleanup is needed (e.g., to handle an unexpected surge of expired messages)
+5. **Adjust the schedule** at runtime from the admin UI (Admin → Delete Reaper section) without restarting
 
 **Example: Daily cleanup at 2 AM with 24-hour TTL**
 
