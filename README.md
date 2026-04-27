@@ -119,6 +119,8 @@ The admin UI is available at `http://localhost:8081` (login: `admin` / `secret`)
 
 The `client/` package provides a high-level Producer/Consumer API for building applications that enqueue and dequeue messages from queue-ti's gRPC service.
 
+### Single-Message Consumer
+
 ```go
 // Connect — token refreshes automatically before expiry
 c, _ := queueti.Dial("localhost:50051",
@@ -139,6 +141,48 @@ consumer.Consume(ctx, func(ctx context.Context, msg *queueti.Message) error {
     return nil // nil = Ack, error = Nack
 })
 ```
+
+### Batch Consumer
+
+For high-throughput scenarios, use batch dequeue to consume multiple messages in a single RPC call:
+
+```go
+c, _ := queueti.Dial("localhost:50051",
+    queueti.WithInsecure(),
+    queueti.WithBearerToken(initialToken),
+)
+defer c.Close()
+
+consumer := c.NewConsumer("orders", queueti.WithConcurrency(4))
+
+// ConsumeBatch dequeues up to batchSize messages and calls handler once
+// with all messages. Each message has individual Ack() and Nack() closures.
+consumer.ConsumeBatch(ctx, 10, func(ctx context.Context, messages []*queueti.BatchMessage) error {
+    for _, msg := range messages {
+        if err := processOrder(msg.Payload); err != nil {
+            msg.Nack("processing failed: " + err.Error())
+            continue
+        }
+        msg.Ack()
+    }
+    return nil // Handler return value is for fatal errors; individual messages use Ack/Nack
+})
+```
+
+**BatchMessage** fields and methods:
+- `Payload` ([]byte) — Message content
+- `Metadata` (map[string]string) — Message metadata
+- `CreatedAt` (time.Time) — Enqueue timestamp
+- `RetryCount` (int) — Current retry count
+- `MaxRetries` (int) — Maximum retries allowed
+- `Ack()` — Acknowledge the message (removes it from the queue)
+- `Nack(reason string)` — Nack the message (optionally with error reason); triggers retry or DLQ promotion
+
+**ConsumeBatch behavior**:
+- Dequeues up to `batchSize` messages (1–1000) in a single gRPC call
+- Returns immediately with available messages (0 to batchSize); never blocks waiting for more
+- Each message in the batch is individually locked and can be acked or nacked independently
+- Auto-reconnect and token refresh work the same as single-message `Consume`
 
 See [client/README.md](client/README.md) for the full API reference, authentication setup, error handling, and examples.
 
@@ -838,6 +882,7 @@ cmd/server/main.go
     ├── /api/auth/status                     GET    Authentication status
     ├── /api/messages                        GET    List messages (with optional topic filter)
     ├── /api/messages                        POST   Enqueue a message
+    ├── /api/messages/dequeue                POST   Dequeue up to N messages from a topic
     ├── /api/messages/:id/nack               POST   Nack a processing message
     ├── /api/messages/:id/requeue            POST   Requeue a DLQ message
     ├── /api/stats                           GET    Queue depth statistics
@@ -961,6 +1006,37 @@ Returns `codes.NotFound` if no messages are available; otherwise returns the nex
 - When `visibility_timeout_seconds` is **set to a value > 0**, that duration (in seconds) overrides the server-wide configuration for this dequeue operation only.
 - When `visibility_timeout_seconds` is **set to 0**, the request is rejected with `codes.InvalidArgument`.
 
+#### BatchDequeue
+
+Dequeues up to N messages from a topic in a single round-trip. Returns immediately with however many messages are available (0 to N); never blocks waiting for messages.
+
+```protobuf
+rpc BatchDequeue(BatchDequeueRequest) returns (BatchDequeueResponse);
+
+message BatchDequeueRequest {
+  string topic = 1;                           // Topic name (required)
+  uint32 count = 2;                           // Number of messages to dequeue (required, 1–1000)
+  optional uint32 visibility_timeout_seconds = 3;  // Visibility timeout override (optional, > 0 if set)
+}
+
+message BatchDequeueResponse {
+  repeated DequeueResponse messages = 1;      // Dequeued messages (0 to N)
+}
+```
+
+**Error conditions**:
+- `codes.InvalidArgument` if `count` is 0 or exceeds 1000
+
+**Visibility Timeout Behavior** (same as single `Dequeue`):
+- When `visibility_timeout_seconds` is **omitted or not set**, the server-wide `visibility_timeout` configuration is used.
+- When `visibility_timeout_seconds` is **set to a value > 0**, that duration overrides the server-wide configuration for this batch dequeue only.
+- When `visibility_timeout_seconds` is **set to 0**, the request is rejected with `codes.InvalidArgument`.
+
+**Performance notes**:
+- All returned messages are locked with `FOR UPDATE SKIP LOCKED`, preventing concurrent consumers from acquiring the same messages.
+- Returns immediately with available messages even if fewer than requested; never blocks.
+- Efficient for high-throughput batch processing scenarios.
+
 #### Ack
 
 Acknowledges (deletes) a processing message.
@@ -1062,6 +1138,73 @@ curl -X POST http://localhost:8080/api/messages \
 ```json
 {"id": "550e8400-e29b-41d4-a716-446655440000"}
 ```
+
+#### POST /api/messages/dequeue
+
+Dequeues up to N messages from a topic in a single request.
+
+**Request body:**
+```json
+{
+  "topic": "orders",
+  "count": 10,
+  "visibility_timeout_seconds": 30
+}
+```
+
+**Fields:**
+- `topic` (string, required) — Topic name
+- `count` (uint32, optional) — Number of messages to dequeue (1–1000); defaults to 1 if omitted
+- `visibility_timeout_seconds` (uint32, optional) — Visibility timeout override; if omitted, server-wide default applies
+
+**Example:**
+```bash
+# Dequeue up to 10 messages
+curl -X POST http://localhost:8080/api/messages/dequeue \
+  -H "Content-Type: application/json" \
+  -d '{"topic": "orders", "count": 10}'
+
+# Dequeue with custom visibility timeout
+curl -X POST http://localhost:8080/api/messages/dequeue \
+  -H "Content-Type: application/json" \
+  -d '{"topic": "orders", "count": 5, "visibility_timeout_seconds": 60}'
+```
+
+**Response:** HTTP 200 OK (or 401 if unauthenticated with auth enabled)
+```json
+{
+  "messages": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "topic": "orders",
+      "payload": "eyJvcmRlcl9pZCI6IDEyMzQ1fQ==",
+      "metadata": {"user_id": "42"},
+      "created_at": "2025-04-25T12:00:00Z",
+      "retry_count": 0,
+      "max_retries": 3
+    },
+    {
+      "id": "660e8400-e29b-41d4-a716-446655440001",
+      "topic": "orders",
+      "payload": "eyJvcmRlcl9pZCI6IDEyMzQ2fQ==",
+      "metadata": {"user_id": "43"},
+      "created_at": "2025-04-25T12:01:00Z",
+      "retry_count": 0,
+      "max_retries": 3
+    }
+  ]
+}
+```
+
+**Behavior:**
+- Returns 0 to N messages depending on availability; never blocks
+- All returned messages transition to `'processing'` status with visibility timeout
+- Each message can be individually acked or nacked via `POST /api/messages/:id/nack` or (for DLQ) `POST /api/messages/:id/requeue`
+
+**Errors:**
+- HTTP 400 if `count` is 0 or exceeds 1000
+- HTTP 401 if authentication is enabled but no valid token is provided
+- HTTP 422 if the topic is unregistered (when `require_topic_registration` is enabled)
 
 #### POST /api/messages/:id/nack
 
