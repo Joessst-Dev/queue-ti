@@ -15,28 +15,6 @@ import (
 // error string.
 type HandlerFunc func(ctx context.Context, msg *Message) error
 
-// ConsumerOption configures a Consumer.
-type ConsumerOption func(*consumerConfig)
-
-type consumerConfig struct {
-	concurrency       int
-	visibilityTimeout uint32 // seconds, 0 = server default
-}
-
-// WithConcurrency sets the number of concurrent handler goroutines (default 1).
-func WithConcurrency(n int) ConsumerOption {
-	return func(cfg *consumerConfig) {
-		cfg.concurrency = n
-	}
-}
-
-// WithVisibilityTimeout sets a custom visibility timeout in seconds.
-func WithVisibilityTimeout(seconds uint32) ConsumerOption {
-	return func(cfg *consumerConfig) {
-		cfg.visibilityTimeout = seconds
-	}
-}
-
 // Consumer subscribes to a topic and dispatches messages to a handler.
 type Consumer struct {
 	client *Client
@@ -234,76 +212,18 @@ func (c *Consumer) ConsumeBatch(ctx context.Context, topic string, batchSize int
 	}
 }
 
-// dequeueProtoToMessage converts a DequeueResponse into a Message, wiring in
-// the ack/nack closures that call back to the server.
 func dequeueProtoToMessage(resp *pb.DequeueResponse, c *Client) *Message {
 	var createdAt time.Time
 	if resp.CreatedAt != nil {
 		createdAt = resp.CreatedAt.AsTime()
 	}
-
-	id := resp.Id
-	msg := &Message{
-		ID:         id,
-		Topic:      resp.Topic,
-		Payload:    resp.Payload,
-		Metadata:   resp.Metadata,
-		CreatedAt:  createdAt,
-		RetryCount: int(resp.RetryCount),
-	}
-
-	msg.ack = func(ctx context.Context) error {
-		_, err := c.pb.Ack(ctx, &pb.AckRequest{Id: id})
-		if err != nil {
-			return fmt.Errorf("ack message %s: %w", id, err)
-		}
-		return nil
-	}
-
-	msg.nack = func(ctx context.Context, reason string) error {
-		_, err := c.pb.Nack(ctx, &pb.NackRequest{Id: id, Error: reason})
-		if err != nil {
-			return fmt.Errorf("nack message %s: %w", id, err)
-		}
-		return nil
-	}
-
-	return msg
+	return buildMessage(resp.Id, resp.Topic, resp.Payload, resp.Metadata, createdAt, int(resp.RetryCount), c)
 }
 
-// protoToMessage converts a SubscribeResponse into a Message, wiring in the
-// ack/nack closures that call back to the server.
 func protoToMessage(resp *pb.SubscribeResponse, c *Client) *Message {
 	var createdAt time.Time
 	if resp.CreatedAt != nil {
 		createdAt = resp.CreatedAt.AsTime()
 	}
-
-	id := resp.Id
-	msg := &Message{
-		ID:         id,
-		Topic:      resp.Topic,
-		Payload:    resp.Payload,
-		Metadata:   resp.Metadata,
-		CreatedAt:  createdAt,
-		RetryCount: int(resp.RetryCount),
-	}
-
-	msg.ack = func(ctx context.Context) error {
-		_, err := c.pb.Ack(ctx, &pb.AckRequest{Id: id})
-		if err != nil {
-			return fmt.Errorf("ack message %s: %w", id, err)
-		}
-		return nil
-	}
-
-	msg.nack = func(ctx context.Context, reason string) error {
-		_, err := c.pb.Nack(ctx, &pb.NackRequest{Id: id, Error: reason})
-		if err != nil {
-			return fmt.Errorf("nack message %s: %w", id, err)
-		}
-		return nil
-	}
-
-	return msg
+	return buildMessage(resp.Id, resp.Topic, resp.Payload, resp.Metadata, createdAt, int(resp.RetryCount), c)
 }

@@ -72,3 +72,49 @@ func (b bearerToken) GetRequestMetadata(_ context.Context, _ ...string) (map[str
 }
 
 func (b bearerToken) RequireTransportSecurity() bool { return false }
+
+// ConsumerOption configures a Consumer.
+type ConsumerOption func(*consumerConfig)
+
+type consumerConfig struct {
+	concurrency       int
+	visibilityTimeout uint32 // seconds, 0 = server default
+}
+
+// WithConcurrency sets the number of concurrent handler goroutines (default 1).
+func WithConcurrency(n int) ConsumerOption {
+	return func(cfg *consumerConfig) {
+		cfg.concurrency = n
+	}
+}
+
+// WithVisibilityTimeout sets a custom visibility timeout in seconds.
+func WithVisibilityTimeout(seconds uint32) ConsumerOption {
+	return func(cfg *consumerConfig) {
+		cfg.visibilityTimeout = seconds
+	}
+}
+
+// PublishOption configures a Publish call.
+type PublishOption func(*publishConfig)
+
+type publishConfig struct {
+	metadata map[string]string
+	key      *string
+}
+
+// WithMetadata attaches key-value metadata to the published message.
+func WithMetadata(m map[string]string) PublishOption {
+	return func(cfg *publishConfig) {
+		cfg.metadata = m
+	}
+}
+
+// WithKey sets a deduplication key on the published message. When a pending
+// message with the same (topic, key) pair already exists it is upserted rather
+// than creating a new row.
+func WithKey(key string) PublishOption {
+	return func(cfg *publishConfig) {
+		cfg.key = &key
+	}
+}
