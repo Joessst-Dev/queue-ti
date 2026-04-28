@@ -364,6 +364,57 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                                 Cancel
                               </button>
                             </div>
+
+                            @if (cfg.replay_window_seconds === null || cfg.replay_window_seconds === undefined) {
+                              <hr class="border-indigo-200" />
+                              <div class="space-y-2">
+                                <p class="text-sm font-medium text-gray-700">Trim Archive</p>
+                                <p class="text-xs text-gray-500">
+                                  Permanently delete archived entries acked before the selected date.
+                                  This cannot be undone.
+                                </p>
+                                <div class="flex flex-col gap-1">
+                                  <label
+                                    [for]="'trim-before-' + cfg.topic"
+                                    class="text-sm text-gray-600"
+                                  >Delete entries acked before</label>
+                                  <input
+                                    type="datetime-local"
+                                    [id]="'trim-before-' + cfg.topic"
+                                    [value]="trimBeforeTime()"
+                                    (input)="trimBeforeTime.set($any($event.target).value)"
+                                    class="w-64 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-400"
+                                  />
+                                </div>
+
+                                @if (trimResult() !== null) {
+                                  <div class="p-3 bg-green-50 border border-green-200 text-green-700 rounded text-sm">
+                                    {{ trimResult() }} archive entries deleted.
+                                  </div>
+                                }
+
+                                @if (trimError()) {
+                                  <div class="p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                                    {{ trimError() }}
+                                  </div>
+                                }
+
+                                <button
+                                  type="button"
+                                  [disabled]="trimLoading()"
+                                  (click)="onConfirmTrim(cfg.topic)"
+                                  class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  @if (trimLoading()) {
+                                    <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                    </svg>
+                                  }
+                                  Trim Archive
+                                </button>
+                              </div>
+                            }
                           </div>
                         </td>
                       </tr>
@@ -406,6 +457,11 @@ export class TopicConfigSection implements OnInit {
   readonly replayLoading = signal(false);
   readonly replayResult = signal<ReplayResponse | null>(null);
   readonly replayError = signal<string | null>(null);
+
+  readonly trimBeforeTime = signal<string>('');
+  readonly trimLoading = signal(false);
+  readonly trimResult = signal<number | null>(null);
+  readonly trimError = signal<string | null>(null);
 
   ngOnInit(): void {
     this.loadConfigs();
@@ -547,6 +603,31 @@ export class TopicConfigSection implements OnInit {
     this.replayMinTime.set('');
     this.replayResult.set(null);
     this.replayError.set(null);
+    this.trimBeforeTime.set('');
+    this.trimResult.set(null);
+    this.trimError.set(null);
+  }
+
+  onConfirmTrim(topic: string): void {
+    const beforeTime = this.trimBeforeTime().trim();
+    if (!beforeTime) {
+      this.trimError.set('Please select a date before trimming');
+      return;
+    }
+    this.trimLoading.set(true);
+    this.trimResult.set(null);
+    this.trimError.set(null);
+    const iso = new Date(beforeTime).toISOString();
+    this.queue.trimMessageLog(topic, iso).subscribe({
+      next: (res) => {
+        this.trimResult.set(res.deleted);
+        this.trimLoading.set(false);
+      },
+      error: (err: { error?: { error?: string } }) => {
+        this.trimError.set(err.error?.error ?? 'Failed to trim archive');
+        this.trimLoading.set(false);
+      },
+    });
   }
 
   onConfirmReplay(topic: string): void {
