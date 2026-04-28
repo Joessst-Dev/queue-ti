@@ -59,6 +59,32 @@ export interface TopicConfig {
   max_retries?: number | null;
   message_ttl_seconds?: number | null;
   max_depth?: number | null;
+  replayable?: boolean;
+  replay_window_seconds?: number | null;
+}
+
+export interface ReplayResponse {
+  topic: string;
+  enqueued: number;
+  from_time: string;
+}
+
+export interface ArchivedMessage {
+  id: string;
+  topic: string;
+  key?: string;
+  payload: string;
+  retry_count: number;
+  original_topic?: string;
+  created_at: string;
+  acked_at: string;
+}
+
+export interface MessageLogResponse {
+  items: ArchivedMessage[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface TopicConfigsResponse {
@@ -144,6 +170,27 @@ export class QueueService {
 
   runDeleteReaper(): Observable<{ deleted: number }> {
     return this.http.post<{ deleted: number }>('/api/admin/delete-reaper/run', {});
+  }
+
+  replayTopic(topic: string, fromTime?: string): Observable<ReplayResponse> {
+    const body: { from_time?: string } = fromTime ? { from_time: fromTime } : {};
+    return this.http.post<ReplayResponse>(`/api/topics/${topic}/replay`, body);
+  }
+
+  listMessageLog(topic: string, offset = 0): Observable<MessageLogResponse> {
+    return this.http.get<MessageLogResponse>(`/api/topics/${topic}/message-log`, {
+      params: { limit: PAGE_SIZE, offset },
+    });
+  }
+
+  trimMessageLog(topic: string, before: string): Observable<{ deleted: number }> {
+    return this.http.delete<{ deleted: number }>(`/api/topics/${topic}/message-log`, {
+      params: { before },
+    });
+  }
+
+  runArchiveReaper(): Observable<{ deleted: number }> {
+    return this.http.post<{ deleted: number }>('/api/admin/archive-reaper/run', {});
   }
 
   getDeleteReaperSchedule(): Observable<DeleteReaperSchedule> {

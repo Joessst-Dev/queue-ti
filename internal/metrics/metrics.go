@@ -19,6 +19,7 @@ type Recorder struct {
 	requeued *prometheus.CounterVec
 	expired  prometheus.Counter
 	deleted  prometheus.Counter
+	replayed *prometheus.CounterVec
 }
 
 // New creates a Recorder and a DepthCollector, registers both with reg.
@@ -67,9 +68,18 @@ func newRecorder(reg prometheus.Registerer) *Recorder {
 			Name:      "messages_deleted_total",
 			Help:      "Total messages permanently deleted by the delete reaper.",
 		}),
+		replayed: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: ns,
+			Name:      "replayed_total",
+			Help:      "Total messages re-enqueued via topic replay.",
+		}, []string{"topic"}),
 	}
-	reg.MustRegister(r.enqueued, r.dequeued, r.acked, r.nacked, r.requeued, r.expired, r.deleted)
+	reg.MustRegister(r.enqueued, r.dequeued, r.acked, r.nacked, r.requeued, r.expired, r.deleted, r.replayed)
 	return r
+}
+
+func (r *Recorder) RecordReplay(topic string, count int64) {
+	r.replayed.WithLabelValues(topic).Add(float64(count))
 }
 
 func (r *Recorder) RecordEnqueue(topic string)       { r.enqueued.WithLabelValues(topic).Inc() }

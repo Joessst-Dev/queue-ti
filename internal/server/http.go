@@ -118,6 +118,10 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer promet
 	api.Post("/admin/delete-reaper/run", jwtAuth, s.requireAdmin(), s.runDeleteReaperOnce)
 	api.Get("/admin/delete-reaper/schedule", jwtAuth, s.requireAdmin(), s.getDeleteReaperSchedule)
 	api.Put("/admin/delete-reaper/schedule", jwtAuth, s.requireAdmin(), s.updateDeleteReaperSchedule)
+	api.Post("/topics/:topic/replay", jwtAuth, s.requireAdmin(), s.replayTopic)
+	api.Get("/topics/:topic/message-log", jwtAuth, s.requireAdmin(), s.listMessageLog)
+	api.Delete("/topics/:topic/message-log", jwtAuth, s.requireAdmin(), s.trimMessageLog)
+	api.Post("/admin/archive-reaper/run", jwtAuth, s.requireAdmin(), s.runArchiveReaperOnce)
 
 	s.App = app
 	return s

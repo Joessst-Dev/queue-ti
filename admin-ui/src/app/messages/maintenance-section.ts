@@ -137,6 +137,46 @@ import { QueueService } from '../services/queue.service';
           </button>
         </div>
       </div>
+
+      <!-- Archive Reaper -->
+      <div class="bg-white shadow rounded-lg">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h2 class="text-lg font-semibold text-gray-900">Archive Reaper</h2>
+        </div>
+        <div class="px-6 py-4 space-y-3">
+          <p class="text-sm text-gray-600">
+            Permanently deletes message archive entries that have aged past each topic's replay window.
+            Topics without a time window (always replayable) are never cleaned up automatically.
+          </p>
+
+          @if (archiveError()) {
+            <div class="p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+              {{ archiveError() }}
+            </div>
+          }
+
+          @if (archiveResult() !== null) {
+            <div class="p-3 bg-green-50 border border-green-200 text-green-700 rounded text-sm">
+              {{ archiveResult() }} archive entries deleted.
+            </div>
+          }
+
+          <button
+            type="button"
+            [disabled]="archiveLoading()"
+            (click)="onRunArchiveReaper()"
+            class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            @if (archiveLoading()) {
+              <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+            }
+            Run Now
+          </button>
+        </div>
+      </div>
     </section>
   `,
 })
@@ -150,6 +190,10 @@ export class MaintenanceSection implements OnInit {
   readonly deleteLoading = signal(false);
   readonly deleteResult = signal<number | null>(null);
   readonly deleteError = signal<string | null>(null);
+
+  readonly archiveLoading = signal(false);
+  readonly archiveResult = signal<number | null>(null);
+  readonly archiveError = signal<string | null>(null);
 
   readonly scheduleActive = signal(false);
   readonly scheduleSaving = signal(false);
@@ -194,6 +238,22 @@ export class MaintenanceSection implements OnInit {
       error: (err: { error?: { error?: string } }) => {
         this.deleteError.set(err.error?.error ?? 'Failed to run delete reaper');
         this.deleteLoading.set(false);
+      },
+    });
+  }
+
+  onRunArchiveReaper(): void {
+    this.archiveLoading.set(true);
+    this.archiveResult.set(null);
+    this.archiveError.set(null);
+    this.queue.runArchiveReaper().subscribe({
+      next: (res) => {
+        this.archiveResult.set(res.deleted);
+        this.archiveLoading.set(false);
+      },
+      error: (err: { error?: { error?: string } }) => {
+        this.archiveError.set(err.error?.error ?? 'Failed to run archive reaper');
+        this.archiveLoading.set(false);
       },
     });
   }

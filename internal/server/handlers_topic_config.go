@@ -11,16 +11,20 @@ import (
 )
 
 type topicConfigRequest struct {
-	MaxRetries        *int `json:"max_retries"`
-	MessageTTLSeconds *int `json:"message_ttl_seconds"`
-	MaxDepth          *int `json:"max_depth"`
+	MaxRetries          *int  `json:"max_retries"`
+	MessageTTLSeconds   *int  `json:"message_ttl_seconds"`
+	MaxDepth            *int  `json:"max_depth"`
+	Replayable          *bool `json:"replayable"`
+	ReplayWindowSeconds *int  `json:"replay_window_seconds"`
 }
 
 type topicConfigResponse struct {
-	Topic             string `json:"topic"`
-	MaxRetries        *int   `json:"max_retries,omitempty"`
-	MessageTTLSeconds *int   `json:"message_ttl_seconds,omitempty"`
-	MaxDepth          *int   `json:"max_depth,omitempty"`
+	Topic               string `json:"topic"`
+	MaxRetries          *int   `json:"max_retries,omitempty"`
+	MessageTTLSeconds   *int   `json:"message_ttl_seconds,omitempty"`
+	MaxDepth            *int   `json:"max_depth,omitempty"`
+	Replayable          bool   `json:"replayable"`
+	ReplayWindowSeconds *int   `json:"replay_window_seconds,omitempty"`
 }
 
 type listTopicConfigsResponse struct {
@@ -29,10 +33,12 @@ type listTopicConfigsResponse struct {
 
 func toTopicConfigResponse(cfg queue.TopicConfig) topicConfigResponse {
 	return topicConfigResponse{
-		Topic:             cfg.Topic,
-		MaxRetries:        cfg.MaxRetries,
-		MessageTTLSeconds: cfg.MessageTTLSeconds,
-		MaxDepth:          cfg.MaxDepth,
+		Topic:               cfg.Topic,
+		MaxRetries:          cfg.MaxRetries,
+		MessageTTLSeconds:   cfg.MessageTTLSeconds,
+		MaxDepth:            cfg.MaxDepth,
+		Replayable:          cfg.Replayable,
+		ReplayWindowSeconds: cfg.ReplayWindowSeconds,
 	}
 }
 
@@ -60,11 +66,17 @@ func (s *HTTPServer) upsertTopicConfig(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
 
+	replayable := false
+	if req.Replayable != nil {
+		replayable = *req.Replayable
+	}
 	cfg := queue.TopicConfig{
-		Topic:             topic,
-		MaxRetries:        req.MaxRetries,
-		MessageTTLSeconds: req.MessageTTLSeconds,
-		MaxDepth:          req.MaxDepth,
+		Topic:               topic,
+		MaxRetries:          req.MaxRetries,
+		MessageTTLSeconds:   req.MessageTTLSeconds,
+		MaxDepth:            req.MaxDepth,
+		Replayable:          replayable,
+		ReplayWindowSeconds: req.ReplayWindowSeconds,
 	}
 	if err := s.queueService.UpsertTopicConfig(c.Context(), cfg); err != nil {
 		slog.Error("upsert topic config failed", "topic", topic, "error", err)

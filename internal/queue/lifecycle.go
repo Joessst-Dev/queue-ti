@@ -5,23 +5,66 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
 
 func (s *Service) Ack(ctx context.Context, id string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("ack begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
 	var topic string
-	err := s.pool.QueryRow(ctx,
-		`DELETE FROM messages WHERE id = $1 AND status = 'processing' RETURNING topic`, id,
-	).Scan(&topic)
+	var key *string
+	var payload, metaJSON []byte
+	var retryCount, maxRetries int
+	var lastError *string
+	var originalTopic *string
+	var createdAt time.Time
+
+	err = tx.QueryRow(ctx, `
+		SELECT topic, key, payload, metadata, retry_count, max_retries,
+		       last_error, original_topic, created_at
+		FROM messages WHERE id = $1 AND status = 'processing' FOR UPDATE
+	`, id).Scan(&topic, &key, &payload, &metaJSON, &retryCount, &maxRetries,
+		&lastError, &originalTopic, &createdAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("ack: %w", ErrNotFound)
 	}
 	if err != nil {
-		return fmt.Errorf("ack: %w", err)
+		return fmt.Errorf("ack fetch: %w", err)
+	}
+
+	var replayable bool
+	_ = tx.QueryRow(ctx,
+		`SELECT COALESCE(replayable, false) FROM topic_config WHERE topic = $1`, topic,
+	).Scan(&replayable)
+
+	if replayable {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO message_log
+			    (id, topic, key, payload, metadata, retry_count, max_retries,
+			     last_error, original_topic, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		`, id, topic, key, payload, metaJSON, retryCount, maxRetries,
+			lastError, originalTopic, createdAt)
+		if err != nil {
+			return fmt.Errorf("ack archive: %w", err)
+		}
+	}
+
+	if _, err = tx.Exec(ctx, `DELETE FROM messages WHERE id = $1`, id); err != nil {
+		return fmt.Errorf("ack delete: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return err
 	}
 	s.recorder.RecordAck(topic)
-	slog.Debug("message acked", "id", id)
+	slog.Debug("message acked", "id", id, "archived", replayable)
 	return nil
 }
 

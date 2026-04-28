@@ -9,21 +9,24 @@ import (
 )
 
 var (
-	ErrNoMessage          = errors.New("no message available")
-	ErrNotFound           = errors.New("message not found")
-	ErrNotProcessing      = errors.New("message is not in processing state")
-	ErrNotDLQ             = errors.New("message is not a dead-letter message")
-	ErrReservedTopic      = errors.New("topic name is reserved: topics may not end with .dlq")
-	ErrQueueFull          = errors.New("queue is at maximum depth for this topic")
-	ErrTopicNotRegistered = errors.New("topic is not registered; an admin must create it first")
-	ErrInvalidBatchSize   = errors.New("batch size must be between 1 and 1000")
+	ErrNoMessage            = errors.New("no message available")
+	ErrNotFound             = errors.New("message not found")
+	ErrNotProcessing        = errors.New("message is not in processing state")
+	ErrNotDLQ               = errors.New("message is not a dead-letter message")
+	ErrReservedTopic        = errors.New("topic name is reserved: topics may not end with .dlq")
+	ErrQueueFull            = errors.New("queue is at maximum depth for this topic")
+	ErrTopicNotRegistered   = errors.New("topic is not registered; an admin must create it first")
+	ErrInvalidBatchSize     = errors.New("batch size must be between 1 and 1000")
+	ErrTopicNotReplayable   = errors.New("topic is not configured as replayable")
+	ErrReplayWindowTooOld   = errors.New("from_time is before the start of the replay window")
 )
 
 // Advisory lock keys for reaper leader election across instances.
 // These are stable, application-specific int64 values stored per database.
 const (
-	expiryReaperLockKey int64 = 7_000_001
-	deleteReaperLockKey int64 = 7_000_002
+	expiryReaperLockKey  int64 = 7_000_001
+	deleteReaperLockKey  int64 = 7_000_002
+	archiveReaperLockKey int64 = 7_000_003
 )
 
 type Message struct {

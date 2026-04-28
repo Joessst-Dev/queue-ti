@@ -10,16 +10,18 @@ type MetricsRecorder interface {
 	RecordRequeue(topic string)
 	RecordExpired(n int64)
 	RecordDeleted(n int64)
+	RecordReplay(topic string, count int64)
 }
 
 // NoopRecorder is a MetricsRecorder that discards all observations.
 // It is used when no metrics backend is configured.
 type NoopRecorder struct{}
 
-func (NoopRecorder) RecordEnqueue(string)   {}
-func (NoopRecorder) RecordDequeue(string)   {}
-func (NoopRecorder) RecordAck(string)       {}
-func (NoopRecorder) RecordNack(_, _ string) {}
-func (NoopRecorder) RecordRequeue(string)   {}
-func (NoopRecorder) RecordExpired(int64)    {}
-func (NoopRecorder) RecordDeleted(int64)    {}
+func (NoopRecorder) RecordEnqueue(string)        {}
+func (NoopRecorder) RecordDequeue(string)        {}
+func (NoopRecorder) RecordAck(string)            {}
+func (NoopRecorder) RecordNack(_, _ string)      {}
+func (NoopRecorder) RecordRequeue(string)        {}
+func (NoopRecorder) RecordExpired(int64)         {}
+func (NoopRecorder) RecordDeleted(int64)         {}
+func (NoopRecorder) RecordReplay(string, int64)  {}
