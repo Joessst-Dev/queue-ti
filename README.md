@@ -27,7 +27,8 @@ queue-ti is designed for teams who want reliable, observable message processing 
 - **Contention-free dequeue** — Uses `FOR UPDATE SKIP LOCKED` for lock-free concurrent consumption
 - **JWT authentication** — Optional JWT-based auth (HS256) with user accounts, role-based access, and per-topic grants
 - **Avro schema validation** — Optional per-topic Avro schema registration; payloads validated at enqueue time
-- **Per-topic configuration** — Override retry count, TTL, and queue depth limits per topic via HTTP API or admin UI
+- **Per-topic configuration** — Override retry count, TTL, queue depth limits, and throughput caps per topic via HTTP API or admin UI
+- **Throughput throttling** — Optional per-topic message rate limits (messages/second) enforced at dequeue time using PostgreSQL token-bucket algorithm
 - **Admin UI** — Angular web interface for message inspection, manual enqueue, DLQ requeue, and topic management
 - **Prometheus metrics** — Real-time counters and gauges (`/metrics` endpoint, unauthenticated)
 - **Go client library** — Drop-in `Producer` and `Consumer` with auto-reconnection and token refresh
@@ -280,12 +281,13 @@ The resolved log level is printed at server startup.
 
 ### Per-Topic Configuration
 
-Individual topics can override the global queue settings. This is useful when certain topics require stricter retry limits, longer TTLs, or queue depth constraints.
+Individual topics can override the global queue settings. This is useful when certain topics require stricter retry limits, longer TTLs, queue depth constraints, or rate limiting.
 
 **Supported overrides:**
 - `max_retries` — Maximum retry count for messages on this topic (overrides global `max_retries`)
 - `message_ttl_seconds` — Time-to-live for messages in seconds (overrides global `message_ttl`); set to `0` to disable TTL for this topic
 - `max_depth` — Maximum number of pending+processing messages allowed on this topic; set to `null` or `0` for unlimited; `Enqueue` returns HTTP 429 when the topic reaches capacity
+- `throughput_limit` — Maximum messages per second allowed to be dequeued from this topic; set to `null` or `0` for unlimited; when exhausted, dequeue returns fewer messages than requested (soft limiting, not an error)
 
 **Precedence:** Per-topic overrides take priority over global defaults. Omitting a field (or sending `null`) reverts that setting to the global default.
 
@@ -297,7 +299,8 @@ curl -u admin:secret -X PUT http://localhost:8080/api/topic-configs/orders \
   -d '{
     "max_retries": 5,
     "message_ttl_seconds": 3600,
-    "max_depth": 1000
+    "max_depth": 1000,
+    "throughput_limit": 100
   }'
 ```
 
@@ -307,7 +310,8 @@ Response:
   "topic": "orders",
   "max_retries": 5,
   "message_ttl_seconds": 3600,
-  "max_depth": 1000
+  "max_depth": 1000,
+  "throughput_limit": 100
 }
 ```
 
@@ -1085,6 +1089,12 @@ message BatchDequeueResponse {
 - Returns immediately with available messages even if fewer than requested; never blocks.
 - Efficient for high-throughput batch processing scenarios.
 
+**Throughput Limiting**:
+- If the topic has a `throughput_limit` configured, `BatchDequeue` respects that rate limit
+- The response may contain fewer messages than requested (including 0) when the rate limit is exhausted
+- This is a **soft limit** — the operation succeeds and returns available messages rather than blocking or erroring
+- Example: if you request 100 messages but the limit allows 50/sec and 30 are available, you get 30
+
 **Key field**: Each message in the response includes its optional `key` field (if present), allowing batch handlers to correlate messages with deduplication keys.
 
 #### Ack
@@ -1282,6 +1292,12 @@ curl -X POST http://localhost:8080/api/messages/dequeue \
 - Each message can be individually acked or nacked via `POST /api/messages/:id/nack` or (for DLQ) `POST /api/messages/:id/requeue`
 - The `key` field is included in each message response (null if not present)
 
+**Throughput Limiting**:
+- If the topic has a `throughput_limit` configured, dequeue operations respect that rate limit
+- The response may contain fewer messages than requested (including 0) when the rate limit is exhausted
+- This is a **soft limit** — the operation succeeds and returns available messages rather than blocking or erroring
+- Example: if you request 10 messages but the limit allows 100/sec and 5 are available, you get 5
+
 **Errors:**
 - HTTP 400 if `count` is 0 or exceeds 1000
 - HTTP 401 if authentication is enabled but no valid token is provided
@@ -1362,7 +1378,8 @@ curl -u admin:secret http://localhost:8080/api/topic-configs
       "topic": "orders",
       "max_retries": 5,
       "message_ttl_seconds": 3600,
-      "max_depth": 1000
+      "max_depth": 1000,
+      "throughput_limit": 100
     }
   ]
 }
@@ -1378,11 +1395,21 @@ curl -u admin:secret -X PUT http://localhost:8080/api/topic-configs/orders \
   -d '{
     "max_retries": 5,
     "message_ttl_seconds": 3600,
-    "max_depth": 1000
+    "max_depth": 1000,
+    "throughput_limit": 100
   }'
 ```
 
 **Response:** HTTP 200 OK
+
+**Throughput Limit Behavior:**
+- When `throughput_limit` is set to a value > 0, dequeue operations respect the per-second rate limit
+- The limit is enforced using a token-bucket algorithm stored in the `topic_throughput` table
+- `DequeueN` (batch dequeue) returns **fewer messages than requested** (or 0) when the rate limit is exhausted; this is a **soft limit** — it does not error, it simply returns what is available
+- `Dequeue` (single message) returns `ErrNoMessage` (same as an empty queue) when the limit is exhausted, allowing subscriber backoff loops to work unchanged
+- The limit applies per topic; multiple consumers of the same topic share the throughput budget
+- Setting `throughput_limit` to `null` or `0` disables the limit (unlimited dequeue)
+- Orphaned `topic_throughput` rows are automatically cleaned up when a topic configuration is deleted
 
 #### DELETE /api/topic-configs/:topic
 

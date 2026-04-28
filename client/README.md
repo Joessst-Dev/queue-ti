@@ -163,6 +163,15 @@ consumer := client.NewConsumer("orders",
 | `WithConcurrency(n int)` | Number of messages processed concurrently (default: 1) |
 | `WithVisibilityTimeout(seconds uint32)` | How long a message stays invisible while being processed (default: server setting, typically 30 s) |
 
+#### Handling Topic Throughput Limits
+
+If your queue-ti server has configured a `throughput_limit` on the topic you are consuming from, you may receive fewer messages than requested (or none at all) when the rate limit is exhausted. This is not an error — it is a **soft limit** that allows you to gracefully handle backpressure.
+
+- **Single-message `Consume`**: When no messages are available or the throughput limit is exhausted, `Consume` receives `ErrNoMessage`, triggers the exponential backoff (500 ms → 30 s), and retries automatically. No changes to your code are needed.
+- **Batch `ConsumeBatch`**: Similarly, when the limit is exhausted, `ConsumeBatch` receives 0 messages, applies exponential backoff, and polls again. Your handler is not called if there are no messages to process.
+
+In both cases, the consumer automatically backs off and retries, making throughput-limited topics transparent to application code.
+
 ### `consumer.Consume(ctx, HandlerFunc) error`
 
 Starts consuming messages from the topic. Blocks until `ctx` is cancelled, then returns `nil`.
@@ -215,9 +224,10 @@ err := consumer.ConsumeBatch(ctx, "orders", 50, func(ctx context.Context, messag
 **Batch semantics:**
 
 - `batchSize`: number of messages to request per poll (valid range 1–1000; behavior is undefined outside this range).
-- **Best-effort:** returns 0–N messages per call, never blocks or waits for a full batch. When the queue is empty, the consumer applies the same exponential backoff as `Consume` (500 ms → 30 s). When messages are returned, backoff resets.
+- **Best-effort:** returns 0–N messages per call, never blocks or waits for a full batch. When the queue is empty or throughput-limited, the consumer applies the same exponential backoff as `Consume` (500 ms → 30 s). When messages are returned, backoff resets.
 - **Per-message ack/nack:** each message in the slice has individual `Ack()` and `Nack(reason)` closures. Call them directly to acknowledge or reject each message, rather than returning an error from the handler.
 - **Reconnection & backoff:** network errors are retried with exponential backoff (500 ms → 30 s), same as `Consume`.
+- **Throughput limiting:** if the topic has a throughput limit configured, `ConsumeBatch` receives fewer messages than requested (or none) when the limit is exhausted; the consumer automatically backs off and retries.
 
 Use `ConsumeBatch` when you want to process multiple messages together (e.g. batch writes to a data warehouse) or when you need more control over per-message error handling.
 
