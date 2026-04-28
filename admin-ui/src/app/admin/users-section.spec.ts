@@ -203,9 +203,9 @@ describe('UsersSection', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      component.newUsername = 'newuser';
-      component.newPassword = 'pass123';
-      component.newIsAdmin = false;
+      component.newUsername.set('newuser');
+      component.newPassword.set('pass123');
+      component.newIsAdmin.set(false);
 
       const saveBtn = Array.from(el.querySelectorAll('button')).find(
         (b) => b.textContent?.trim() === 'Save',
@@ -232,8 +232,8 @@ describe('UsersSection', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      component.newUsername = 'newuser';
-      component.newPassword = 'pass123';
+      component.newUsername.set('newuser');
+      component.newPassword.set('pass123');
 
       const saveBtn = Array.from(el.querySelectorAll('button')).find(
         (b) => b.textContent?.trim() === 'Save',
@@ -401,8 +401,8 @@ describe('UsersSection', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      component.newGrantAction = 'write';
-      component.newGrantPattern = 'orders';
+      component.newGrantAction.set('write');
+      component.newGrantPattern.set('orders');
 
       const addBtn = el.querySelector(`button[aria-label="Add grant for alice"]`) as HTMLButtonElement;
       addBtn.click();

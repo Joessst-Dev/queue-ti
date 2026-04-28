@@ -290,7 +290,7 @@ describe('TopicSchemaSection', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      component.newTopic = '';
+      component.newTopic.set('');
 
       const saveBtn = Array.from(el.querySelectorAll('button')).find(
         (b) => b.textContent?.trim() === 'Save',

@@ -1,6 +1,7 @@
 import { Component, inject, signal, ChangeDetectionStrategy, OnInit } from '@angular/core';
 import { SlicePipe } from '@angular/common';
 import { UserService, User, Grant } from '../services/user.service';
+import { getErrorMessage } from '../utils/error';
 
 @Component({
   selector: 'app-users-section',
@@ -68,8 +69,8 @@ import { UserService, User, Grant } from '../services/user.service';
                     <td class="px-3 py-2">
                       <input
                         type="text"
-                        [value]="newUsername"
-                        (input)="newUsername = $any($event.target).value"
+                        [value]="newUsername()"
+                        (input)="newUsername.set(inputValue($event))"
                         placeholder="username"
                         aria-label="New username"
                         class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -78,8 +79,8 @@ import { UserService, User, Grant } from '../services/user.service';
                     <td class="px-3 py-2">
                       <input
                         type="password"
-                        [value]="newPassword"
-                        (input)="newPassword = $any($event.target).value"
+                        [value]="newPassword()"
+                        (input)="newPassword.set(inputValue($event))"
                         placeholder="password"
                         aria-label="New password"
                         class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -89,8 +90,8 @@ import { UserService, User, Grant } from '../services/user.service';
                       <label class="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
-                          [checked]="newIsAdmin"
-                          (change)="newIsAdmin = $any($event.target).checked"
+                          [checked]="newIsAdmin()"
+                          (change)="newIsAdmin.set(inputChecked($event))"
                           aria-label="Is admin"
                           class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
@@ -240,8 +241,8 @@ import { UserService, User, Grant } from '../services/user.service';
                               <tr class="bg-indigo-50">
                                 <td class="px-3 py-2">
                                   <select
-                                    [value]="newGrantAction"
-                                    (change)="newGrantAction = $any($event.target).value"
+                                    [value]="newGrantAction()"
+                                    (change)="setNewGrantAction($event)"
                                     [attr.aria-label]="'Grant action for ' + user.username"
                                     class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                   >
@@ -253,8 +254,8 @@ import { UserService, User, Grant } from '../services/user.service';
                                 <td class="px-3 py-2">
                                   <input
                                     type="text"
-                                    [value]="newGrantPattern"
-                                    (input)="newGrantPattern = $any($event.target).value"
+                                    [value]="newGrantPattern()"
+                                    (input)="newGrantPattern.set(inputValue($event))"
                                     placeholder="topic pattern"
                                     [attr.aria-label]="'Grant topic pattern for ' + user.username"
                                     class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -298,14 +299,26 @@ export class UsersSection implements OnInit {
   readonly expandedGrantUserId = signal<string | null>(null);
   readonly grants = signal<Record<string, Grant[]>>({});
 
-  newUsername = '';
-  newPassword = '';
-  newIsAdmin = false;
-  newGrantAction: 'read' | 'write' | 'admin' = 'read';
-  newGrantPattern = '*';
+  readonly newUsername = signal('');
+  readonly newPassword = signal('');
+  readonly newIsAdmin = signal(false);
+  readonly newGrantAction = signal<'read' | 'write' | 'admin'>('read');
+  readonly newGrantPattern = signal('*');
 
   grantsFor(userId: string): Grant[] {
     return this.grants()[userId] ?? [];
+  }
+
+  inputValue(e: Event): string {
+    return (e.target as HTMLInputElement).value;
+  }
+
+  inputChecked(e: Event): boolean {
+    return (e.target as HTMLInputElement).checked;
+  }
+
+  setNewGrantAction(e: Event): void {
+    this.newGrantAction.set((e.target as HTMLSelectElement).value as 'read' | 'write' | 'admin');
   }
 
   ngOnInit(): void {
@@ -320,8 +333,8 @@ export class UsersSection implements OnInit {
         this.users.set(users);
         this.loading.set(false);
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.error.set(err.error?.error ?? 'Failed to load users');
+      error: (err: unknown) => {
+        this.error.set(getErrorMessage(err, 'Failed to load users'));
         this.loading.set(false);
       },
     });
@@ -358,8 +371,8 @@ export class UsersSection implements OnInit {
         this.users.update((list) => list.map((u) => (u.id === id ? updated : u)));
         this.editingUserId.set(null);
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.error.set(err.error?.error ?? 'Failed to update user');
+      error: (err: unknown) => {
+        this.error.set(getErrorMessage(err, 'Failed to update user'));
       },
     });
   }
@@ -372,16 +385,16 @@ export class UsersSection implements OnInit {
           this.expandedGrantUserId.set(null);
         }
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.error.set(err.error?.error ?? 'Failed to delete user');
+      error: (err: unknown) => {
+        this.error.set(getErrorMessage(err, 'Failed to delete user'));
       },
     });
   }
 
   onAddNew(): void {
-    this.newUsername = '';
-    this.newPassword = '';
-    this.newIsAdmin = false;
+    this.newUsername.set('');
+    this.newPassword.set('');
+    this.newIsAdmin.set(false);
     this.addingNew.set(true);
   }
 
@@ -390,26 +403,26 @@ export class UsersSection implements OnInit {
   }
 
   onSaveNew(): void {
-    if (!this.newUsername.trim()) {
+    if (!this.newUsername().trim()) {
       this.error.set('Username is required');
       return;
     }
     this.userSvc
       .createUser({
-        username: this.newUsername.trim(),
-        password: this.newPassword,
-        is_admin: this.newIsAdmin,
+        username: this.newUsername().trim(),
+        password: this.newPassword(),
+        is_admin: this.newIsAdmin(),
       })
       .subscribe({
         next: (created) => {
           this.users.update((list) => [...list, created]);
           this.addingNew.set(false);
-          this.newUsername = '';
-          this.newPassword = '';
-          this.newIsAdmin = false;
+          this.newUsername.set('');
+          this.newPassword.set('');
+          this.newIsAdmin.set(false);
         },
-        error: (err: { error?: { error?: string } }) => {
-          this.error.set(err.error?.error ?? 'Failed to create user');
+        error: (err: unknown) => {
+          this.error.set(getErrorMessage(err, 'Failed to create user'));
         },
       });
   }
@@ -423,8 +436,8 @@ export class UsersSection implements OnInit {
       next: (grantList) => {
         this.grants.update((all) => ({ ...all, [userId]: grantList }));
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.error.set(err.error?.error ?? 'Failed to load grants');
+      error: (err: unknown) => {
+        this.error.set(getErrorMessage(err, 'Failed to load grants'));
       },
     });
     this.expandedGrantUserId.set(userId);
@@ -438,8 +451,8 @@ export class UsersSection implements OnInit {
           [userId]: (all[userId] ?? []).filter((g) => g.id !== grantId),
         }));
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.error.set(err.error?.error ?? 'Failed to delete grant');
+      error: (err: unknown) => {
+        this.error.set(getErrorMessage(err, 'Failed to delete grant'));
       },
     });
   }
@@ -447,8 +460,8 @@ export class UsersSection implements OnInit {
   onAddGrant(userId: string): void {
     this.userSvc
       .addGrant(userId, {
-        action: this.newGrantAction,
-        topic_pattern: this.newGrantPattern || '*',
+        action: this.newGrantAction(),
+        topic_pattern: this.newGrantPattern() || '*',
       })
       .subscribe({
         next: (grant) => {
@@ -456,11 +469,11 @@ export class UsersSection implements OnInit {
             ...all,
             [userId]: [...(all[userId] ?? []), grant],
           }));
-          this.newGrantAction = 'read';
-          this.newGrantPattern = '*';
+          this.newGrantAction.set('read');
+          this.newGrantPattern.set('*');
         },
-        error: (err: { error?: { error?: string } }) => {
-          this.error.set(err.error?.error ?? 'Failed to add grant');
+        error: (err: unknown) => {
+          this.error.set(getErrorMessage(err, 'Failed to add grant'));
         },
       });
   }

@@ -1,13 +1,12 @@
-import { Component, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, signal, ChangeDetectionStrategy, OnInit } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { QueueService, TopicSchema } from '../services/queue.service';
+import { getErrorMessage } from '../utils/error';
 
 @Component({
   selector: 'app-topic-schema-section',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DatePipe],
+  imports: [DatePipe],
   template: `
     <section class="bg-white shadow rounded-lg">
       <div class="px-6 py-4 border-b border-gray-200">
@@ -76,7 +75,8 @@ import { QueueService, TopicSchema } from '../services/queue.service';
                     <td class="px-3 py-2">
                       <input
                         type="text"
-                        [(ngModel)]="newTopic"
+                        [value]="newTopic()"
+                        (input)="newTopic.set(inputValue($event))"
                         placeholder="topic name"
                         aria-label="New topic name"
                         class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -86,7 +86,8 @@ import { QueueService, TopicSchema } from '../services/queue.service';
                     <td class="px-3 py-2 text-gray-400">—</td>
                     <td class="px-3 py-2">
                       <textarea
-                        [(ngModel)]="newSchemaJson"
+                        [value]="newSchemaJson()"
+                        (input)="newSchemaJson.set(inputValue($event))"
                         rows="8"
                         placeholder='{"type":"record","name":"...","fields":[]}'
                         aria-label="New schema JSON"
@@ -120,7 +121,7 @@ import { QueueService, TopicSchema } from '../services/queue.service';
                       <td class="px-3 py-2">
                         <textarea
                           [value]="editForm().schema_json"
-                          (input)="patchEditForm($any($event.target).value)"
+                          (input)="patchEditForm(inputValue($event))"
                           rows="8"
                           [attr.aria-label]="'Schema JSON for ' + schema.topic"
                           class="w-full px-3 py-1.5 text-sm font-mono border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -177,7 +178,7 @@ import { QueueService, TopicSchema } from '../services/queue.service';
     </section>
   `,
 })
-export class TopicSchemaSection {
+export class TopicSchemaSection implements OnInit {
   private readonly queue = inject(QueueService);
 
   readonly schemas = signal<TopicSchema[]>([]);
@@ -187,11 +188,15 @@ export class TopicSchemaSection {
   readonly editForm = signal<{ schema_json: string }>({ schema_json: '' });
   readonly addingNew = signal(false);
 
-  newTopic = '';
-  newSchemaJson = '';
+  readonly newTopic = signal('');
+  readonly newSchemaJson = signal('');
 
-  constructor() {
+  ngOnInit(): void {
     this.loadSchemas();
+  }
+
+  inputValue(e: Event): string {
+    return (e.target as HTMLInputElement).value;
   }
 
   loadSchemas(): void {
@@ -202,8 +207,8 @@ export class TopicSchemaSection {
         this.schemas.set(schemas);
         this.loading.set(false);
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.error.set(err.error?.error ?? 'Failed to load schemas');
+      error: (err: unknown) => {
+        this.error.set(getErrorMessage(err, 'Failed to load schemas'));
         this.loading.set(false);
       },
     });
@@ -230,8 +235,8 @@ export class TopicSchemaSection {
         );
         this.editingTopic.set(null);
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.error.set(err.error?.error ?? 'Failed to save schema');
+      error: (err: unknown) => {
+        this.error.set(getErrorMessage(err, 'Failed to save schema'));
       },
     });
   }
@@ -241,15 +246,15 @@ export class TopicSchemaSection {
       next: () => {
         this.schemas.update((list) => list.filter((s) => s.topic !== topic));
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.error.set(err.error?.error ?? 'Failed to delete schema');
+      error: (err: unknown) => {
+        this.error.set(getErrorMessage(err, 'Failed to delete schema'));
       },
     });
   }
 
   onAddNew(): void {
-    this.newTopic = '';
-    this.newSchemaJson = '';
+    this.newTopic.set('');
+    this.newSchemaJson.set('');
     this.addingNew.set(true);
   }
 
@@ -258,20 +263,20 @@ export class TopicSchemaSection {
   }
 
   onSaveNew(): void {
-    const topic = this.newTopic.trim();
+    const topic = this.newTopic().trim();
     if (!topic) {
       this.error.set('Topic name is required');
       return;
     }
-    this.queue.upsertTopicSchema(topic, this.newSchemaJson).subscribe({
+    this.queue.upsertTopicSchema(topic, this.newSchemaJson()).subscribe({
       next: (created) => {
         this.schemas.update((list) => [...list, created]);
         this.addingNew.set(false);
-        this.newTopic = '';
-        this.newSchemaJson = '';
+        this.newTopic.set('');
+        this.newSchemaJson.set('');
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.error.set(err.error?.error ?? 'Failed to save schema');
+      error: (err: unknown) => {
+        this.error.set(getErrorMessage(err, 'Failed to save schema'));
       },
     });
   }

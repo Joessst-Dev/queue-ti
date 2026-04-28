@@ -1,11 +1,13 @@
 import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { QueueService } from '../services/queue.service';
+import { SpinnerComponent } from '../shared/spinner.component';
+import { getErrorMessage } from '../utils/error';
 
 @Component({
   selector: 'app-maintenance-section',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule],
+  imports: [FormsModule, SpinnerComponent],
   template: `
     <section class="space-y-6">
       <!-- Expiry Reaper -->
@@ -37,10 +39,7 @@ import { QueueService } from '../services/queue.service';
             class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             @if (expiryLoading()) {
-              <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-              </svg>
+              <app-spinner />
             }
             Run Now
           </button>
@@ -86,10 +85,7 @@ import { QueueService } from '../services/queue.service';
                 class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
               >
                 @if (scheduleSaving()) {
-                  <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                  </svg>
+                  <app-spinner />
                 }
                 Save
               </button>
@@ -128,10 +124,7 @@ import { QueueService } from '../services/queue.service';
             class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             @if (deleteLoading()) {
-              <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-              </svg>
+              <app-spinner />
             }
             Run Now
           </button>
@@ -168,10 +161,7 @@ import { QueueService } from '../services/queue.service';
             class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             @if (archiveLoading()) {
-              <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-              </svg>
+              <app-spinner />
             }
             Run Now
           </button>
@@ -219,8 +209,8 @@ export class MaintenanceSection implements OnInit {
         this.expiryResult.set(res.expired);
         this.expiryLoading.set(false);
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.expiryError.set(err.error?.error ?? 'Failed to run expiry reaper');
+      error: (err: unknown) => {
+        this.expiryError.set(getErrorMessage(err, 'Failed to run expiry reaper'));
         this.expiryLoading.set(false);
       },
     });
@@ -235,8 +225,8 @@ export class MaintenanceSection implements OnInit {
         this.deleteResult.set(res.deleted);
         this.deleteLoading.set(false);
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.deleteError.set(err.error?.error ?? 'Failed to run delete reaper');
+      error: (err: unknown) => {
+        this.deleteError.set(getErrorMessage(err, 'Failed to run delete reaper'));
         this.deleteLoading.set(false);
       },
     });
@@ -251,8 +241,8 @@ export class MaintenanceSection implements OnInit {
         this.archiveResult.set(res.deleted);
         this.archiveLoading.set(false);
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.archiveError.set(err.error?.error ?? 'Failed to run archive reaper');
+      error: (err: unknown) => {
+        this.archiveError.set(getErrorMessage(err, 'Failed to run archive reaper'));
         this.archiveLoading.set(false);
       },
     });
@@ -269,8 +259,8 @@ export class MaintenanceSection implements OnInit {
         this.scheduleSaveSuccess.set(true);
         this.scheduleSaving.set(false);
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.scheduleError.set(err.error?.error ?? 'Failed to save schedule');
+      error: (err: unknown) => {
+        this.scheduleError.set(getErrorMessage(err, 'Failed to save schedule'));
         this.scheduleSaving.set(false);
       },
     });

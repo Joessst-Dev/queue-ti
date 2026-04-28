@@ -1,6 +1,7 @@
 import { Component, inject, computed, signal, ChangeDetectionStrategy } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormField, form, schema, required } from '@angular/forms/signals';
+import { SpinnerComponent } from '../shared/spinner.component';
 import { Router } from '@angular/router';
 import { Subject, switchMap, map, tap, startWith } from 'rxjs';
 import { AuthService } from '../services/auth.service';
@@ -17,7 +18,7 @@ interface LoginModel {
 
 @Component({
   selector: 'app-login',
-  imports: [FormField],
+  imports: [FormField, SpinnerComponent],
   template: `
     <div class="min-h-screen flex items-center justify-center bg-gray-50">
       <div class="w-full max-w-sm">
@@ -79,28 +80,10 @@ interface LoginModel {
             <button
               type="submit"
               [disabled]="loading()"
-              class="w-full py-2 px-4 bg-indigo-600 text-white font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              class="flex items-center justify-center gap-2 w-full py-2 px-4 bg-indigo-600 text-white font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               @if (loading()) {
-                <svg
-                  class="inline w-4 h-4 mr-1 animate-spin"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    class="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    stroke-width="4"
-                  ></circle>
-                  <path
-                    class="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                  ></path>
-                </svg>
+                <app-spinner />
                 Signing in...
               } @else {
                 <svg

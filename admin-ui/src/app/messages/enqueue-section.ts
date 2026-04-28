@@ -13,6 +13,7 @@ import { Subject, debounceTime, switchMap, catchError, of } from 'rxjs';
 import { FormField, form, schema, required } from '@angular/forms/signals';
 import { EnqueueRequest, QueueService, TopicSchema } from '../services/queue.service';
 import { generateAvroExample } from './avro-example';
+import { SpinnerComponent } from '../shared/spinner.component';
 
 interface EnqueueModel {
   topic: string;
@@ -28,7 +29,7 @@ interface MetadataRowModel {
 @Component({
   selector: 'app-enqueue-section',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormField],
+  imports: [FormField, SpinnerComponent],
   template: `
     <section class="bg-white shadow rounded-lg">
       <div class="px-6 py-4 border-b border-gray-200">
@@ -79,7 +80,7 @@ interface MetadataRowModel {
                 id="enqueue-topic"
                 type="text"
                 [formField]="enqueueForm.topic"
-                (input)="onTopicInput($any($event.target).value)"
+                (input)="onTopicInput(inputValue($event))"
                 class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="e.g. orders"
               />
@@ -113,6 +114,9 @@ interface MetadataRowModel {
                 <button type="button" (click)="fillExample()" class="text-sm text-indigo-600 hover:text-indigo-800 cursor-pointer">
                   Fill example
                 </button>
+              }
+              @if (fillExampleError()) {
+                <span class="text-xs text-red-600">{{ fillExampleError() }}</span>
               }
             </div>
             <textarea
@@ -185,28 +189,10 @@ interface MetadataRowModel {
           <button
             type="submit"
             [disabled]="loading()"
-            class="px-4 py-2 bg-indigo-600 text-white font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             @if (loading()) {
-              <svg
-                class="inline w-4 h-4 mr-1 animate-spin"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  class="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  stroke-width="4"
-                ></circle>
-                <path
-                  class="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                ></path>
-              </svg>
+              <app-spinner />
               Sending...
             } @else {
               <svg
@@ -260,6 +246,7 @@ export class EnqueueSection {
   private readonly destroyRef = inject(DestroyRef);
   private readonly topicChange$ = new Subject<string>();
   readonly topicSchema = signal<TopicSchema | null>(null);
+  readonly fillExampleError = signal<string | null>(null);
 
   constructor() {
     effect(() => {
@@ -267,6 +254,7 @@ export class EnqueueSection {
         this.enqueueModel.set({ topic: '', key: '', payload: '' });
         this.metadataRows.set([]);
         this.topicSchema.set(null);
+        this.fillExampleError.set(null);
       }
     });
 
@@ -277,7 +265,10 @@ export class EnqueueSection {
         return this.queue.getTopicSchema(topic).pipe(catchError(() => of(null)));
       }),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe((schema) => this.topicSchema.set(schema));
+    ).subscribe((schema) => {
+      this.topicSchema.set(schema);
+      this.fillExampleError.set(null);
+    });
   }
 
   addMetadataRow(): void {
@@ -294,14 +285,18 @@ export class EnqueueSection {
   }
 
   fillExample(): void {
-    const schema = this.topicSchema();
-    if (!schema) return;
+    const schemaData = this.topicSchema();
+    if (!schemaData) return;
     try {
-      const example = generateAvroExample(JSON.parse(schema.schema_json));
+      const example = generateAvroExample(JSON.parse(schemaData.schema_json));
       this.enqueueModel.update((m) => ({ ...m, payload: JSON.stringify(example, null, 2) }));
     } catch {
-      // malformed schema_json — no-op
+      this.fillExampleError.set('Schema JSON is malformed and could not generate an example.');
     }
+  }
+
+  inputValue(e: Event): string {
+    return (e.target as HTMLInputElement).value;
   }
 
   onSubmit(event: Event): void {

@@ -2,8 +2,8 @@ import { Component, inject, ChangeDetectionStrategy } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth.service';
 import { MessagesHeader } from '../messages/messages-header';
-import { UsersSection } from '../messages/users-section';
-import { MaintenanceSection } from '../messages/maintenance-section';
+import { UsersSection } from './users-section';
+import { MaintenanceSection } from './maintenance-section';
 
 @Component({
   selector: 'app-admin',

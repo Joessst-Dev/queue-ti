@@ -284,6 +284,7 @@ const ITEM_SIZE = 53;
                     @if (isDlq(msg)) {
                       <button
                         (click)="requeue.emit(msg.id)"
+                        [attr.aria-label]="'Requeue message ' + msg.id"
                         class="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 rounded hover:bg-amber-200 cursor-pointer whitespace-nowrap"
                       >
                         Requeue
@@ -293,7 +294,7 @@ const ITEM_SIZE = 53;
                         <input
                           type="text"
                           [value]="nackError()"
-                          (input)="nackError.set($any($event.target).value)"
+                          (input)="nackError.set(inputValue($event))"
                           placeholder="Reason…"
                           class="px-1 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-red-400 w-20 shrink-0"
                         />
@@ -314,6 +315,7 @@ const ITEM_SIZE = 53;
                       } @else {
                         <button
                           (click)="nackOpenId.set(msg.id); nackError.set('')"
+                          [attr.aria-label]="'Nack message ' + msg.id"
                           class="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer whitespace-nowrap"
                         >
                           Nack
@@ -325,6 +327,7 @@ const ITEM_SIZE = 53;
                         type="button"
                         (click)="onPurgeByKey(msg)"
                         [title]="purgeKeyTitle(msg.key)"
+                        [attr.aria-label]="purgeKeyTitle(msg.key)"
                         class="shrink-0 p-0.5 text-red-400 hover:text-red-600 cursor-pointer"
                       >
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -411,13 +414,16 @@ export class MessagesTable {
     return Object.entries(metadata).map(([k, v]) => `${k}=${v}`).join(', ');
   }
 
+  private readonly STATUS_CLASS_MAP: Record<string, string> = {
+    pending:    'bg-yellow-100 text-yellow-800',
+    processing: 'bg-blue-100 text-blue-800',
+    failed:     'bg-red-100 text-red-800',
+    expired:    'bg-orange-100 text-orange-800',
+  };
+  private readonly STATUS_BASE = 'inline-flex px-2 py-0.5 text-xs font-medium rounded-full';
+
   statusClasses(status: string): string {
-    const base = 'inline-flex px-2 py-0.5 text-xs font-medium rounded-full';
-    if (status === 'pending') return `${base} bg-yellow-100 text-yellow-800`;
-    if (status === 'processing') return `${base} bg-blue-100 text-blue-800`;
-    if (status === 'failed') return `${base} bg-red-100 text-red-800`;
-    if (status === 'expired') return `${base} bg-orange-100 text-orange-800`;
-    return `${base} bg-gray-100 text-gray-800`;
+    return `${this.STATUS_BASE} ${this.STATUS_CLASS_MAP[status] ?? 'bg-gray-100 text-gray-800'}`;
   }
 
   isDlq(msg: QueueMessage): boolean {
@@ -448,7 +454,12 @@ export class MessagesTable {
     navigator.clipboard.writeText(id).then(() => {
       this.copiedId.set(id);
       setTimeout(() => this.copiedId.set(null), 1500);
-    });
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    }).catch(() => {});
+  }
+
+  inputValue(e: Event): string {
+    return (e.target as HTMLInputElement).value;
   }
 
   togglePurgeStatus(status: string): void {

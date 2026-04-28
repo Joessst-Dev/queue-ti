@@ -1,6 +1,7 @@
-import { Component, inject, computed, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, computed, signal, ChangeDetectionStrategy, OnInit } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
+import { getErrorMessage } from '../utils/error';
 import { Subject, switchMap, map, catchError, of, startWith, tap } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 import {
@@ -50,9 +51,9 @@ interface EnqueueState {
 
       <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         @if (activeTab() === 'messages') {
-          @if (purgeResult()) {
+          @if (purgeResult(); as result) {
             <div class="mb-4 flex items-center justify-between p-3 bg-green-50 border border-green-200 text-green-800 rounded text-sm">
-              <span>{{ purgeResult()!.deleted }} messages purged successfully.</span>
+              <span>{{ result.deleted }} messages purged successfully.</span>
               <button type="button" (click)="purgeResult.set(null)" class="text-green-600 hover:text-green-800 cursor-pointer" aria-label="Dismiss purge result">&times;</button>
             </div>
           }
@@ -92,7 +93,7 @@ interface EnqueueState {
     </div>
   `,
 })
-export class Messages {
+export class Messages implements OnInit {
   protected readonly auth = inject(AuthService);
   private readonly queue = inject(QueueService);
   private readonly router = inject(Router);
@@ -180,7 +181,7 @@ export class Messages {
     { initialValue: { loading: false, error: '' } },
   );
 
-  constructor() {
+  ngOnInit(): void {
     this.loadMessages();
   }
 
@@ -201,8 +202,8 @@ export class Messages {
         this.currentOffset += page.items.length;
         this.loadingMessages.set(false);
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.messagesError.set(err.error?.error ?? 'Failed to load messages');
+      error: (err: unknown) => {
+        this.messagesError.set(getErrorMessage(err, 'Failed to load messages'));
         this.loadingMessages.set(false);
       },
     });
@@ -241,8 +242,8 @@ export class Messages {
         this.purgeResult.set(res);
         this.loadMessages();
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.purgeError.set(err.error?.error ?? 'Failed to purge topic');
+      error: (err: unknown) => {
+        this.purgeError.set(getErrorMessage(err, 'Failed to purge topic'));
       },
     });
   }
@@ -255,8 +256,8 @@ export class Messages {
         this.purgeResult.set(res);
         this.loadMessages();
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.purgeError.set(err.error?.error ?? 'Failed to purge by key');
+      error: (err: unknown) => {
+        this.purgeError.set(getErrorMessage(err, 'Failed to purge by key'));
       },
     });
   }

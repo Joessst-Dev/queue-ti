@@ -1,10 +1,12 @@
 import { Component, inject, signal, ChangeDetectionStrategy, OnInit } from '@angular/core';
 import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.service';
+import { SpinnerComponent } from '../shared/spinner.component';
+import { getErrorMessage } from '../utils/error';
 
 @Component({
   selector: 'app-topic-config-section',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [],
+  imports: [SpinnerComponent],
   template: `
     <section class="bg-white shadow rounded-lg">
       <div class="px-6 py-4 border-b border-gray-200">
@@ -78,7 +80,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                       <input
                         type="text"
                         [value]="newTopicName()"
-                        (input)="newTopicName.set($any($event.target).value)"
+                        (input)="newTopicName.set(inputValue($event))"
                         placeholder="topic name"
                         aria-label="New topic name"
                         class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -88,7 +90,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                       <input
                         type="number"
                         [value]="editForm().max_retries"
-                        (input)="patchEditForm('max_retries', $any($event.target).value)"
+                        (input)="patchEditForm('max_retries', inputValue($event))"
                         placeholder="default"
                         aria-label="Max retries"
                         class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -98,7 +100,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                       <input
                         type="number"
                         [value]="editForm().message_ttl_seconds"
-                        (input)="patchEditForm('message_ttl_seconds', $any($event.target).value)"
+                        (input)="patchEditForm('message_ttl_seconds', inputValue($event))"
                         placeholder="default"
                         aria-label="TTL seconds"
                         class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -108,7 +110,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                       <input
                         type="number"
                         [value]="editForm().max_depth"
-                        (input)="patchEditForm('max_depth', $any($event.target).value)"
+                        (input)="patchEditForm('max_depth', inputValue($event))"
                         placeholder="default"
                         aria-label="Max depth"
                         class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -119,7 +121,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                         type="checkbox"
                         id="new-replayable"
                         [checked]="editForm().replayable"
-                        (change)="patchEditForm('replayable', $any($event.target).checked)"
+                        (change)="patchEditForm('replayable', inputChecked($event))"
                         class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
                       />
                       <label for="new-replayable" class="ml-1 text-sm text-gray-700">Replayable</label>
@@ -129,7 +131,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                         <input
                           type="number"
                           [value]="editForm().replay_window_seconds"
-                          (input)="patchEditForm('replay_window_seconds', $any($event.target).value)"
+                          (input)="patchEditForm('replay_window_seconds', inputValue($event))"
                           placeholder="always"
                           aria-label="Window seconds"
                           class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -162,7 +164,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                         <input
                           type="number"
                           [value]="editForm().max_retries"
-                          (input)="patchEditForm('max_retries', $any($event.target).value)"
+                          (input)="patchEditForm('max_retries', inputValue($event))"
                           placeholder="default"
                           [attr.aria-label]="'Max retries for ' + cfg.topic"
                           class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -172,7 +174,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                         <input
                           type="number"
                           [value]="editForm().message_ttl_seconds"
-                          (input)="patchEditForm('message_ttl_seconds', $any($event.target).value)"
+                          (input)="patchEditForm('message_ttl_seconds', inputValue($event))"
                           placeholder="default"
                           [attr.aria-label]="'TTL seconds for ' + cfg.topic"
                           class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -182,7 +184,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                         <input
                           type="number"
                           [value]="editForm().max_depth"
-                          (input)="patchEditForm('max_depth', $any($event.target).value)"
+                          (input)="patchEditForm('max_depth', inputValue($event))"
                           placeholder="default"
                           [attr.aria-label]="'Max depth for ' + cfg.topic"
                           class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -193,7 +195,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                           type="checkbox"
                           [id]="'replayable-' + cfg.topic"
                           [checked]="editForm().replayable"
-                          (change)="patchEditForm('replayable', $any($event.target).checked)"
+                          (change)="patchEditForm('replayable', inputChecked($event))"
                           class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
                         />
                         <label [for]="'replayable-' + cfg.topic" class="ml-1 text-sm text-gray-700">Replayable</label>
@@ -203,7 +205,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                           <input
                             type="number"
                             [value]="editForm().replay_window_seconds"
-                            (input)="patchEditForm('replay_window_seconds', $any($event.target).value)"
+                            (input)="patchEditForm('replay_window_seconds', inputValue($event))"
                             placeholder="always"
                             [attr.aria-label]="'Window seconds for ' + cfg.topic"
                             class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -313,7 +315,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                                 type="datetime-local"
                                 [id]="'replay-from-' + cfg.topic"
                                 [value]="replayFromTime()"
-                                (input)="replayFromTime.set($any($event.target).value)"
+                                (input)="replayFromTime.set(inputValue($event))"
                                 [min]="replayMinTime()"
                                 class="w-64 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                               />
@@ -349,10 +351,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                                 class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 @if (replayLoading()) {
-                                  <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                                  </svg>
+                                  <app-spinner />
                                 }
                                 Confirm Replay
                               </button>
@@ -382,7 +381,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                                     type="datetime-local"
                                     [id]="'trim-before-' + cfg.topic"
                                     [value]="trimBeforeTime()"
-                                    (input)="trimBeforeTime.set($any($event.target).value)"
+                                    (input)="trimBeforeTime.set(inputValue($event))"
                                     class="w-64 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-400"
                                   />
                                 </div>
@@ -406,10 +405,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                                   class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   @if (trimLoading()) {
-                                    <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                                    </svg>
+                                    <app-spinner />
                                   }
                                   Trim Archive
                                 </button>
@@ -467,6 +463,35 @@ export class TopicConfigSection implements OnInit {
     this.loadConfigs();
   }
 
+  inputValue(e: Event): string {
+    return (e.target as HTMLInputElement).value;
+  }
+
+  inputChecked(e: Event): boolean {
+    return (e.target as HTMLInputElement).checked;
+  }
+
+  private blankEditForm() {
+    return {
+      max_retries: '',
+      message_ttl_seconds: '',
+      max_depth: '',
+      replayable: false,
+      replay_window_seconds: '',
+    };
+  }
+
+  private formatConfigForEdit(cfg: TopicConfig) {
+    return {
+      max_retries: cfg.max_retries != null ? String(cfg.max_retries) : '',
+      message_ttl_seconds: cfg.message_ttl_seconds != null ? String(cfg.message_ttl_seconds) : '',
+      max_depth: cfg.max_depth != null ? String(cfg.max_depth) : '',
+      replayable: cfg.replayable ?? false,
+      replay_window_seconds:
+        cfg.replayable && cfg.replay_window_seconds != null ? String(cfg.replay_window_seconds) : '',
+    };
+  }
+
   private loadConfigs(): void {
     this.loading.set(true);
     this.error.set('');
@@ -475,8 +500,8 @@ export class TopicConfigSection implements OnInit {
         this.configs.set(res.items);
         this.loading.set(false);
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.error.set(err.error?.error ?? 'Failed to load topic configs');
+      error: (err: unknown) => {
+        this.error.set(getErrorMessage(err, 'Failed to load topic configs'));
         this.loading.set(false);
       },
     });
@@ -484,25 +509,12 @@ export class TopicConfigSection implements OnInit {
 
   onAddConfig(): void {
     this.newTopicName.set('');
-    this.editForm.set({
-      max_retries: '',
-      message_ttl_seconds: '',
-      max_depth: '',
-      replayable: false,
-      replay_window_seconds: '',
-    });
+    this.editForm.set(this.blankEditForm());
     this.editingTopic.set('__new__');
   }
 
   onEdit(cfg: TopicConfig): void {
-    this.editForm.set({
-      max_retries: cfg.max_retries != null ? String(cfg.max_retries) : '',
-      message_ttl_seconds: cfg.message_ttl_seconds != null ? String(cfg.message_ttl_seconds) : '',
-      max_depth: cfg.max_depth != null ? String(cfg.max_depth) : '',
-      replayable: cfg.replayable ?? false,
-      replay_window_seconds:
-        cfg.replayable && cfg.replay_window_seconds !== null && cfg.replay_window_seconds !== undefined ? String(cfg.replay_window_seconds) : '',
-    });
+    this.editForm.set(this.formatConfigForEdit(cfg));
     this.editingTopic.set(cfg.topic);
   }
 
@@ -544,8 +556,8 @@ export class TopicConfigSection implements OnInit {
         );
         this.editingTopic.set(null);
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.error.set(err.error?.error ?? 'Failed to save topic config');
+      error: (err: unknown) => {
+        this.error.set(getErrorMessage(err, 'Failed to save topic config'));
       },
     });
   }
@@ -563,8 +575,8 @@ export class TopicConfigSection implements OnInit {
         this.editingTopic.set(null);
         this.newTopicName.set('');
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.error.set(err.error?.error ?? 'Failed to save topic config');
+      error: (err: unknown) => {
+        this.error.set(getErrorMessage(err, 'Failed to save topic config'));
       },
     });
   }
@@ -574,8 +586,8 @@ export class TopicConfigSection implements OnInit {
       next: () => {
         this.configs.update((list) => list.filter((c) => c.topic !== topic));
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.error.set(err.error?.error ?? 'Failed to delete topic config');
+      error: (err: unknown) => {
+        this.error.set(getErrorMessage(err, 'Failed to delete topic config'));
       },
     });
   }
@@ -626,8 +638,8 @@ export class TopicConfigSection implements OnInit {
         this.trimResult.set(res.deleted);
         this.trimLoading.set(false);
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.trimError.set(err.error?.error ?? 'Failed to trim archive');
+      error: (err: unknown) => {
+        this.trimError.set(getErrorMessage(err, 'Failed to trim archive'));
         this.trimLoading.set(false);
       },
     });
@@ -646,8 +658,8 @@ export class TopicConfigSection implements OnInit {
         this.replayResult.set(res);
         this.replayLoading.set(false);
       },
-      error: (err: { error?: { error?: string } }) => {
-        this.replayError.set(err.error?.error ?? 'Failed to replay topic');
+      error: (err: unknown) => {
+        this.replayError.set(getErrorMessage(err, 'Failed to replay topic'));
         this.replayLoading.set(false);
       },
     });

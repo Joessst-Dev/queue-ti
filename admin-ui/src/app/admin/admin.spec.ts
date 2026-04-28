@@ -4,8 +4,8 @@ import { provideRouter } from '@angular/router';
 import { AdminComponent } from './admin';
 import { AuthService } from '../services/auth.service';
 import { MessagesHeader } from '../messages/messages-header';
-import { UsersSection } from '../messages/users-section';
-import { MaintenanceSection } from '../messages/maintenance-section';
+import { UsersSection } from './users-section';
+import { MaintenanceSection } from './maintenance-section';
 
 @Component({ selector: 'app-messages-header', template: '<div>header</div>', standalone: true })
 class StubMessagesHeader {
