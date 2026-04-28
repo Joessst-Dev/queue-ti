@@ -355,7 +355,7 @@ describe('MessagesTable', () => {
 
         vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-        findPurgeKeyBtn(fixture.nativeElement)!.click();
+        findPurgeKeyBtn(fixture.nativeElement)?.click();
         await fixture.whenStable();
 
         expect(emitted.length).toBe(1);

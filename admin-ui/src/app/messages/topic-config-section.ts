@@ -117,12 +117,12 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                     <td class="px-3 py-2">
                       <input
                         type="checkbox"
+                        id="new-replayable"
                         [checked]="editForm().replayable"
                         (change)="patchEditForm('replayable', $any($event.target).checked)"
-                        aria-label="Replayable"
                         class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
                       />
-                      <label class="ml-1 text-sm text-gray-700">Replayable</label>
+                      <label for="new-replayable" class="ml-1 text-sm text-gray-700">Replayable</label>
                     </td>
                     <td class="px-3 py-2">
                       @if (editForm().replayable) {
@@ -191,12 +191,12 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                       <td class="px-3 py-2">
                         <input
                           type="checkbox"
+                          [id]="'replayable-' + cfg.topic"
                           [checked]="editForm().replayable"
                           (change)="patchEditForm('replayable', $any($event.target).checked)"
-                          [attr.aria-label]="'Replayable for ' + cfg.topic"
                           class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
                         />
-                        <label class="ml-1 text-sm text-gray-700">Replayable</label>
+                        <label [for]="'replayable-' + cfg.topic" class="ml-1 text-sm text-gray-700">Replayable</label>
                       </td>
                       <td class="px-3 py-2">
                         @if (editForm().replayable) {
@@ -307,7 +307,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                                 [for]="'replay-from-' + cfg.topic"
                                 class="text-sm font-medium text-gray-700"
                               >
-                                {{ cfg.replay_window_seconds != null ? 'Replay from' : 'Replay from (optional)' }}
+                                {{ cfg.replay_window_seconds !== null && cfg.replay_window_seconds !== undefined ? 'Replay from' : 'Replay from (optional)' }}
                               </label>
                               <input
                                 type="datetime-local"
@@ -318,7 +318,7 @@ import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.ser
                                 class="w-64 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                               />
                               <p class="text-xs text-gray-500">
-                                @if (cfg.replay_window_seconds != null) {
+                                @if (cfg.replay_window_seconds !== null && cfg.replay_window_seconds !== undefined) {
                                   Re-enqueues all messages acked since the selected time. Duplicates may occur if consumers are currently active.
                                 } @else {
                                   No time window configured — replaying without a from-time will re-enqueue all archived messages for this topic.
@@ -445,7 +445,7 @@ export class TopicConfigSection implements OnInit {
       max_depth: cfg.max_depth != null ? String(cfg.max_depth) : '',
       replayable: cfg.replayable ?? false,
       replay_window_seconds:
-        cfg.replayable && cfg.replay_window_seconds != null ? String(cfg.replay_window_seconds) : '',
+        cfg.replayable && cfg.replay_window_seconds !== null && cfg.replay_window_seconds !== undefined ? String(cfg.replay_window_seconds) : '',
     });
     this.editingTopic.set(cfg.topic);
   }
@@ -528,7 +528,7 @@ export class TopicConfigSection implements OnInit {
     this.replayResult.set(null);
     this.replayError.set(null);
 
-    if (cfg.replay_window_seconds != null) {
+    if (cfg.replay_window_seconds !== null && cfg.replay_window_seconds !== undefined) {
       const now = new Date();
       const fromDate = new Date(now.getTime() - cfg.replay_window_seconds * 1000);
       this.replayFromTime.set(this.toDatetimeLocal(fromDate));
