@@ -39,9 +39,12 @@ func (s *Service) Ack(ctx context.Context, id string) error {
 	}
 
 	var replayable bool
-	_ = tx.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`SELECT COALESCE(replayable, false) FROM topic_config WHERE topic = $1`, topic,
 	).Scan(&replayable)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("ack check replayable: %w", err)
+	}
 
 	if replayable {
 		_, err = tx.Exec(ctx, `

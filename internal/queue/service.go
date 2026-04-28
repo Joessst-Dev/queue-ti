@@ -24,9 +24,8 @@ var (
 // Advisory lock keys for reaper leader election across instances.
 // These are stable, application-specific int64 values stored per database.
 const (
-	expiryReaperLockKey  int64 = 7_000_001
-	deleteReaperLockKey  int64 = 7_000_002
-	archiveReaperLockKey int64 = 7_000_003
+	expiryReaperLockKey int64 = 7_000_001
+	deleteReaperLockKey int64 = 7_000_002
 )
 
 type Message struct {

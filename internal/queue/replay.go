@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // ArchivedMessage is a row from message_log returned by ListMessageLog.
@@ -48,7 +50,7 @@ func (s *Service) ReplayTopic(ctx context.Context, topic string, fromTime time.T
 		effectiveFrom = windowStart
 	}
 
-	var tag interface{ RowsAffected() int64 }
+	var tag pgconn.CommandTag
 	if effectiveFrom.IsZero() {
 		tag, err = s.pool.Exec(ctx, `
 			INSERT INTO messages

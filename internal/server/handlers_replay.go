@@ -75,6 +75,9 @@ func (s *HTTPServer) replayTopic(c *fiber.Ctx) error {
 func (s *HTTPServer) listMessageLog(c *fiber.Ctx) error {
 	topic := c.Params("topic")
 	limit := c.QueryInt("limit", 50)
+	if limit <= 0 {
+		limit = 50
+	}
 	if limit > 200 {
 		limit = 200
 	}

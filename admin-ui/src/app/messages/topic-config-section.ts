@@ -583,6 +583,9 @@ export class TopicConfigSection implements OnInit {
   onReplay(cfg: TopicConfig): void {
     this.replayResult.set(null);
     this.replayError.set(null);
+    this.trimBeforeTime.set('');
+    this.trimResult.set(null);
+    this.trimError.set(null);
 
     if (cfg.replay_window_seconds !== null && cfg.replay_window_seconds !== undefined) {
       const now = new Date();

@@ -70,13 +70,17 @@ func (s *HTTPServer) upsertTopicConfig(c *fiber.Ctx) error {
 	if req.Replayable != nil {
 		replayable = *req.Replayable
 	}
+	replayWindow := req.ReplayWindowSeconds
+	if !replayable {
+		replayWindow = nil
+	}
 	cfg := queue.TopicConfig{
 		Topic:               topic,
 		MaxRetries:          req.MaxRetries,
 		MessageTTLSeconds:   req.MessageTTLSeconds,
 		MaxDepth:            req.MaxDepth,
 		Replayable:          replayable,
-		ReplayWindowSeconds: req.ReplayWindowSeconds,
+		ReplayWindowSeconds: replayWindow,
 	}
 	if err := s.queueService.UpsertTopicConfig(c.Context(), cfg); err != nil {
 		slog.Error("upsert topic config failed", "topic", topic, "error", err)

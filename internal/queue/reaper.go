@@ -113,19 +113,21 @@ func (s *Service) RunDeleteReaperOnce(ctx context.Context) (int64, error) {
 	return n, nil
 }
 
+const archiveReaperSQL = `
+	DELETE FROM message_log ml
+	USING topic_config tc
+	WHERE ml.topic = tc.topic
+	  AND tc.replayable = true
+	  AND tc.replay_window_seconds IS NOT NULL
+	  AND tc.replay_window_seconds > 0
+	  AND ml.acked_at < now() - (tc.replay_window_seconds || ' seconds')::interval
+`
+
 // RunArchiveReaperOnce deletes message_log rows that have aged past each
 // topic's replay_window_seconds. Topics with replayable = false or no window
 // configured are skipped. Returns the total number of rows deleted.
 func (s *Service) RunArchiveReaperOnce(ctx context.Context) (int64, error) {
-	tag, err := s.pool.Exec(ctx, `
-		DELETE FROM message_log ml
-		USING topic_config tc
-		WHERE ml.topic = tc.topic
-		  AND tc.replayable = true
-		  AND tc.replay_window_seconds IS NOT NULL
-		  AND tc.replay_window_seconds > 0
-		  AND ml.acked_at < now() - (tc.replay_window_seconds || ' seconds')::interval
-	`)
+	tag, err := s.pool.Exec(ctx, archiveReaperSQL)
 	if err != nil {
 		return 0, fmt.Errorf("run archive reaper: %w", err)
 	}
@@ -161,15 +163,7 @@ func (s *Service) StartDeleteReaper(ctx context.Context, schedule string) (stop 
 				s.recorder.RecordDeleted(n)
 				slog.Info("delete reaper (scheduled) removed expired messages", "count", n)
 			}
-			archiveTag, err := tx.Exec(ctx, `
-				DELETE FROM message_log ml
-				USING topic_config tc
-				WHERE ml.topic = tc.topic
-				  AND tc.replayable = true
-				  AND tc.replay_window_seconds IS NOT NULL
-				  AND tc.replay_window_seconds > 0
-				  AND ml.acked_at < now() - (tc.replay_window_seconds || ' seconds')::interval
-			`)
+			archiveTag, err := tx.Exec(ctx, archiveReaperSQL)
 			if err != nil {
 				return err
 			}
