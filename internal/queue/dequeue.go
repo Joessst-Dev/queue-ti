@@ -16,6 +16,33 @@ func (s *Service) Dequeue(ctx context.Context, topic string, visibilityTimeout t
 		vt = visibilityTimeout
 	}
 
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("dequeue begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// Check for a per-topic throughput limit.
+	var limit *int
+	err = tx.QueryRow(ctx,
+		`SELECT throughput_limit FROM topic_config WHERE topic = $1`, topic,
+	).Scan(&limit)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("dequeue fetch limit: %w", err)
+	}
+	if limit != nil && *limit > 0 {
+		allowed, err := s.consumeTokens(ctx, tx, topic, *limit, 1)
+		if err != nil {
+			return nil, err
+		}
+		if allowed == 0 {
+			if commitErr := tx.Commit(ctx); commitErr != nil {
+				return nil, fmt.Errorf("dequeue commit (throttled): %w", commitErr)
+			}
+			return nil, ErrNoMessage
+		}
+	}
+
 	query := `
 		UPDATE messages
 		SET status = 'processing',
@@ -39,7 +66,7 @@ func (s *Service) Dequeue(ctx context.Context, topic string, visibilityTimeout t
 	var msg Message
 	var metaJSON []byte
 	var lastError *string
-	err := s.pool.QueryRow(ctx, query,
+	err = tx.QueryRow(ctx, query,
 		fmt.Sprintf("%d seconds", int(vt.Seconds())),
 		topic,
 	).Scan(
@@ -50,6 +77,9 @@ func (s *Service) Dequeue(ctx context.Context, topic string, visibilityTimeout t
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			return nil, fmt.Errorf("dequeue commit (empty): %w", commitErr)
+		}
 		return nil, ErrNoMessage
 	}
 	if err != nil {
@@ -58,6 +88,10 @@ func (s *Service) Dequeue(ctx context.Context, topic string, visibilityTimeout t
 
 	if err := hydrateMessage(&msg, metaJSON, lastError); err != nil {
 		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("dequeue commit: %w", err)
 	}
 
 	s.recorder.RecordDequeue(msg.Topic)
@@ -77,6 +111,34 @@ func (s *Service) DequeueN(ctx context.Context, topic string, n int, visibilityT
 	vt := s.visibilityTimeout
 	if visibilityTimeout > 0 {
 		vt = visibilityTimeout
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("dequeue batch begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	allowed := n
+	var limit *int
+	err = tx.QueryRow(ctx,
+		`SELECT throughput_limit FROM topic_config WHERE topic = $1`, topic,
+	).Scan(&limit)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("dequeue batch fetch limit: %w", err)
+	}
+	if limit != nil && *limit > 0 {
+		allowed, err = s.consumeTokens(ctx, tx, topic, *limit, n)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if allowed == 0 {
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			return nil, fmt.Errorf("dequeue batch commit (throttled): %w", commitErr)
+		}
+		return []*Message{}, nil
 	}
 
 	query := `
@@ -100,9 +162,9 @@ func (s *Service) DequeueN(ctx context.Context, topic string, n int, visibilityT
 		          COALESCE(original_topic, ''), dlq_moved_at, key
 	`
 
-	rows, err := s.pool.Query(ctx, query,
+	rows, err := tx.Query(ctx, query,
 		topic,
-		n,
+		allowed,
 		fmt.Sprintf("%d seconds", int(vt.Seconds())),
 	)
 	if err != nil {
@@ -110,7 +172,7 @@ func (s *Service) DequeueN(ctx context.Context, topic string, n int, visibilityT
 	}
 	defer rows.Close()
 
-	messages := make([]*Message, 0, n)
+	messages := make([]*Message, 0, allowed)
 	for rows.Next() {
 		var msg Message
 		var metaJSON []byte
@@ -132,6 +194,10 @@ func (s *Service) DequeueN(ctx context.Context, topic string, n int, visibilityT
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("dequeue batch rows: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("dequeue batch commit: %w", err)
 	}
 
 	return messages, nil

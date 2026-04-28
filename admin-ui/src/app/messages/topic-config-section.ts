@@ -70,6 +70,7 @@ import { getErrorMessage } from '../utils/error';
                   <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Depth</th>
                   <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Replayable</th>
                   <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Window</th>
+                  <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Throttle (msg/s)</th>
                   <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -137,6 +138,17 @@ import { getErrorMessage } from '../utils/error';
                           class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                       }
+                    </td>
+                    <td class="px-3 py-2">
+                      <input
+                        type="number"
+                        min="0"
+                        [value]="editForm().throughput_limit"
+                        (input)="patchEditForm('throughput_limit', inputValue($event))"
+                        placeholder="unlimited"
+                        aria-label="Throttle (msg/s)"
+                        class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
                     </td>
                     <td class="px-3 py-2 flex items-center gap-2">
                       <button
@@ -212,6 +224,17 @@ import { getErrorMessage } from '../utils/error';
                           />
                         }
                       </td>
+                      <td class="px-3 py-2">
+                        <input
+                          type="number"
+                          min="0"
+                          [value]="editForm().throughput_limit"
+                          (input)="patchEditForm('throughput_limit', inputValue($event))"
+                          placeholder="unlimited"
+                          [attr.aria-label]="'Throttle for ' + cfg.topic"
+                          class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </td>
                       <td class="px-3 py-2 flex items-center gap-2">
                         <button
                           type="button"
@@ -271,6 +294,13 @@ import { getErrorMessage } from '../utils/error';
                           <span class="text-gray-400">—</span>
                         }
                       </td>
+                      <td class="px-3 py-2">
+                        @if (cfg.throughput_limit !== null && cfg.throughput_limit !== undefined) {
+                          {{ cfg.throughput_limit }}
+                        } @else {
+                          <span class="text-gray-400">—</span>
+                        }
+                      </td>
                       <td class="px-3 py-2 flex items-center gap-2">
                         <button
                           type="button"
@@ -302,7 +332,7 @@ import { getErrorMessage } from '../utils/error';
                     </tr>
                     @if (replayingTopic() === cfg.topic) {
                       <tr>
-                        <td colspan="7" class="px-4 py-4 bg-indigo-50 border-t border-indigo-100">
+                        <td colspan="8" class="px-4 py-4 bg-indigo-50 border-t border-indigo-100">
                           <div class="space-y-3">
                             <div class="flex flex-col gap-1">
                               <label
@@ -438,12 +468,14 @@ export class TopicConfigSection implements OnInit {
     max_depth: string;
     replayable: boolean;
     replay_window_seconds: string;
+    throughput_limit: string;
   }>({
     max_retries: '',
     message_ttl_seconds: '',
     max_depth: '',
     replayable: false,
     replay_window_seconds: '',
+    throughput_limit: '',
   });
   readonly newTopicName = signal('');
 
@@ -478,6 +510,7 @@ export class TopicConfigSection implements OnInit {
       max_depth: '',
       replayable: false,
       replay_window_seconds: '',
+      throughput_limit: '',
     };
   }
 
@@ -489,6 +522,7 @@ export class TopicConfigSection implements OnInit {
       replayable: cfg.replayable ?? false,
       replay_window_seconds:
         cfg.replayable && cfg.replay_window_seconds != null ? String(cfg.replay_window_seconds) : '',
+      throughput_limit: cfg.throughput_limit != null ? String(cfg.throughput_limit) : '',
     };
   }
 
@@ -523,7 +557,7 @@ export class TopicConfigSection implements OnInit {
   }
 
   patchEditForm(
-    field: 'max_retries' | 'message_ttl_seconds' | 'max_depth' | 'replayable' | 'replay_window_seconds',
+    field: 'max_retries' | 'message_ttl_seconds' | 'max_depth' | 'replayable' | 'replay_window_seconds' | 'throughput_limit',
     value: string | boolean,
   ): void {
     this.editForm.update((f) => ({ ...f, [field]: value }));
@@ -544,6 +578,7 @@ export class TopicConfigSection implements OnInit {
       max_depth: this.parseField(f.max_depth),
       replayable: f.replayable,
       replay_window_seconds: f.replayable ? this.parseField(f.replay_window_seconds) : null,
+      throughput_limit: this.parseField(f.throughput_limit),
     };
   }
 

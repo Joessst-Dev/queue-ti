@@ -112,8 +112,8 @@ describe('TopicConfigSection', () => {
       const { el } = await setup({ configs });
 
       const dashes = el.querySelectorAll('span.text-gray-400');
-      // max_retries, message_ttl_seconds, max_depth, replayable, window
-      expect(dashes.length).toBe(5);
+      // max_retries, message_ttl_seconds, max_depth, replayable, window, throughput_limit
+      expect(dashes.length).toBe(6);
       dashes.forEach((d) => expect(d.textContent?.trim()).toBe('—'));
     });
 

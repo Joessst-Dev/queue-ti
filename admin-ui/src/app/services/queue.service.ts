@@ -61,6 +61,7 @@ export interface TopicConfig {
   max_depth?: number | null;
   replayable?: boolean;
   replay_window_seconds?: number | null;
+  throughput_limit?: number | null;
 }
 
 export interface ReplayResponse {

@@ -16,6 +16,7 @@ type topicConfigRequest struct {
 	MaxDepth            *int  `json:"max_depth"`
 	Replayable          *bool `json:"replayable"`
 	ReplayWindowSeconds *int  `json:"replay_window_seconds"`
+	ThroughputLimit     *int  `json:"throughput_limit"`
 }
 
 type topicConfigResponse struct {
@@ -25,6 +26,7 @@ type topicConfigResponse struct {
 	MaxDepth            *int   `json:"max_depth,omitempty"`
 	Replayable          bool   `json:"replayable"`
 	ReplayWindowSeconds *int   `json:"replay_window_seconds,omitempty"`
+	ThroughputLimit     *int   `json:"throughput_limit,omitempty"`
 }
 
 type listTopicConfigsResponse struct {
@@ -39,6 +41,7 @@ func toTopicConfigResponse(cfg queue.TopicConfig) topicConfigResponse {
 		MaxDepth:            cfg.MaxDepth,
 		Replayable:          cfg.Replayable,
 		ReplayWindowSeconds: cfg.ReplayWindowSeconds,
+		ThroughputLimit:     cfg.ThroughputLimit,
 	}
 }
 
@@ -66,6 +69,10 @@ func (s *HTTPServer) upsertTopicConfig(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
 
+	if req.ThroughputLimit != nil && *req.ThroughputLimit < 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "throughput_limit must be a non-negative integer"})
+	}
+
 	replayable := false
 	if req.Replayable != nil {
 		replayable = *req.Replayable
@@ -81,6 +88,7 @@ func (s *HTTPServer) upsertTopicConfig(c *fiber.Ctx) error {
 		MaxDepth:            req.MaxDepth,
 		Replayable:          replayable,
 		ReplayWindowSeconds: replayWindow,
+		ThroughputLimit:     req.ThroughputLimit,
 	}
 	if err := s.queueService.UpsertTopicConfig(c.Context(), cfg); err != nil {
 		slog.Error("upsert topic config failed", "topic", topic, "error", err)
