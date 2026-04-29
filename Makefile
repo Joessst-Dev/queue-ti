@@ -1,4 +1,4 @@
-.PHONY: proto deps test run build bench bench-mem bench-queue bench-loadtest install-hooks
+.PHONY: proto deps test run build bench bench-mem bench-queue bench-loadtest install-hooks up up-redis down
 
 proto:
 	protoc --go_out=pb --go_opt=paths=source_relative \
@@ -22,6 +22,15 @@ build:
 
 run:
 	go run cmd/server/main.go
+
+up:
+	docker-compose up -d
+
+up-redis:
+	docker-compose -f docker-compose.yaml -f docker-compose.redis.yaml up -d
+
+down:
+	docker-compose -f docker-compose.yaml -f docker-compose.redis.yaml down
 
 # Run all benchmarks (3 s per benchmark, no unit tests)
 bench:
