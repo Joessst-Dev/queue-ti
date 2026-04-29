@@ -521,6 +521,38 @@ var _ = Describe("HTTP Server", func() {
 				Expect(resp.StatusCode).To(Equal(403))
 			})
 		})
+
+		Context("when auth is enabled and no Authorization header is sent", func() {
+			It("should return 401 on requireGrant-protected routes", func() {
+				// GET /api/messages — protected by requireGrant("read")
+				req := httptest.NewRequest("GET", "/api/messages?topic=orders", nil)
+				resp, err := httpServer.App.Test(req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(401))
+
+				// POST /api/messages — protected by requireGrant("write")
+				req = httptest.NewRequest("POST", "/api/messages",
+					strings.NewReader(`{"topic":"orders","payload":"hi"}`))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err = httpServer.App.Test(req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(401))
+			})
+
+			It("should return 401 on requireAdmin-protected routes", func() {
+				// GET /api/stats — protected by requireAdmin
+				req := httptest.NewRequest("GET", "/api/stats", nil)
+				resp, err := httpServer.App.Test(req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(401))
+
+				// GET /api/users — protected by requireAdmin
+				req = httptest.NewRequest("GET", "/api/users", nil)
+				resp, err = httpServer.App.Test(req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(401))
+			})
+		})
 	})
 
 	// ---------------------------------------------------------------------------
@@ -1741,6 +1773,107 @@ var _ = Describe("HTTP Server", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(401))
 				Expect(decodeErrorBody(resp.Body)).To(Equal("missing authorization header"))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
+	// POST /api/users
+	// ---------------------------------------------------------------------------
+
+	Describe("POST /api/users", func() {
+		var httpServer *server.HTTPServer
+		var adminToken string
+
+		BeforeEach(func() {
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+				Enabled:   true,
+				JWTSecret: testJWTSecret,
+			}, prometheus.NewRegistry(), userStore, "dev")
+
+			admin, err := userStore.Create(httpTestCtx, "post-users-admin", "strongpassword123", true)
+			Expect(err).NotTo(HaveOccurred())
+			adminToken, err = users.IssueToken([]byte(testJWTSecret), admin.ID, admin.Username, admin.IsAdmin)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when the password is shorter than 12 characters", func() {
+			It("should return 400 with a descriptive error", func() {
+				body := `{"username":"newuser","password":"short"}`
+				req := httptest.NewRequest("POST", "/api/users", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+adminToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(400))
+				Expect(decodeErrorBody(resp.Body)).To(Equal("password must be at least 12 characters"))
+			})
+		})
+
+		Context("when the password meets the minimum length", func() {
+			It("should return 201 and create the user", func() {
+				body := `{"username":"newuser","password":"strongpassword123"}`
+				req := httptest.NewRequest("POST", "/api/users", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+adminToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(201))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
+	// PUT /api/users/:id
+	// ---------------------------------------------------------------------------
+
+	Describe("PUT /api/users/:id", func() {
+		var httpServer *server.HTTPServer
+		var adminToken string
+		var targetUserID string
+
+		BeforeEach(func() {
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+				Enabled:   true,
+				JWTSecret: testJWTSecret,
+			}, prometheus.NewRegistry(), userStore, "dev")
+
+			admin, err := userStore.Create(httpTestCtx, "put-users-admin", "strongpassword123", true)
+			Expect(err).NotTo(HaveOccurred())
+			adminToken, err = users.IssueToken([]byte(testJWTSecret), admin.ID, admin.Username, admin.IsAdmin)
+			Expect(err).NotTo(HaveOccurred())
+
+			target, err := userStore.Create(httpTestCtx, "put-users-target", "strongpassword123", false)
+			Expect(err).NotTo(HaveOccurred())
+			targetUserID = target.ID
+		})
+
+		Context("when the new password is shorter than 12 characters", func() {
+			It("should return 400 with a descriptive error", func() {
+				body := `{"password":"short"}`
+				req := httptest.NewRequest("PUT", "/api/users/"+targetUserID, strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+adminToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(400))
+				Expect(decodeErrorBody(resp.Body)).To(Equal("password must be at least 12 characters"))
+			})
+		})
+
+		Context("when the new password meets the minimum length", func() {
+			It("should return 200 and update the user", func() {
+				body := `{"password":"newstrongpassword123"}`
+				req := httptest.NewRequest("PUT", "/api/users/"+targetUserID, strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+adminToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
 			})
 		})
 	})
