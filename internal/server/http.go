@@ -83,18 +83,30 @@ func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, rateLimitSt
 		return nil
 	})
 
+	// When X-Real-IP is absent (e.g. direct connections, tests) fall back to the
+	// actual socket IP so the limiter key is never empty. An empty key is silently
+	// ignored by the Redis storage backend, which would bypass rate limiting.
+	rateLimitKey := func(c *fiber.Ctx) string {
+		if ip := c.Get("X-Real-IP"); ip != "" {
+			return ip
+		}
+		return c.Context().RemoteIP().String()
+	}
+
 	var loginLimiter fiber.Handler
 	if rateLimitStore != nil {
 		loginLimiter = limiter.New(limiter.Config{
-			Max:        10,
-			Expiration: 60 * time.Second,
-			Storage:    rateLimitStore,
+			Max:          10,
+			Expiration:   60 * time.Second,
+			Storage:      rateLimitStore,
+			KeyGenerator: rateLimitKey,
 		})
 		slog.Info("login rate limiter using Redis storage")
 	} else {
 		loginLimiter = limiter.New(limiter.Config{
-			Max:        10,
-			Expiration: 60 * time.Second,
+			Max:          10,
+			Expiration:   60 * time.Second,
+			KeyGenerator: rateLimitKey,
 		})
 		slog.Info("login rate limiter using in-memory storage (single-instance only)")
 	}
