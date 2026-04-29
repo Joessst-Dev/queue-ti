@@ -13,6 +13,17 @@ export class AuthService {
   isAuthenticated = computed(() => this.token() !== null);
   authRequired = computed(() => this._authRequired());
 
+  tokenExpiresAt = computed<number | null>(() => {
+    const t = this.token();
+    if (!t) return null;
+    try {
+      const payload = JSON.parse(atob(t.split('.')[1]));
+      return typeof payload['exp'] === 'number' ? payload['exp'] * 1000 : null;
+    } catch {
+      return null;
+    }
+  });
+
   isAdmin = computed(() => {
     const t = this.token();
     if (!t) return false;

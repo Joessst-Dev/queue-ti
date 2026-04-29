@@ -1,1 +1,12 @@
 @import 'tailwindcss';
+@import '@angular/cdk/overlay-prebuilt.css';
+
+.cdk-overlay-backdrop {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.cdk-overlay-pane {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -20,7 +20,9 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       error: (err) => {
         if (err.status === 401 && auth.isAuthenticated()) {
           auth.logout();
-          router.navigate(['/login']);
+          if (!req.url.includes('/auth/refresh')) {
+            router.navigate(['/login']);
+          }
         }
       },
     }),

@@ -224,6 +224,35 @@ describe('AuthService', () => {
     });
   });
 
+  describe('tokenExpiresAt()', () => {
+    describe('when not authenticated', () => {
+      it('should return null', () => {
+        expect(service.tokenExpiresAt()).toBeNull();
+      });
+    });
+
+    describe('when token has an exp claim', () => {
+      it('should return exp * 1000 as milliseconds', () => {
+        const expSeconds = 1_700_000_000;
+        const jwt = makeJwt({ sub: 'admin', exp: expSeconds });
+        service.login('admin', 'secret').subscribe();
+        httpController.expectOne('/api/auth/login').flush({ token: jwt });
+
+        expect(service.tokenExpiresAt()).toBe(expSeconds * 1000);
+      });
+    });
+
+    describe('when token has no exp claim', () => {
+      it('should return null', () => {
+        const jwt = makeJwt({ sub: 'admin' });
+        service.login('admin', 'secret').subscribe();
+        httpController.expectOne('/api/auth/login').flush({ token: jwt });
+
+        expect(service.tokenExpiresAt()).toBeNull();
+      });
+    });
+  });
+
   describe('refreshToken()', () => {
     describe('when the server responds with a new token', () => {
       it('should POST to /api/auth/refresh', () => {
