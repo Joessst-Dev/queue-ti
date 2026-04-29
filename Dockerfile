@@ -16,7 +16,6 @@ FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=builder /queue-ti /queue-ti
 COPY --from=builder /healthcheck /healthcheck
-COPY config.yaml /config.yaml
 
 EXPOSE 50051
 

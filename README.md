@@ -2023,6 +2023,15 @@ docker run -d \
   queue-ti:latest
 ```
 
+### gRPC TLS
+
+The gRPC server (port 50051) runs **without TLS by default**. In production, never expose port 50051 directly to untrusted networks. Use one of the following approaches:
+
+- **TLS-terminating reverse proxy** — Place an Envoy sidecar, an nginx stream proxy, or a cloud load balancer in front of port 50051 and have it handle TLS termination before forwarding plaintext gRPC to the backend.
+- **Native TLS (planned)** — A future release will support loading a certificate and key directly in the server via `QUEUETI_GRPC_TLS_CERT` / `QUEUETI_GRPC_TLS_KEY` env vars. Until then, the reverse-proxy approach is the recommended workaround for production deployments.
+
+The `docker-compose.yaml` already restricts gRPC to `127.0.0.1:50051` to prevent accidental external exposure in local and single-host environments.
+
 ### Docker Compose
 
 The included `docker-compose.yaml` orchestrates PostgreSQL, the backend, and the admin UI:

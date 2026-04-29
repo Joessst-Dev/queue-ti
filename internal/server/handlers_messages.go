@@ -104,7 +104,7 @@ func (s *HTTPServer) listMessages(c *fiber.Ctx) error {
 	messages, total, err := s.queueService.List(c.Context(), topic, limit, offset)
 	if err != nil {
 		slog.Error("list messages failed", "topic", topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	items := make([]messageResponse, 0, len(messages))
@@ -142,7 +142,7 @@ func (s *HTTPServer) enqueueMessage(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{"error": err.Error()})
 		}
 		slog.Error("enqueue failed", "topic", req.Topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"id": id})
@@ -177,7 +177,7 @@ func (s *HTTPServer) batchDequeueMessages(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 		}
 		slog.Error("batch dequeue failed", "topic", req.Topic, "count", req.Count, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	items := make([]messageResponse, 0, len(batch))
@@ -200,7 +200,7 @@ func (s *HTTPServer) nackMessage(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 		}
 		slog.Error("nack failed", "id", id, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
@@ -210,7 +210,7 @@ func (s *HTTPServer) statsHandler(c *fiber.Ctx) error {
 	stats, err := s.queueService.Stats(c.Context())
 	if err != nil {
 		slog.Error("stats failed", "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 	items := make([]topicStatResponse, len(stats))
 	for i, st := range stats {
@@ -227,7 +227,7 @@ func (s *HTTPServer) requeueMessage(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 		}
 		slog.Error("requeue failed", "id", id, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)

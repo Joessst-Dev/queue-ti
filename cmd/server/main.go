@@ -77,6 +77,10 @@ func main() {
 			slog.Error("auth.enabled is true but auth.jwt_secret is not set")
 			os.Exit(1)
 		}
+		if len(cfg.Auth.JWTSecret) < 32 {
+			slog.Error("auth.jwt_secret must be at least 32 bytes for security", "length", len(cfg.Auth.JWTSecret))
+			os.Exit(1)
+		}
 		if err := users.SeedAdminUser(ctx, userStore, cfg.Auth.Username, cfg.Auth.Password); err != nil {
 			slog.Error("failed to seed admin user", "error", err)
 			os.Exit(1)
@@ -132,7 +136,7 @@ func main() {
 		}
 	}()
 
-	httpServer := server.NewHTTPServer(queueService, cfg.Auth, reg, userStore, version)
+	httpServer := server.NewHTTPServer(queueService, cfg.Server, cfg.Auth, reg, userStore, version)
 	httpAddr := fmt.Sprintf(":%d", cfg.Server.HTTPPort)
 	go func() {
 		slog.Info("HTTP server listening", "addr", httpAddr)

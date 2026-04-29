@@ -10,6 +10,9 @@ import (
 func (s *HTTPServer) requireAdmin() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		claims := internalAuth.ClaimsFromCtx(c)
+		if s.authConfig.Enabled && claims == nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "authentication required"})
+		}
 		if claims == nil {
 			return c.Next()
 		}
@@ -23,6 +26,9 @@ func (s *HTTPServer) requireAdmin() fiber.Handler {
 func (s *HTTPServer) requireGrant(action string, topicFn func(*fiber.Ctx) string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		claims := internalAuth.ClaimsFromCtx(c)
+		if s.authConfig.Enabled && claims == nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "authentication required"})
+		}
 		if claims == nil {
 			return c.Next()
 		}
@@ -44,6 +50,9 @@ func (s *HTTPServer) requireGrant(action string, topicFn func(*fiber.Ctx) string
 func (s *HTTPServer) requireWriteOnMsgTopic() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		claims := internalAuth.ClaimsFromCtx(c)
+		if s.authConfig.Enabled && claims == nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "authentication required"})
+		}
 		if claims == nil {
 			return c.Next()
 		}

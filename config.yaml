@@ -1,3 +1,4 @@
+# LOCAL DEVELOPMENT ONLY — never use these values in production
 server:
   port: 50051
   http_port: 8080
@@ -6,9 +7,9 @@ db:
   host: localhost
   port: 5432
   user: postgres
-  password: postgres
+  password: postgres  # override with QUEUETI_DB_PASSWORD in production
   name: queueti
-  sslmode: disable
+  sslmode: disable  # dev only — code default is 'require'; override with QUEUETI_DB_SSLMODE
 
 queue:
   visibility_timeout: 30s
@@ -18,5 +19,5 @@ auth:
   enabled: false
   username: admin
   password: secret
-  jwt_secret: dev-only-secret-change-for-production
-
+  jwt_secret: CHANGE_ME_USE_QUEUETI_AUTH_JWT_SECRET_ENV_VAR_IN_PRODUCTION
+  # cors_origins defaults to "*" — set QUEUETI_SERVER_CORS_ORIGINS to restrict in production

@@ -29,7 +29,7 @@ var _ = Describe("Load", func() {
 			Expect(cfg.DB.User).To(Equal("postgres"))
 			Expect(cfg.DB.Password).To(Equal("postgres"))
 			Expect(cfg.DB.Name).To(Equal("queueti"))
-			Expect(cfg.DB.SSLMode).To(Equal("disable"))
+			Expect(cfg.DB.SSLMode).To(Equal("require"))
 			Expect(cfg.Queue.VisibilityTimeout).To(Equal(30 * time.Second))
 			Expect(cfg.Queue.MaxRetries).To(Equal(3))
 			Expect(cfg.Queue.MessageTTL).To(Equal(24 * time.Hour))

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
@@ -21,14 +22,16 @@ type HTTPServer struct {
 	App          *fiber.App
 	queueService *queue.Service
 	authConfig   config.AuthConfig
+	serverConfig config.ServerConfig
 	userStore    *users.Store
 	version      string
 }
 
-func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer prometheus.Gatherer, userStore *users.Store, version string) *HTTPServer {
+func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, authCfg config.AuthConfig, gatherer prometheus.Gatherer, userStore *users.Store, version string) *HTTPServer {
 	s := &HTTPServer{
 		queueService: qs,
 		authConfig:   authCfg,
+		serverConfig: serverCfg,
 		userStore:    userStore,
 		version:      version,
 	}
@@ -38,7 +41,7 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer promet
 	})
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
+		AllowOrigins: serverCfg.CORSOrigins,
 		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders: "Content-Type,Authorization",
 	}))
@@ -60,14 +63,6 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer promet
 		return c.SendStatus(fiber.StatusOK)
 	})
 
-	promH := fasthttpadaptor.NewFastHTTPHandler(
-		promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{}),
-	)
-	app.Get("/metrics", func(c *fiber.Ctx) error {
-		promH(c.Context())
-		return nil
-	})
-
 	var jwtAuth fiber.Handler
 	if authCfg.Enabled {
 		jwtAuth = internalAuth.JWTMiddleware([]byte(authCfg.JWTSecret))
@@ -75,10 +70,23 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer promet
 		jwtAuth = func(c *fiber.Ctx) error { return c.Next() }
 	}
 
+	promH := fasthttpadaptor.NewFastHTTPHandler(
+		promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{}),
+	)
+	app.Get("/metrics", jwtAuth, func(c *fiber.Ctx) error {
+		promH(c.Context())
+		return nil
+	})
+
+	loginLimiter := limiter.New(limiter.Config{
+		Max:        10,
+		Expiration: 60 * time.Second,
+	})
+
 	api := app.Group("/api")
 	api.Get("/version", s.versionHandler)
 	api.Get("/auth/status", s.authStatus)
-	api.Post("/auth/login", s.handleLogin)
+	api.Post("/auth/login", loginLimiter, s.handleLogin)
 	api.Post("/auth/refresh", jwtAuth, s.handleRefresh)
 
 	userRoutes := api.Group("/users", jwtAuth, s.requireAdmin())

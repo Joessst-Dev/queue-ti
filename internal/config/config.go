@@ -17,8 +17,9 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port     int
-	HTTPPort int `mapstructure:"http_port"`
+	Port        int
+	HTTPPort    int    `mapstructure:"http_port"`
+	CORSOrigins string `mapstructure:"cors_origins"`
 }
 
 type DBConfig struct {
@@ -58,12 +59,13 @@ func Load() (*Config, error) {
 
 	viper.SetDefault("server.port", 50051)
 	viper.SetDefault("server.http_port", 8080)
+	viper.SetDefault("server.cors_origins", "*")
 	viper.SetDefault("db.host", "localhost")
 	viper.SetDefault("db.port", 5432)
 	viper.SetDefault("db.user", "postgres")
 	viper.SetDefault("db.password", "postgres")
 	viper.SetDefault("db.name", "queueti")
-	viper.SetDefault("db.sslmode", "disable")
+	viper.SetDefault("db.sslmode", "require")
 	viper.SetDefault("queue.visibility_timeout", "30s")
 	viper.SetDefault("queue.max_retries", 3)
 	viper.SetDefault("queue.message_ttl", "24h")
@@ -79,6 +81,7 @@ func Load() (*Config, error) {
 	// Explicitly bind environment variables to config keys
 	_ = viper.BindEnv("server.port")
 	_ = viper.BindEnv("server.http_port")
+	_ = viper.BindEnv("server.cors_origins")
 	_ = viper.BindEnv("db.host")
 	_ = viper.BindEnv("db.port")
 	_ = viper.BindEnv("db.user")
