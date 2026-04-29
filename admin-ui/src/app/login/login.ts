@@ -5,6 +5,7 @@ import { SpinnerComponent } from '../shared/spinner.component';
 import { Router } from '@angular/router';
 import { Subject, switchMap, map, tap, startWith } from 'rxjs';
 import { AuthService } from '../services/auth.service';
+import { SessionService } from '../services/session.service';
 
 interface LoginState {
   loading: boolean;
@@ -112,6 +113,7 @@ interface LoginModel {
 export class Login {
   private auth = inject(AuthService);
   private router = inject(Router);
+  private session = inject(SessionService);
 
   private loginModel = signal<LoginModel>({ username: '', password: '' });
 
@@ -130,7 +132,10 @@ export class Login {
       switchMap(({ username, password }) =>
         this.auth.login(username, password).pipe(
           tap((success) => {
-            if (success) this.router.navigate(['/messages']);
+            if (success) {
+              this.session.recordActivity();
+              this.router.navigate(['/messages']);
+            }
           }),
           map((success) =>
             success

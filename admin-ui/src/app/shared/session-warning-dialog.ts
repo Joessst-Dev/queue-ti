@@ -60,7 +60,7 @@ export class SessionWarningDialog {
 
   extend(): void {
     this.sessionService.extendSession();
-    this.dialogRef.close();
+    // SessionManagerComponent closes the dialog when showWarning becomes false
   }
 
   logout(): void {

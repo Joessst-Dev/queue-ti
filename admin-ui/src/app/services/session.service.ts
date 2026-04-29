@@ -1,7 +1,7 @@
 import { Injectable, DestroyRef, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
-import { interval } from 'rxjs';
+import { interval, Subscription } from 'rxjs';
 import { startWith } from 'rxjs/operators';
 import { AuthService } from './auth.service';
 
@@ -20,12 +20,16 @@ export class SessionService {
 
   private lastActivity = Date.now();
   private isRefreshing = false;
+  private timerSub: Subscription | null = null;
 
   constructor() {
     effect(() => {
+      this.timerSub?.unsubscribe();
+      this.timerSub = null;
+
       if (!this.auth.isAuthenticated()) return;
 
-      interval(10_000)
+      this.timerSub = interval(10_000)
         .pipe(startWith(0), takeUntilDestroyed(this.destroyRef))
         .subscribe(() => this.tick());
     });
@@ -36,6 +40,7 @@ export class SessionService {
   }
 
   extendSession(): void {
+    this.recordActivity();
     this.auth.refreshToken().subscribe({
       next: () => this.showWarning.set(false),
       error: () => {
@@ -45,21 +50,18 @@ export class SessionService {
     });
   }
 
-  dismissWarning(): void {
-    this.showWarning.set(false);
-  }
-
   private tick(): void {
+    const now = Date.now();
     const expiresAt = this.auth.tokenExpiresAt();
 
-    if (expiresAt === null || expiresAt <= Date.now()) {
+    if (expiresAt === null || expiresAt <= now) {
       this.auth.logout();
       this.router.navigate(['/login']);
       return;
     }
 
-    const msUntilExpiry = expiresAt - Date.now();
-    const msInactive = Date.now() - this.lastActivity;
+    const msUntilExpiry = expiresAt - now;
+    const msInactive = now - this.lastActivity;
 
     this.secondsRemaining.set(Math.ceil(msUntilExpiry / 1000));
 
