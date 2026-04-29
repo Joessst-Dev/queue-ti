@@ -136,7 +136,7 @@ func main() {
 		}
 	}()
 
-	httpServer := server.NewHTTPServer(queueService, cfg.Server, cfg.Auth, reg, userStore, version)
+	httpServer := server.NewHTTPServer(queueService, cfg.Server, cfg.Redis, cfg.Auth, reg, userStore, version)
 	httpAddr := fmt.Sprintf(":%d", cfg.Server.HTTPPort)
 	go func() {
 		slog.Info("HTTP server listening", "addr", httpAddr)

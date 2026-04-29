@@ -12,6 +12,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 
+	redisstorage "github.com/gofiber/storage/redis/v3"
+
 	internalAuth "github.com/Joessst-Dev/queue-ti/internal/auth"
 	"github.com/Joessst-Dev/queue-ti/internal/config"
 	"github.com/Joessst-Dev/queue-ti/internal/queue"
@@ -27,7 +29,7 @@ type HTTPServer struct {
 	version      string
 }
 
-func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, authCfg config.AuthConfig, gatherer prometheus.Gatherer, userStore *users.Store, version string) *HTTPServer {
+func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, redisCfg config.RedisConfig, authCfg config.AuthConfig, gatherer prometheus.Gatherer, userStore *users.Store, version string) *HTTPServer {
 	s := &HTTPServer{
 		queueService: qs,
 		authConfig:   authCfg,
@@ -78,10 +80,25 @@ func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, authCfg con
 		return nil
 	})
 
-	loginLimiter := limiter.New(limiter.Config{
-		Max:        10,
-		Expiration: 60 * time.Second,
-	})
+	var loginLimiter fiber.Handler
+	if redisCfg.Host != "" {
+		store := redisstorage.New(redisstorage.Config{
+			Host: redisCfg.Host,
+			Port: redisCfg.Port,
+		})
+		loginLimiter = limiter.New(limiter.Config{
+			Max:        10,
+			Expiration: 60 * time.Second,
+			Storage:    store,
+		})
+		slog.Info("login rate limiter using Redis", "host", redisCfg.Host, "port", redisCfg.Port)
+	} else {
+		loginLimiter = limiter.New(limiter.Config{
+			Max:        10,
+			Expiration: 60 * time.Second,
+		})
+		slog.Info("login rate limiter using in-memory storage (single-instance only)")
+	}
 
 	api := app.Group("/api")
 	api.Get("/version", s.versionHandler)

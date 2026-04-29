@@ -21,3 +21,7 @@ auth:
   password: secret
   jwt_secret: CHANGE_ME_USE_QUEUETI_AUTH_JWT_SECRET_ENV_VAR_IN_PRODUCTION
   # cors_origins defaults to "*" — set QUEUETI_SERVER_CORS_ORIGINS to restrict in production
+
+# redis:
+#   host: ""      # set to enable Redis-backed rate limiter (QUEUETI_REDIS_HOST)
+#   port: 6379    # QUEUETI_REDIS_PORT
