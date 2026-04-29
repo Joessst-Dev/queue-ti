@@ -1,5 +1,4 @@
-import { TestBed } from '@angular/core/testing';
-import { ComponentFixture } from '@angular/core/testing';
+import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { FooterComponent } from './footer.component';

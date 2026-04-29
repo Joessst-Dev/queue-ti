@@ -75,9 +75,8 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer promet
 		jwtAuth = func(c *fiber.Ctx) error { return c.Next() }
 	}
 
-	app.Get("/api/version", s.versionHandler)
-
 	api := app.Group("/api")
+	api.Get("/version", s.versionHandler)
 	api.Get("/auth/status", s.authStatus)
 	api.Post("/auth/login", s.handleLogin)
 	api.Post("/auth/refresh", jwtAuth, s.handleRefresh)

@@ -120,6 +120,28 @@ var _ = Describe("HTTP Server", func() {
 	})
 
 	// ---------------------------------------------------------------------------
+	// GET /api/version
+	// ---------------------------------------------------------------------------
+
+	Describe("GET /api/version", func() {
+		Context("Given the server is running", func() {
+			It("should return the version string injected at construction", func() {
+				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "v1.2.3")
+
+				req := httptest.NewRequest("GET", "/api/version", nil)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				var body map[string]string
+				Expect(json.NewDecoder(resp.Body).Decode(&body)).To(Succeed())
+				Expect(body["version"]).To(Equal("v1.2.3"))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
 	// GET /api/auth/status
 	// ---------------------------------------------------------------------------
 
