@@ -14,6 +14,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	redisstorage "github.com/gofiber/storage/redis/v3"
+
 	"github.com/Joessst-Dev/queue-ti/internal/auth"
 	"github.com/Joessst-Dev/queue-ti/internal/config"
 	"github.com/Joessst-Dev/queue-ti/internal/db"
@@ -135,6 +137,19 @@ func main() {
 			os.Exit(1)
 		}
 	}()
+
+	if cfg.Redis.Host != "" {
+		pingStore := redisstorage.New(redisstorage.Config{
+			Host: cfg.Redis.Host,
+			Port: cfg.Redis.Port,
+		})
+		if err := pingStore.Conn().Ping(ctx).Err(); err != nil {
+			slog.Error("redis ping failed — check QUEUETI_REDIS_HOST and QUEUETI_REDIS_PORT", "error", err)
+			os.Exit(1)
+		}
+		_ = pingStore.Close()
+		slog.Info("Redis connection verified for rate limiter", "host", cfg.Redis.Host, "port", cfg.Redis.Port)
+	}
 
 	httpServer := server.NewHTTPServer(queueService, cfg.Server, cfg.Redis, cfg.Auth, reg, userStore, version)
 	httpAddr := fmt.Sprintf(":%d", cfg.Server.HTTPPort)

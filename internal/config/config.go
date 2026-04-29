@@ -49,8 +49,8 @@ type AuthConfig struct {
 }
 
 type RedisConfig struct {
-	Host string
-	Port int
+	Host string `mapstructure:"host"`
+	Port int    `mapstructure:"port"`
 }
 
 func Load() (*Config, error) {

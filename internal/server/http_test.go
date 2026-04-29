@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +17,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
+	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -1875,6 +1879,64 @@ var _ = Describe("HTTP Server", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
+	// Redis-backed rate limiter integration test
+	// ---------------------------------------------------------------------------
+
+	Describe("POST /api/auth/login rate limiting with Redis storage", func() {
+		var redisContainer *tcredis.RedisContainer
+
+		BeforeEach(func() {
+			var err error
+			redisContainer, err = tcredis.Run(httpTestCtx, "redis:7-alpine")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			if redisContainer != nil {
+				_ = redisContainer.Terminate(httpTestCtx)
+			}
+		})
+
+		It("enforces the rate limit after 10 requests and returns 429 on the 11th", func() {
+			connStr, err := redisContainer.ConnectionString(httpTestCtx)
+			Expect(err).NotTo(HaveOccurred())
+
+			u, err := url.Parse(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			host, portStr, err := net.SplitHostPort(u.Host)
+			Expect(err).NotTo(HaveOccurred())
+			port, err := strconv.Atoi(portStr)
+			Expect(err).NotTo(HaveOccurred())
+
+			httpServer := server.NewHTTPServer(
+				queueService,
+				config.ServerConfig{CORSOrigins: "*"},
+				config.RedisConfig{Host: host, Port: port},
+				config.AuthConfig{Enabled: false},
+				prometheus.NewRegistry(),
+				nil,
+				"dev",
+			)
+
+			for i := range 10 {
+				req := httptest.NewRequest("POST", "/api/auth/login",
+					strings.NewReader(`{"username":"x","password":"y"}`))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := httpServer.App.Test(req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).NotTo(Equal(429), "request %d should not be rate-limited yet", i+1)
+			}
+
+			req := httptest.NewRequest("POST", "/api/auth/login",
+				strings.NewReader(`{"username":"x","password":"y"}`))
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := httpServer.App.Test(req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(429))
 		})
 	})
 
