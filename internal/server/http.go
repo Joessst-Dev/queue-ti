@@ -12,8 +12,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 
-	redisstorage "github.com/gofiber/storage/redis/v3"
-
 	internalAuth "github.com/Joessst-Dev/queue-ti/internal/auth"
 	"github.com/Joessst-Dev/queue-ti/internal/config"
 	"github.com/Joessst-Dev/queue-ti/internal/queue"
@@ -29,7 +27,9 @@ type HTTPServer struct {
 	version      string
 }
 
-func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, redisCfg config.RedisConfig, authCfg config.AuthConfig, gatherer prometheus.Gatherer, userStore *users.Store, version string) *HTTPServer {
+// NewHTTPServer creates the HTTP server. Pass a non-nil rateLimitStore (e.g. Redis) to
+// share rate-limit state across replicas; nil falls back to in-memory storage.
+func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, rateLimitStore fiber.Storage, authCfg config.AuthConfig, gatherer prometheus.Gatherer, userStore *users.Store, version string) *HTTPServer {
 	s := &HTTPServer{
 		queueService: qs,
 		authConfig:   authCfg,
@@ -40,6 +40,9 @@ func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, redisCfg co
 
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
+		// Trust X-Real-IP set by a reverse proxy (nginx) so that the rate limiter
+		// keys on the actual client IP rather than the proxy's IP.
+		ProxyHeader: "X-Real-IP",
 	})
 
 	app.Use(cors.New(cors.Config{
@@ -81,17 +84,13 @@ func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, redisCfg co
 	})
 
 	var loginLimiter fiber.Handler
-	if redisCfg.Host != "" {
-		store := redisstorage.New(redisstorage.Config{
-			Host: redisCfg.Host,
-			Port: redisCfg.Port,
-		})
+	if rateLimitStore != nil {
 		loginLimiter = limiter.New(limiter.Config{
 			Max:        10,
 			Expiration: 60 * time.Second,
-			Storage:    store,
+			Storage:    rateLimitStore,
 		})
-		slog.Info("login rate limiter using Redis", "host", redisCfg.Host, "port", redisCfg.Port)
+		slog.Info("login rate limiter using Redis storage")
 	} else {
 		loginLimiter = limiter.New(limiter.Config{
 			Max:        10,

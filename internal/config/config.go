@@ -49,8 +49,10 @@ type AuthConfig struct {
 }
 
 type RedisConfig struct {
-	Host string `mapstructure:"host"`
-	Port int    `mapstructure:"port"`
+	Host       string `mapstructure:"host"`
+	Port       int    `mapstructure:"port"`
+	Password   string `mapstructure:"password"`
+	TLSEnabled bool   `mapstructure:"tls_enabled"`
 }
 
 func Load() (*Config, error) {
@@ -84,6 +86,8 @@ func Load() (*Config, error) {
 	viper.SetDefault("auth.jwt_secret", "")
 	viper.SetDefault("redis.host", "")
 	viper.SetDefault("redis.port", 6379)
+	viper.SetDefault("redis.password", "")
+	viper.SetDefault("redis.tls_enabled", false)
 	viper.SetDefault("log_level", "info")
 
 	// Explicitly bind environment variables to config keys
@@ -108,6 +112,8 @@ func Load() (*Config, error) {
 	_ = viper.BindEnv("auth.jwt_secret")
 	_ = viper.BindEnv("redis.host")
 	_ = viper.BindEnv("redis.port")
+	_ = viper.BindEnv("redis.password")
+	_ = viper.BindEnv("redis.tls_enabled")
 	_ = viper.BindEnv("log_level")
 
 	if err := viper.ReadInConfig(); err != nil {

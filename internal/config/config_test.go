@@ -39,6 +39,8 @@ var _ = Describe("Load", func() {
 			Expect(cfg.Auth.Password).To(BeEmpty())
 			Expect(cfg.Redis.Host).To(BeEmpty())
 			Expect(cfg.Redis.Port).To(Equal(6379))
+			Expect(cfg.Redis.Password).To(BeEmpty())
+			Expect(cfg.Redis.TLSEnabled).To(BeFalse())
 		})
 	})
 
@@ -61,6 +63,8 @@ var _ = Describe("Load", func() {
 			os.Unsetenv("QUEUETI_AUTH_PASSWORD")
 			os.Unsetenv("QUEUETI_REDIS_HOST")
 			os.Unsetenv("QUEUETI_REDIS_PORT")
+			os.Unsetenv("QUEUETI_REDIS_PASSWORD")
+			os.Unsetenv("QUEUETI_REDIS_TLS_ENABLED")
 		})
 
 		It("overrides server ports", func() {
@@ -145,12 +149,16 @@ var _ = Describe("Load", func() {
 		It("overrides redis settings", func() {
 			os.Setenv("QUEUETI_REDIS_HOST", "redis.example.com")
 			os.Setenv("QUEUETI_REDIS_PORT", "6380")
+			os.Setenv("QUEUETI_REDIS_PASSWORD", "s3cr3t")
+			os.Setenv("QUEUETI_REDIS_TLS_ENABLED", "true")
 
 			cfg, err := config.Load()
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Redis.Host).To(Equal("redis.example.com"))
 			Expect(cfg.Redis.Port).To(Equal(6380))
+			Expect(cfg.Redis.Password).To(Equal("s3cr3t"))
+			Expect(cfg.Redis.TLSEnabled).To(BeTrue())
 		})
 	})
 
