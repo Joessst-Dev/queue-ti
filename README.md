@@ -11,6 +11,7 @@ queue-ti is designed for teams who want reliable, observable message processing 
 - **Built for observability** — Prometheus metrics out of the box (`/metrics`); live queue depth via REST API; admin UI shows message status, retry counts, and expiry times.
 - **High performance** — gRPC protocol with `FOR UPDATE SKIP LOCKED` dequeue. Throughput tested at 1500+ ops/sec per consumer.
 - **Admin UI included** — Inspect messages, manually enqueue test data, requeue from DLQ, manage topics and users—all without writing code. OAuth-ready JWT auth.
+- **Brute-force protection** — Login rate limiting (10 requests per 60-second window per IP) backed by Redis for multi-replica deployments, in-memory for single-instance setups.
 - **Per-topic configuration** — Override retry limits, TTLs, and queue depth per topic at runtime without restart.
 - **Avro schema validation** — Optional per-topic schemas enforce payload contracts at enqueue time.
 - **Go client library** — Drop-in Producer/Consumer with auto-reconnect, token refresh, and zero boilerplate.
@@ -38,6 +39,7 @@ queue-ti is designed for teams who want reliable, observable message processing 
 - [Quick Start](#quick-start)
 - [Go Client Library](#go-client-library)
 - [Configuration](#configuration)
+- [Login Rate Limiting](#login-rate-limiting)
 - [Authentication & User Management](#authentication--user-management)
 - [Avro Schema Validation](#avro-schema-validation)
 - [Queue Mechanics](#queue-mechanics)
@@ -228,6 +230,12 @@ auth:
   password: secret
 
 log_level: info         # Log level: debug, info, warn, error (default: info)
+
+# redis:
+#   host: ""            # Redis host for login rate limiter (empty = in-memory, disabled by default)
+#   port: 6379          # Redis port
+#   password: ""        # Redis AUTH password (optional, but required in production)
+#   tls_enabled: false  # Enable TLS for Redis connections
 ```
 
 ### Environment Variables
@@ -255,6 +263,10 @@ Any configuration key can be overridden with an environment variable using the k
 | `QUEUETI_AUTH_USERNAME` | Default admin username | `admin` |
 | `QUEUETI_AUTH_PASSWORD` | Default admin password | `secret` |
 | `QUEUETI_LOG_LEVEL` | Log level (debug, info, warn, error) | `info` |
+| `QUEUETI_REDIS_HOST` | Redis host for login rate limiter (empty = in-memory; default: empty) | `` |
+| `QUEUETI_REDIS_PORT` | Redis port | `6379` |
+| `QUEUETI_REDIS_PASSWORD` | Redis AUTH password (optional, but recommended in production) | `` |
+| `QUEUETI_REDIS_TLS_ENABLED` | Enable TLS for Redis connections | `false` |
 
 ### Log Levels
 
@@ -367,6 +379,82 @@ curl -X POST http://localhost:8080/api/messages \
 - Production deployments where topic names are fixed and controlled
 - Microservices architectures with schema registries (topics are registered alongside schemas)
 - Teams that want producer errors on typos rather than silent failures
+
+## Login Rate Limiting
+
+### Overview
+
+The login endpoint (`POST /api/auth/login`) is protected by a rate limiter that prevents brute-force authentication attacks. By default, the rate limiter uses in-memory storage. For multi-replica deployments, configure Redis to share rate-limit state across all backend instances.
+
+**Default behavior (in-memory):**
+- Rate limit: 10 requests per 60-second window per client IP
+- Storage: In-memory; each instance has its own rate-limit counter
+- Suitable for: Single-instance deployments, development, testing
+
+**With Redis (shared state):**
+- Rate limit: 10 requests per 60-second window per client IP (same limit, shared across instances)
+- Storage: Redis; all backend instances query the same counter
+- Suitable for: Multi-replica deployments, load-balanced production setups
+
+### Enabling Redis Rate Limiter
+
+To enable Redis-backed rate limiting, set the `redis.host` configuration:
+
+```yaml
+redis:
+  host: redis.example.com  # Non-empty host enables Redis
+  port: 6379
+  password: ""             # Optional, but recommended for production
+  tls_enabled: false       # Enable TLS for secure Redis connections
+```
+
+Or use environment variables:
+```bash
+QUEUETI_REDIS_HOST=redis.example.com
+QUEUETI_REDIS_PORT=6379
+QUEUETI_REDIS_PASSWORD=your-redis-password
+QUEUETI_REDIS_TLS_ENABLED=true
+```
+
+When `QUEUETI_REDIS_HOST` is empty or unset, the rate limiter falls back to in-memory storage automatically.
+
+### Redis Connection
+
+- **Startup validation**: The server pings Redis at startup to verify reachability. If the ping fails, the server logs an error and exits.
+- **Client IP detection**: The rate limiter uses the `X-Real-IP` header (set by reverse proxies like Nginx) to identify the client. Ensure your proxy sets this header correctly.
+- **Key isolation**: Rate-limit keys include the client IP to prevent one user's failed login attempts from blocking others.
+
+### Example: Docker Compose with Redis
+
+The `docker-compose.redis.yaml` overlay adds a Redis service and configures the backend to use it:
+
+```bash
+# Start with Redis
+docker-compose -f docker-compose.yaml -f docker-compose.redis.yaml up -d
+
+# Or use the convenient make target
+make up-redis
+```
+
+This runs:
+- PostgreSQL (as usual)
+- Redis (7-alpine) bound to `127.0.0.1:6379`
+- Backend (with `QUEUETI_REDIS_HOST=redis`, `QUEUETI_REDIS_PORT=6379`)
+- Admin UI (as usual)
+
+To stop all services:
+```bash
+make down
+```
+
+### Multi-Replica Deployments
+
+In production with multiple backend replicas behind a load balancer:
+
+1. **Configure Redis** to a shared instance (e.g., an AWS ElastiCache, Google Cloud Memorystore, or self-hosted Redis cluster)
+2. **Set Redis credentials** via `QUEUETI_REDIS_PASSWORD` and optionally `QUEUETI_REDIS_TLS_ENABLED`
+3. **Deploy replicas** — each instance connects to the same Redis and shares rate-limit state
+4. **Security note**: Bind your Redis instance to a private network or use authentication and TLS (`QUEUETI_REDIS_TLS_ENABLED=true`) in production
 
 ## Authentication & User Management
 
@@ -2034,27 +2122,32 @@ The `docker-compose.yaml` already restricts gRPC to `127.0.0.1:50051` to prevent
 
 ### Docker Compose
 
-The included `docker-compose.yaml` orchestrates PostgreSQL, the backend, and the admin UI:
+The included `docker-compose.yaml` orchestrates PostgreSQL, the backend, and the admin UI. An optional Compose overlay, `docker-compose.redis.yaml`, adds a Redis service for shared login rate limiting.
 
+**Without Redis (in-memory rate limiter):**
 ```bash
-# Without Redis (in-memory rate limiter)
 make up
 # or
 docker-compose up -d
+```
 
-# With Redis (shared rate limiter — recommended for multi-replica deployments)
+**With Redis (shared rate limiter — recommended for multi-replica deployments):**
+```bash
 make up-redis
 # or
 docker-compose -f docker-compose.yaml -f docker-compose.redis.yaml up -d
 ```
 
-`docker-compose.redis.yaml` is a Compose overlay that adds a `redis:7-alpine` service and wires `QUEUETI_REDIS_HOST`/`QUEUETI_REDIS_PORT` into the backend. When active, the login rate limiter state is shared across all backend replicas.
+The `docker-compose.redis.yaml` overlay adds a `redis:7-alpine` service (bound to `127.0.0.1:6379`) and wires `QUEUETI_REDIS_HOST` and `QUEUETI_REDIS_PORT` environment variables into the backend. When the overlay is active, all backend instances (if replicated) share the same login rate-limit state.
 
-To stop all services:
-
+**To stop all services** (works with or without the Redis overlay):
 ```bash
 make down
 ```
+
+**Additional make targets:**
+- `make build-nocache` — Rebuild Docker images without cache (without Redis)
+- `make build-nocache-redis` — Rebuild Docker images without cache (with Redis overlay)
 
 Access the admin UI at `http://localhost:8081` (login: `admin` / `secret`).
 
