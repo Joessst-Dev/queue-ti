@@ -1,4 +1,4 @@
-.PHONY: proto deps test run build bench bench-mem bench-queue bench-loadtest install-hooks up up-redis down
+.PHONY: proto deps test run build bench bench-mem bench-queue bench-loadtest install-hooks up up-redis down build-nocache build-nocache-redis
 
 proto:
 	protoc --go_out=pb --go_opt=paths=source_relative \
@@ -31,6 +31,12 @@ up-redis:
 
 down:
 	docker-compose -f docker-compose.yaml -f docker-compose.redis.yaml down
+
+build-nocache:
+	docker-compose build --no-cache
+
+build-nocache-redis:
+	docker-compose -f docker-compose.yaml -f docker-compose.redis.yaml build --no-cache
 
 # Run all benchmarks (3 s per benchmark, no unit tests)
 bench:
