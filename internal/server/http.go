@@ -22,13 +22,15 @@ type HTTPServer struct {
 	queueService *queue.Service
 	authConfig   config.AuthConfig
 	userStore    *users.Store
+	version      string
 }
 
-func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer prometheus.Gatherer, userStore *users.Store) *HTTPServer {
+func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer prometheus.Gatherer, userStore *users.Store, version string) *HTTPServer {
 	s := &HTTPServer{
 		queueService: qs,
 		authConfig:   authCfg,
 		userStore:    userStore,
+		version:      version,
 	}
 
 	app := fiber.New(fiber.Config{
@@ -72,6 +74,8 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer promet
 	} else {
 		jwtAuth = func(c *fiber.Ctx) error { return c.Next() }
 	}
+
+	app.Get("/api/version", s.versionHandler)
 
 	api := app.Group("/api")
 	api.Get("/auth/status", s.authStatus)
@@ -125,6 +129,10 @@ func NewHTTPServer(qs *queue.Service, authCfg config.AuthConfig, gatherer promet
 
 	s.App = app
 	return s
+}
+
+func (s *HTTPServer) versionHandler(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{"version": s.version})
 }
 
 func (s *HTTPServer) authStatus(c *fiber.Ctx) error {

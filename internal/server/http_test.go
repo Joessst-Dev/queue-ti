@@ -106,7 +106,7 @@ var _ = Describe("HTTP Server", func() {
 		Context("Given the server is running", func() {
 			It("should return HTTP 200", func() {
 				// Given the HTTP server with auth disabled
-				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 
 				// When we call the health endpoint
 				req := httptest.NewRequest("GET", "/healthz", nil)
@@ -127,7 +127,7 @@ var _ = Describe("HTTP Server", func() {
 		Context("Given auth is disabled", func() {
 			It("should return auth_required: false", func() {
 				// Given the HTTP server with auth disabled
-				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 
 				// When we call the auth status endpoint
 				req := httptest.NewRequest("GET", "/api/auth/status", nil)
@@ -149,7 +149,7 @@ var _ = Describe("HTTP Server", func() {
 				httpServer := server.NewHTTPServer(queueService, config.AuthConfig{
 					Enabled:   true,
 					JWTSecret: testJWTSecret,
-				}, prometheus.NewRegistry(), userStore)
+				}, prometheus.NewRegistry(), userStore, "dev")
 
 				// When we call the auth status endpoint
 				req := httptest.NewRequest("GET", "/api/auth/status", nil)
@@ -177,13 +177,13 @@ var _ = Describe("HTTP Server", func() {
 			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
-			}, prometheus.NewRegistry(), userStore)
+			}, prometheus.NewRegistry(), userStore, "dev")
 		})
 
 		Context("Given auth is disabled", func() {
 			It("should pass the request through without an Authorization header", func() {
 				// Given the HTTP server with auth disabled
-				noAuthServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+				noAuthServer := server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 
 				// When we call a protected endpoint without credentials
 				req := httptest.NewRequest("GET", "/api/messages", nil)
@@ -268,7 +268,7 @@ var _ = Describe("HTTP Server", func() {
 			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
-			}, prometheus.NewRegistry(), userStore)
+			}, prometheus.NewRegistry(), userStore, "dev")
 		})
 
 		Context("when valid credentials are provided", func() {
@@ -352,7 +352,7 @@ var _ = Describe("HTTP Server", func() {
 			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
-			}, prometheus.NewRegistry(), userStore)
+			}, prometheus.NewRegistry(), userStore, "dev")
 		})
 
 		Context("when a valid token is provided", func() {
@@ -410,7 +410,7 @@ var _ = Describe("HTTP Server", func() {
 		}
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, authCfg, prometheus.NewRegistry(), userStore)
+			httpServer = server.NewHTTPServer(queueService, authCfg, prometheus.NewRegistry(), userStore, "dev")
 		})
 
 		Context("when an admin user makes requests", func() {
@@ -509,7 +509,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("Given no messages exist", func() {
@@ -609,7 +609,7 @@ var _ = Describe("HTTP Server", func() {
 				authServer := server.NewHTTPServer(queueService, config.AuthConfig{
 					Enabled:   true,
 					JWTSecret: testJWTSecret,
-				}, prometheus.NewRegistry(), us)
+				}, prometheus.NewRegistry(), us, "dev")
 				_, err = queueService.Enqueue(httpTestCtx, "auth-topic", []byte("secure-msg"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -640,7 +640,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("Given the request body is not valid JSON", func() {
@@ -768,7 +768,7 @@ var _ = Describe("HTTP Server", func() {
 				authServer = server.NewHTTPServer(queueService, config.AuthConfig{
 					Enabled:   true,
 					JWTSecret: testJWTSecret,
-				}, prometheus.NewRegistry(), us)
+				}, prometheus.NewRegistry(), us, "dev")
 			})
 
 			It("should enqueue successfully when a valid admin token is provided", func() {
@@ -806,7 +806,7 @@ var _ = Describe("HTTP Server", func() {
 			It("should return 422", func() {
 				// Given a service with topic registration enforcement and no topic_config row.
 				strictService := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, true, queue.NoopRecorder{})
-				strictServer := server.NewHTTPServer(strictService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+				strictServer := server.NewHTTPServer(strictService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 
 				req := httptest.NewRequest("POST", "/api/messages",
 					strings.NewReader(`{"topic":"unknown-topic","payload":"hello"}`))
@@ -826,7 +826,7 @@ var _ = Describe("HTTP Server", func() {
 					Topic: "known-topic",
 				})).To(Succeed())
 
-				strictServer := server.NewHTTPServer(strictService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+				strictServer := server.NewHTTPServer(strictService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 
 				req := httptest.NewRequest("POST", "/api/messages",
 					strings.NewReader(`{"topic":"known-topic","payload":"hello"}`))
@@ -938,7 +938,7 @@ var _ = Describe("HTTP Server", func() {
 			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
-			}, prometheus.NewRegistry(), userStore)
+			}, prometheus.NewRegistry(), userStore, "dev")
 		})
 
 		Context("when a message with the given key exists on the topic", func() {
@@ -995,7 +995,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("Given a message that has been promoted to the DLQ", func() {
@@ -1004,7 +1004,7 @@ var _ = Describe("HTTP Server", func() {
 			BeforeEach(func() {
 				// Use dlqThreshold = 1 so a single nack promotes the message.
 				dlqService := queue.NewService(httpTestPool, 30*time.Second, 5, 0, 1, false, queue.NoopRecorder{})
-				httpServer = server.NewHTTPServer(dlqService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+				httpServer = server.NewHTTPServer(dlqService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 
 				var err error
 				dlqMessageID, err = dlqService.Enqueue(httpTestCtx, "payments", []byte("charge"), nil, nil)
@@ -1062,7 +1062,7 @@ var _ = Describe("HTTP Server", func() {
 			httpServer = server.NewHTTPServer(svc, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
-			}, reg, userStore)
+			}, reg, userStore, "dev")
 		})
 
 		Context("when called without an Authorization header and auth is enabled", func() {
@@ -1081,7 +1081,7 @@ var _ = Describe("HTTP Server", func() {
 				reg2 := prometheus.NewRegistry()
 				rec2 := metrics.New(httpTestPool, reg2)
 				svc2 := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, false, rec2)
-				httpServer = server.NewHTTPServer(svc2, config.AuthConfig{Enabled: false}, reg2, nil)
+				httpServer = server.NewHTTPServer(svc2, config.AuthConfig{Enabled: false}, reg2, nil, "dev")
 
 				_, err := svc2.Enqueue(httpTestCtx, "metrics-topic", []byte("hello"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
@@ -1122,7 +1122,7 @@ var _ = Describe("HTTP Server", func() {
 		const paginationTopic = "pagination-topic"
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 
 			// Given 5 messages are enqueued on the same topic
 			for i := range 5 {
@@ -1226,7 +1226,7 @@ var _ = Describe("HTTP Server", func() {
 		BeforeEach(func() {
 			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
 			Expect(err).NotTo(HaveOccurred())
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("when no topic configs exist", func() {
@@ -1281,7 +1281,7 @@ var _ = Describe("HTTP Server", func() {
 		BeforeEach(func() {
 			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
 			Expect(err).NotTo(HaveOccurred())
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("when a valid body is provided", func() {
@@ -1320,7 +1320,7 @@ var _ = Describe("HTTP Server", func() {
 				authServer := server.NewHTTPServer(queueService, config.AuthConfig{
 					Enabled:   true,
 					JWTSecret: testJWTSecret,
-				}, prometheus.NewRegistry(), userStore)
+				}, prometheus.NewRegistry(), userStore, "dev")
 
 				req := httptest.NewRequest("PUT", "/api/topic-configs/some-topic",
 					strings.NewReader(`{"max_retries":1}`))
@@ -1343,7 +1343,7 @@ var _ = Describe("HTTP Server", func() {
 		BeforeEach(func() {
 			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
 			Expect(err).NotTo(HaveOccurred())
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("when the topic config exists", func() {
@@ -1383,7 +1383,7 @@ var _ = Describe("HTTP Server", func() {
 		BeforeEach(func() {
 			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
 			Expect(err).NotTo(HaveOccurred())
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("when a topic config with max_depth=1 is set and one message is already enqueued", func() {
@@ -1438,7 +1438,7 @@ var _ = Describe("HTTP Server", func() {
 			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
-			}, prometheus.NewRegistry(), userStore)
+			}, prometheus.NewRegistry(), userStore, "dev")
 
 			// Seed 2 pending messages on "purge-http-topic"
 			_, err = queueService.Enqueue(httpTestCtx, "purge-http-topic", []byte("msg-1"), nil, nil)
@@ -1534,7 +1534,7 @@ var _ = Describe("HTTP Server", func() {
 			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
-			}, prometheus.NewRegistry(), userStore)
+			}, prometheus.NewRegistry(), userStore, "dev")
 		})
 
 		Context("when an admin triggers the expiry reaper", func() {
@@ -1591,7 +1591,7 @@ var _ = Describe("HTTP Server", func() {
 			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
-			}, prometheus.NewRegistry(), userStore)
+			}, prometheus.NewRegistry(), userStore, "dev")
 		})
 
 		Context("when an admin triggers the delete reaper", func() {
@@ -1631,7 +1631,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil)
+			httpServer = server.NewHTTPServer(queueService, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("with no messages", func() {
@@ -1711,7 +1711,7 @@ var _ = Describe("HTTP Server", func() {
 				authServer := server.NewHTTPServer(queueService, config.AuthConfig{
 					Enabled:   true,
 					JWTSecret: testJWTSecret,
-				}, prometheus.NewRegistry(), userStore)
+				}, prometheus.NewRegistry(), userStore, "dev")
 
 				req := httptest.NewRequest("GET", "/api/stats", nil)
 				resp, err := authServer.App.Test(req)

@@ -1,4 +1,4 @@
-.PHONY: proto deps test run bench bench-mem bench-queue bench-loadtest install-hooks
+.PHONY: proto deps test run build bench bench-mem bench-queue bench-loadtest install-hooks
 
 proto:
 	protoc --go_out=pb --go_opt=paths=source_relative \
@@ -16,6 +16,9 @@ install-hooks:
 
 test:
 	ginkgo ./...
+
+build:
+	go build -ldflags="-X main.version=$$(git describe --tags --always --dirty)" -o bin/queue-ti ./cmd/server
 
 run:
 	go run cmd/server/main.go

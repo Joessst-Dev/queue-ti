@@ -4,11 +4,12 @@ import { AuthService } from '../services/auth.service';
 import { MessagesHeader } from '../messages/messages-header';
 import { UsersSection } from './users-section';
 import { MaintenanceSection } from './maintenance-section';
+import { FooterComponent } from '../shared/footer.component';
 
 @Component({
   selector: 'app-admin',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MessagesHeader, UsersSection, MaintenanceSection],
+  imports: [MessagesHeader, UsersSection, MaintenanceSection, FooterComponent],
   template: `
     <div class="min-h-screen bg-gray-50">
       <app-messages-header [isAuthenticated]="auth.isAuthenticated()" (signOut)="onLogout()" />
@@ -17,6 +18,7 @@ import { MaintenanceSection } from './maintenance-section';
         <div><app-users-section /></div>
         <div><app-maintenance-section /></div>
       </div>
+      <app-footer />
     </div>
   `,
 })

@@ -24,6 +24,8 @@ import (
 	pb "github.com/Joessst-Dev/queue-ti/pb"
 )
 
+var version = "dev"
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -40,6 +42,7 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})))
 
 	slog.Info("config loaded",
+		"version", version,
 		"log_level", logLevel.String(),
 		"grpc_port", cfg.Server.Port,
 		"http_port", cfg.Server.HTTPPort,
@@ -129,7 +132,7 @@ func main() {
 		}
 	}()
 
-	httpServer := server.NewHTTPServer(queueService, cfg.Auth, reg, userStore)
+	httpServer := server.NewHTTPServer(queueService, cfg.Auth, reg, userStore, version)
 	httpAddr := fmt.Sprintf(":%d", cfg.Server.HTTPPort)
 	go func() {
 		slog.Info("HTTP server listening", "addr", httpAddr)

@@ -14,6 +14,7 @@ import { MessagesTable } from './messages-table';
 import { EnqueueSection } from './enqueue-section';
 import { QueueStatsChart } from './queue-stats-chart';
 import { TopicsSection } from './topics-section';
+import { FooterComponent } from '../shared/footer.component';
 
 interface EnqueueState {
   id: string;
@@ -23,7 +24,7 @@ interface EnqueueState {
 
 @Component({
   selector: 'app-messages',
-  imports: [MessagesHeader, MessagesTable, EnqueueSection, QueueStatsChart, TopicsSection],
+  imports: [MessagesHeader, MessagesTable, EnqueueSection, QueueStatsChart, TopicsSection, FooterComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -90,6 +91,7 @@ interface EnqueueState {
           <app-topics-section />
         }
       </main>
+      <app-footer />
     </div>
   `,
 })
