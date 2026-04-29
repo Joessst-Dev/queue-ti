@@ -1918,7 +1918,7 @@ var _ = Describe("HTTP Server", func() {
 				config.RedisConfig{Host: host, Port: port},
 				config.AuthConfig{Enabled: false},
 				prometheus.NewRegistry(),
-				nil,
+				userStore,
 				"dev",
 			)
 
