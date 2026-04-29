@@ -4,12 +4,8 @@ import { signal } from '@angular/core';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { Observable, of, throwError } from 'rxjs';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { SessionService } from './session.service';
+import { SessionService, TOKEN_LIFETIME_MS, WARNING_THRESHOLD_MS, REFRESH_AFTER_MS } from './session.service';
 import { AuthService } from './auth.service';
-
-const TOKEN_LIFETIME_MS = 15 * 60 * 1000;
-const WARNING_THRESHOLD_MS = 2 * 60 * 1000;
-const REFRESH_AFTER_MS = TOKEN_LIFETIME_MS / 2;
 
 interface MockAuth {
   isAuthenticated: ReturnType<typeof signal<boolean>>;
@@ -43,7 +39,7 @@ function setup(auth: MockAuth = makeAuth()): {
   });
 
   const service = TestBed.inject(SessionService);
-  TestBed.flushEffects();
+  TestBed.tick();
 
   return { service, router };
 }
@@ -62,10 +58,9 @@ describe('SessionService', () => {
     describe('when tokenExpiresAt returns null', () => {
       it('should call auth.logout()', () => {
         const auth = makeAuth({ tokenExpiresAt: signal(null) });
-        const { router } = setup(auth);
+        setup(auth);
 
         expect(auth.logout).toHaveBeenCalledTimes(1);
-        expect(router.navigate).toHaveBeenCalledWith(['/login']);
       });
 
       it('should navigate to /login', () => {
@@ -77,11 +72,17 @@ describe('SessionService', () => {
     });
 
     describe('when token is already expired', () => {
-      it('should call auth.logout() and navigate to /login', () => {
+      it('should call auth.logout()', () => {
+        const auth = makeAuth({ tokenExpiresAt: signal(Date.now() - 1) });
+        setup(auth);
+
+        expect(auth.logout).toHaveBeenCalledTimes(1);
+      });
+
+      it('should navigate to /login', () => {
         const auth = makeAuth({ tokenExpiresAt: signal(Date.now() - 1) });
         const { router } = setup(auth);
 
-        expect(auth.logout).toHaveBeenCalledTimes(1);
         expect(router.navigate).toHaveBeenCalledWith(['/login']);
       });
     });
@@ -117,6 +118,7 @@ describe('SessionService', () => {
         const { service } = setup(auth);
 
         vi.advanceTimersByTime(TOKEN_LIFETIME_MS);
+        TestBed.tick();
 
         expect(service.showWarning()).toBe(true);
       });
@@ -131,6 +133,7 @@ describe('SessionService', () => {
         const { service } = setup(auth);
 
         vi.advanceTimersByTime(TOKEN_LIFETIME_MS);
+        TestBed.tick();
 
         expect(service.showWarning()).toBe(false);
       });
@@ -144,10 +147,12 @@ describe('SessionService', () => {
         const { service } = setup(auth);
 
         vi.advanceTimersByTime(TOKEN_LIFETIME_MS);
+        TestBed.tick();
         expect(service.showWarning()).toBe(true);
 
         expiresAt.set(Date.now() + WARNING_THRESHOLD_MS + 60_000);
         vi.advanceTimersByTime(10_000);
+        TestBed.tick();
 
         expect(service.showWarning()).toBe(false);
       });
@@ -156,7 +161,6 @@ describe('SessionService', () => {
     describe('when refreshToken is already in flight', () => {
       it('should not call refreshToken() again on a subsequent tick', () => {
         const pendingRefresh = new Observable<void>(() => {});
-
         const auth = makeAuth({
           tokenExpiresAt: signal(Date.now() + REFRESH_AFTER_MS - 1),
           refreshToken: vi.fn().mockReturnValue(pendingRefresh) as unknown as () => Observable<void>,
@@ -166,8 +170,34 @@ describe('SessionService', () => {
         expect(auth.refreshToken).toHaveBeenCalledTimes(1);
 
         vi.advanceTimersByTime(10_000);
+        TestBed.tick();
 
         expect(auth.refreshToken).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('when isAuthenticated toggles true → false → true', () => {
+      it('should not stack interval subscriptions', () => {
+        const auth = makeAuth({
+          tokenExpiresAt: signal(Date.now() + REFRESH_AFTER_MS - 1),
+        });
+        setup(auth);
+
+        const callsAfterFirstSetup = (auth.refreshToken as ReturnType<typeof vi.fn>).mock.calls.length;
+
+        auth.isAuthenticated.set(false);
+        TestBed.tick();
+        auth.isAuthenticated.set(true);
+        TestBed.tick();
+
+        vi.advanceTimersByTime(10_000);
+        TestBed.tick();
+
+        // No stacking: startWith(0) on re-subscribe (+1) + one 10s tick (+1) = +2.
+        // If two intervals were running simultaneously, the 10s tick would fire twice → +3.
+        expect((auth.refreshToken as ReturnType<typeof vi.fn>).mock.calls.length).toBeLessThanOrEqual(
+          callsAfterFirstSetup + 2,
+        );
       });
     });
   });
@@ -190,6 +220,7 @@ describe('SessionService', () => {
         const { service } = setup(auth);
 
         vi.advanceTimersByTime(TOKEN_LIFETIME_MS);
+        TestBed.tick();
         expect(service.showWarning()).toBe(true);
 
         expiresAt.set(Date.now() + TOKEN_LIFETIME_MS);
@@ -205,12 +236,14 @@ describe('SessionService', () => {
         const { service } = setup(auth);
 
         vi.advanceTimersByTime(TOKEN_LIFETIME_MS);
+        TestBed.tick();
         expect(service.showWarning()).toBe(true);
 
         expiresAt.set(Date.now() + TOKEN_LIFETIME_MS);
         service.extendSession();
 
         vi.advanceTimersByTime(10_000);
+        TestBed.tick();
 
         expect(service.showWarning()).toBe(false);
       });
@@ -219,11 +252,13 @@ describe('SessionService', () => {
     describe('when refreshToken errors', () => {
       it('should call auth.logout()', () => {
         const auth = makeAuth({
-          refreshToken: vi.fn().mockReturnValue(throwError(() => new Error('network error'))) as unknown as () => Observable<void>,
+          tokenExpiresAt: signal(Date.now() + TOKEN_LIFETIME_MS),
+          refreshToken: vi.fn().mockReturnValue(
+            throwError(() => new Error('network error')),
+          ) as unknown as () => Observable<void>,
         });
         const { service } = setup(auth);
 
-        (auth.logout as ReturnType<typeof vi.fn>).mockClear();
         service.extendSession();
 
         expect(auth.logout).toHaveBeenCalledTimes(1);
@@ -231,11 +266,13 @@ describe('SessionService', () => {
 
       it('should navigate to /login', () => {
         const auth = makeAuth({
-          refreshToken: vi.fn().mockReturnValue(throwError(() => new Error('network error'))) as unknown as () => Observable<void>,
+          tokenExpiresAt: signal(Date.now() + TOKEN_LIFETIME_MS),
+          refreshToken: vi.fn().mockReturnValue(
+            throwError(() => new Error('network error')),
+          ) as unknown as () => Observable<void>,
         });
         const { router, service } = setup(auth);
 
-        router.navigate.mockClear();
         service.extendSession();
 
         expect(router.navigate).toHaveBeenCalledWith(['/login']);
@@ -251,11 +288,13 @@ describe('SessionService', () => {
       const { service } = setup(auth);
 
       vi.advanceTimersByTime(TOKEN_LIFETIME_MS);
+      TestBed.tick();
       expect(service.showWarning()).toBe(true);
 
       service.recordActivity();
       expiresAt.set(Date.now() + TOKEN_LIFETIME_MS);
       vi.advanceTimersByTime(10_000);
+      TestBed.tick();
 
       expect(service.showWarning()).toBe(false);
     });

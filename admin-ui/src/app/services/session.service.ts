@@ -5,9 +5,9 @@ import { interval, Subscription } from 'rxjs';
 import { startWith } from 'rxjs/operators';
 import { AuthService } from './auth.service';
 
-const TOKEN_LIFETIME_MS = 15 * 60 * 1000;
-const WARNING_THRESHOLD_MS = 2 * 60 * 1000;
-const REFRESH_AFTER_MS = TOKEN_LIFETIME_MS / 2;
+export const TOKEN_LIFETIME_MS = 15 * 60 * 1000;
+export const WARNING_THRESHOLD_MS = 2 * 60 * 1000;
+export const REFRESH_AFTER_MS = TOKEN_LIFETIME_MS / 2;
 
 @Injectable({ providedIn: 'root' })
 export class SessionService {
