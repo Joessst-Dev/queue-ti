@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { signal } from '@angular/core';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { Observable, of, throwError } from 'rxjs';
+import { NEVER, Observable, of, throwError } from 'rxjs';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SessionService, TOKEN_LIFETIME_MS, WARNING_THRESHOLD_MS, REFRESH_AFTER_MS } from './session.service';
 import { AuthService } from './auth.service';
@@ -160,10 +160,9 @@ describe('SessionService', () => {
 
     describe('when refreshToken is already in flight', () => {
       it('should not call refreshToken() again on a subsequent tick', () => {
-        const pendingRefresh = new Observable<void>(() => {});
         const auth = makeAuth({
           tokenExpiresAt: signal(Date.now() + REFRESH_AFTER_MS - 1),
-          refreshToken: vi.fn().mockReturnValue(pendingRefresh) as unknown as () => Observable<void>,
+          refreshToken: vi.fn().mockReturnValue(NEVER) as unknown as () => Observable<void>,
         });
         setup(auth);
 
