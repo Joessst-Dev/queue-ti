@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -112,39 +111,32 @@ func (s *Store) Update(ctx context.Context, id string, username *string, plainPa
 	if username == nil && plainPassword == nil && isAdmin == nil {
 		return s.GetByID(ctx, id)
 	}
-	// Build a partial update with only the provided fields.
-	setClauses := []string{"updated_at = now()"}
-	args := []any{}
-	argN := 1
 
-	if username != nil {
-		setClauses = append(setClauses, fmt.Sprintf("username = $%d", argN))
-		args = append(args, *username)
-		argN++
-	}
+	// Hash the password before building the query so all args are known upfront.
+	var passwordHash *string
 	if plainPassword != nil {
 		hash, err := bcrypt.GenerateFromPassword([]byte(*plainPassword), bcrypt.DefaultCost)
 		if err != nil {
 			return nil, fmt.Errorf("hash password: %w", err)
 		}
-		setClauses = append(setClauses, fmt.Sprintf("password_hash = $%d", argN))
-		args = append(args, string(hash))
-		argN++
+		h := string(hash)
+		passwordHash = &h
 	}
-	if isAdmin != nil {
-		setClauses = append(setClauses, fmt.Sprintf("is_admin = $%d", argN))
-		args = append(args, *isAdmin)
-		argN++
-	}
-	args = append(args, id)
 
-	query := fmt.Sprintf(
-		`UPDATE users SET %s WHERE id = $%d
-         RETURNING id, username, is_admin, created_at, updated_at`,
-		joinClauses(setClauses), argN,
-	)
+	// Static query: CASE WHEN avoids any dynamic SQL construction.
+	// Each column is updated only when the corresponding arg is non-NULL;
+	// otherwise the existing value is preserved.
+	const query = `
+		UPDATE users SET
+			username      = CASE WHEN $2::text     IS NOT NULL THEN $2::text     ELSE username      END,
+			password_hash = CASE WHEN $3::text     IS NOT NULL THEN $3::text     ELSE password_hash END,
+			is_admin      = CASE WHEN $4::boolean  IS NOT NULL THEN $4::boolean  ELSE is_admin      END,
+			updated_at    = now()
+		WHERE id = $1
+		RETURNING id, username, is_admin, created_at, updated_at`
+
 	var u User
-	err := s.pool.QueryRow(ctx, query, args...).Scan(
+	err := s.pool.QueryRow(ctx, query, id, username, passwordHash, isAdmin).Scan(
 		&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -232,6 +224,3 @@ func isUniqueViolation(err error) bool {
 	return false
 }
 
-func joinClauses(clauses []string) string {
-	return strings.Join(clauses, ", ")
-}

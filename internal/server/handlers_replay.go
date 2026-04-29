@@ -62,7 +62,7 @@ func (s *HTTPServer) replayTopic(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": err.Error()})
 		}
 		slog.Error("replay topic failed", "topic", topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	fromStr := ""
@@ -86,7 +86,7 @@ func (s *HTTPServer) listMessageLog(c *fiber.Ctx) error {
 	msgs, total, err := s.queueService.ListMessageLog(c.Context(), topic, limit, offset)
 	if err != nil {
 		slog.Error("list message log failed", "topic", topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	items := make([]archivedMessageResponse, len(msgs))
@@ -109,7 +109,7 @@ func (s *HTTPServer) runArchiveReaperOnce(c *fiber.Ctx) error {
 	n, err := s.queueService.RunArchiveReaperOnce(c.Context())
 	if err != nil {
 		slog.Error("archive reaper (manual) failed", "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 	return c.JSON(fiber.Map{"deleted": n})
 }
@@ -128,7 +128,7 @@ func (s *HTTPServer) trimMessageLog(c *fiber.Ctx) error {
 	n, err := s.queueService.TrimMessageLog(c.Context(), topic, before)
 	if err != nil {
 		slog.Error("trim message log failed", "topic", topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 	return c.JSON(fiber.Map{"deleted": n})
 }

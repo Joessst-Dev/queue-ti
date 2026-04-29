@@ -49,7 +49,7 @@ func (s *HTTPServer) listTopicConfigs(c *fiber.Ctx) error {
 	configs, err := s.queueService.ListTopicConfigs(c.Context())
 	if err != nil {
 		slog.Error("list topic configs failed", "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 	items := make([]topicConfigResponse, len(configs))
 	for i, cfg := range configs {
@@ -92,7 +92,7 @@ func (s *HTTPServer) upsertTopicConfig(c *fiber.Ctx) error {
 	}
 	if err := s.queueService.UpsertTopicConfig(c.Context(), cfg); err != nil {
 		slog.Error("upsert topic config failed", "topic", topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 	return c.JSON(toTopicConfigResponse(cfg))
 }
@@ -104,7 +104,7 @@ func (s *HTTPServer) deleteTopicConfig(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 		}
 		slog.Error("delete topic config failed", "topic", topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }

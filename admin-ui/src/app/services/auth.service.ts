@@ -7,6 +7,7 @@ import { tap, map, catchError } from 'rxjs/operators';
 export class AuthService {
   private http = inject(HttpClient);
 
+  // sessionStorage is intentional: cleared on tab/browser close, reducing token persistence risk vs. localStorage
   private token = signal<string | null>(sessionStorage.getItem('queueti_jwt'));
   private _authRequired = signal<boolean | null>(null);
 
@@ -17,6 +18,7 @@ export class AuthService {
     const t = this.token();
     if (!t) return null;
     try {
+      // Display-only: server validates signature on every request
       const payload = JSON.parse(atob(t.split('.')[1]));
       return typeof payload['exp'] === 'number' ? payload['exp'] * 1000 : null;
     } catch {
@@ -28,6 +30,7 @@ export class AuthService {
     const t = this.token();
     if (!t) return false;
     try {
+      // Display-only: server validates signature on every request
       const payload = JSON.parse(atob(t.split('.')[1]));
       return !!payload['adm'];
     } catch {

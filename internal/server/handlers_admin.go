@@ -40,7 +40,7 @@ func (s *HTTPServer) purgeTopicMessages(c *fiber.Ctx) error {
 	n, err := s.queueService.PurgeTopic(c.Context(), topic, statuses)
 	if err != nil {
 		slog.Error("purge topic failed", "topic", topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 	return c.JSON(fiber.Map{"deleted": n})
 }
@@ -54,7 +54,7 @@ func (s *HTTPServer) purgeByKeyMessages(c *fiber.Ctx) error {
 	n, err := s.queueService.PurgeByKey(c.Context(), topic, key)
 	if err != nil {
 		slog.Error("purge by key failed", "topic", topic, "key", key, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 	return c.JSON(fiber.Map{"deleted": n})
 }
@@ -63,7 +63,7 @@ func (s *HTTPServer) runExpiryReaperOnce(c *fiber.Ctx) error {
 	n, err := s.queueService.RunExpiryReaperOnce(c.Context())
 	if err != nil {
 		slog.Error("expiry reaper (manual) failed", "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 	return c.JSON(fiber.Map{"expired": n})
 }
@@ -72,7 +72,7 @@ func (s *HTTPServer) runDeleteReaperOnce(c *fiber.Ctx) error {
 	n, err := s.queueService.RunDeleteReaperOnce(c.Context())
 	if err != nil {
 		slog.Error("delete reaper (manual) failed", "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 	return c.JSON(fiber.Map{"deleted": n})
 }
@@ -80,7 +80,8 @@ func (s *HTTPServer) runDeleteReaperOnce(c *fiber.Ctx) error {
 func (s *HTTPServer) getDeleteReaperSchedule(c *fiber.Ctx) error {
 	schedule, err := s.queueService.GetDeleteReaperSchedule(c.Context())
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		slog.Error("get delete reaper schedule failed", "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 	return c.JSON(fiber.Map{"schedule": schedule, "active": schedule != ""})
 }
