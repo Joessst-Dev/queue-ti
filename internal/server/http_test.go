@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,9 +17,12 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
+	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/prometheus/client_golang/prometheus"
+
+	redisstorage "github.com/gofiber/storage/redis/v3"
 
 	"github.com/Joessst-Dev/queue-ti/internal/config"
 	"github.com/Joessst-Dev/queue-ti/internal/db"
@@ -106,7 +112,7 @@ var _ = Describe("HTTP Server", func() {
 		Context("Given the server is running", func() {
 			It("should return HTTP 200", func() {
 				// Given the HTTP server with auth disabled
-				httpServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+				httpServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 
 				// When we call the health endpoint
 				req := httptest.NewRequest("GET", "/healthz", nil)
@@ -126,7 +132,7 @@ var _ = Describe("HTTP Server", func() {
 	Describe("GET /api/version", func() {
 		Context("Given the server is running", func() {
 			It("should return the version string injected at construction", func() {
-				httpServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "v1.2.3")
+				httpServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "v1.2.3")
 
 				req := httptest.NewRequest("GET", "/api/version", nil)
 				resp, err := httpServer.App.Test(req)
@@ -149,7 +155,7 @@ var _ = Describe("HTTP Server", func() {
 		Context("Given auth is disabled", func() {
 			It("should return auth_required: false", func() {
 				// Given the HTTP server with auth disabled
-				httpServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+				httpServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 
 				// When we call the auth status endpoint
 				req := httptest.NewRequest("GET", "/api/auth/status", nil)
@@ -168,7 +174,7 @@ var _ = Describe("HTTP Server", func() {
 		Context("Given auth is enabled", func() {
 			It("should return auth_required: true", func() {
 				// Given the HTTP server with auth enabled
-				httpServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+				httpServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 					Enabled:   true,
 					JWTSecret: testJWTSecret,
 				}, prometheus.NewRegistry(), userStore, "dev")
@@ -196,7 +202,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
 			}, prometheus.NewRegistry(), userStore, "dev")
@@ -205,7 +211,7 @@ var _ = Describe("HTTP Server", func() {
 		Context("Given auth is disabled", func() {
 			It("should pass the request through without an Authorization header", func() {
 				// Given the HTTP server with auth disabled
-				noAuthServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+				noAuthServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 
 				// When we call a protected endpoint without credentials
 				req := httptest.NewRequest("GET", "/api/messages", nil)
@@ -287,7 +293,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
 			}, prometheus.NewRegistry(), userStore, "dev")
@@ -371,7 +377,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
 			}, prometheus.NewRegistry(), userStore, "dev")
@@ -432,7 +438,7 @@ var _ = Describe("HTTP Server", func() {
 		}
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, authCfg, prometheus.NewRegistry(), userStore, "dev")
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, authCfg, prometheus.NewRegistry(), userStore, "dev")
 		})
 
 		Context("when an admin user makes requests", func() {
@@ -563,7 +569,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("Given no messages exist", func() {
@@ -660,7 +666,7 @@ var _ = Describe("HTTP Server", func() {
 				admin, err := us.Create(httpTestCtx, "msg-admin", "secret", true)
 				Expect(err).NotTo(HaveOccurred())
 
-				authServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+				authServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 					Enabled:   true,
 					JWTSecret: testJWTSecret,
 				}, prometheus.NewRegistry(), us, "dev")
@@ -694,7 +700,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("Given the request body is not valid JSON", func() {
@@ -819,7 +825,7 @@ var _ = Describe("HTTP Server", func() {
 				adminToken, err = users.IssueToken([]byte(testJWTSecret), admin.ID, admin.Username, admin.IsAdmin)
 				Expect(err).NotTo(HaveOccurred())
 
-				authServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+				authServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 					Enabled:   true,
 					JWTSecret: testJWTSecret,
 				}, prometheus.NewRegistry(), us, "dev")
@@ -860,7 +866,7 @@ var _ = Describe("HTTP Server", func() {
 			It("should return 422", func() {
 				// Given a service with topic registration enforcement and no topic_config row.
 				strictService := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, true, queue.NoopRecorder{})
-				strictServer := server.NewHTTPServer(strictService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+				strictServer := server.NewHTTPServer(strictService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 
 				req := httptest.NewRequest("POST", "/api/messages",
 					strings.NewReader(`{"topic":"unknown-topic","payload":"hello"}`))
@@ -880,7 +886,7 @@ var _ = Describe("HTTP Server", func() {
 					Topic: "known-topic",
 				})).To(Succeed())
 
-				strictServer := server.NewHTTPServer(strictService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+				strictServer := server.NewHTTPServer(strictService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 
 				req := httptest.NewRequest("POST", "/api/messages",
 					strings.NewReader(`{"topic":"known-topic","payload":"hello"}`))
@@ -989,7 +995,7 @@ var _ = Describe("HTTP Server", func() {
 			userToken, err = users.IssueToken([]byte(testJWTSecret), nonAdmin.ID, nonAdmin.Username, nonAdmin.IsAdmin)
 			Expect(err).NotTo(HaveOccurred())
 
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
 			}, prometheus.NewRegistry(), userStore, "dev")
@@ -1049,7 +1055,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("Given a message that has been promoted to the DLQ", func() {
@@ -1058,7 +1064,7 @@ var _ = Describe("HTTP Server", func() {
 			BeforeEach(func() {
 				// Use dlqThreshold = 1 so a single nack promotes the message.
 				dlqService := queue.NewService(httpTestPool, 30*time.Second, 5, 0, 1, false, queue.NoopRecorder{})
-				httpServer = server.NewHTTPServer(dlqService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+				httpServer = server.NewHTTPServer(dlqService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 
 				var err error
 				dlqMessageID, err = dlqService.Enqueue(httpTestCtx, "payments", []byte("charge"), nil, nil)
@@ -1113,7 +1119,7 @@ var _ = Describe("HTTP Server", func() {
 			reg = prometheus.NewRegistry()
 			rec := metrics.New(httpTestPool, reg)
 			svc := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, false, rec)
-			httpServer = server.NewHTTPServer(svc, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+			httpServer = server.NewHTTPServer(svc, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
 			}, reg, userStore, "dev")
@@ -1135,7 +1141,7 @@ var _ = Describe("HTTP Server", func() {
 				reg2 := prometheus.NewRegistry()
 				rec2 := metrics.New(httpTestPool, reg2)
 				svc2 := queue.NewService(httpTestPool, 30*time.Second, 3, 0, 3, false, rec2)
-				httpServer = server.NewHTTPServer(svc2, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, reg2, nil, "dev")
+				httpServer = server.NewHTTPServer(svc2, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, reg2, nil, "dev")
 
 				_, err := svc2.Enqueue(httpTestCtx, "metrics-topic", []byte("hello"), nil, nil)
 				Expect(err).NotTo(HaveOccurred())
@@ -1176,7 +1182,7 @@ var _ = Describe("HTTP Server", func() {
 		const paginationTopic = "pagination-topic"
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 
 			// Given 5 messages are enqueued on the same topic
 			for i := range 5 {
@@ -1280,7 +1286,7 @@ var _ = Describe("HTTP Server", func() {
 		BeforeEach(func() {
 			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
 			Expect(err).NotTo(HaveOccurred())
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("when no topic configs exist", func() {
@@ -1335,7 +1341,7 @@ var _ = Describe("HTTP Server", func() {
 		BeforeEach(func() {
 			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
 			Expect(err).NotTo(HaveOccurred())
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("when a valid body is provided", func() {
@@ -1371,7 +1377,7 @@ var _ = Describe("HTTP Server", func() {
 
 		Context("when no Authorization header is provided and auth is enabled", func() {
 			It("should return 401", func() {
-				authServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+				authServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 					Enabled:   true,
 					JWTSecret: testJWTSecret,
 				}, prometheus.NewRegistry(), userStore, "dev")
@@ -1397,7 +1403,7 @@ var _ = Describe("HTTP Server", func() {
 		BeforeEach(func() {
 			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
 			Expect(err).NotTo(HaveOccurred())
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("when the topic config exists", func() {
@@ -1437,7 +1443,7 @@ var _ = Describe("HTTP Server", func() {
 		BeforeEach(func() {
 			_, err := httpTestPool.Exec(httpTestCtx, "DELETE FROM topic_config")
 			Expect(err).NotTo(HaveOccurred())
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("when a topic config with max_depth=1 is set and one message is already enqueued", func() {
@@ -1489,7 +1495,7 @@ var _ = Describe("HTTP Server", func() {
 			userToken, err = users.IssueToken([]byte(testJWTSecret), nonAdmin.ID, nonAdmin.Username, nonAdmin.IsAdmin)
 			Expect(err).NotTo(HaveOccurred())
 
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
 			}, prometheus.NewRegistry(), userStore, "dev")
@@ -1585,7 +1591,7 @@ var _ = Describe("HTTP Server", func() {
 			userToken, err = users.IssueToken([]byte(testJWTSecret), nonAdmin.ID, nonAdmin.Username, nonAdmin.IsAdmin)
 			Expect(err).NotTo(HaveOccurred())
 
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
 			}, prometheus.NewRegistry(), userStore, "dev")
@@ -1642,7 +1648,7 @@ var _ = Describe("HTTP Server", func() {
 			userToken, err = users.IssueToken([]byte(testJWTSecret), nonAdmin.ID, nonAdmin.Username, nonAdmin.IsAdmin)
 			Expect(err).NotTo(HaveOccurred())
 
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
 			}, prometheus.NewRegistry(), userStore, "dev")
@@ -1685,7 +1691,7 @@ var _ = Describe("HTTP Server", func() {
 		var httpServer *server.HTTPServer
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{Enabled: false}, prometheus.NewRegistry(), nil, "dev")
 		})
 
 		Context("with no messages", func() {
@@ -1762,7 +1768,7 @@ var _ = Describe("HTTP Server", func() {
 
 		Context("when auth is enabled and no Authorization header is sent", func() {
 			It("should return 401", func() {
-				authServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+				authServer := server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 					Enabled:   true,
 					JWTSecret: testJWTSecret,
 				}, prometheus.NewRegistry(), userStore, "dev")
@@ -1786,7 +1792,7 @@ var _ = Describe("HTTP Server", func() {
 		var adminToken string
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
 			}, prometheus.NewRegistry(), userStore, "dev")
@@ -1835,7 +1841,7 @@ var _ = Describe("HTTP Server", func() {
 		var targetUserID string
 
 		BeforeEach(func() {
-			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, config.AuthConfig{
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
 				Enabled:   true,
 				JWTSecret: testJWTSecret,
 			}, prometheus.NewRegistry(), userStore, "dev")
@@ -1875,6 +1881,67 @@ var _ = Describe("HTTP Server", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
+	// Redis-backed rate limiter integration test
+	// ---------------------------------------------------------------------------
+
+	Describe("POST /api/auth/login rate limiting with Redis storage", func() {
+		var redisContainer *tcredis.RedisContainer
+
+		BeforeEach(func() {
+			var err error
+			redisContainer, err = tcredis.Run(httpTestCtx, "redis:7-alpine")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			if redisContainer != nil {
+				_ = redisContainer.Terminate(httpTestCtx)
+			}
+		})
+
+		It("enforces the rate limit after 10 requests and returns 429 on the 11th", func() {
+			connStr, err := redisContainer.ConnectionString(httpTestCtx)
+			Expect(err).NotTo(HaveOccurred())
+
+			u, err := url.Parse(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			host, portStr, err := net.SplitHostPort(u.Host)
+			Expect(err).NotTo(HaveOccurred())
+			port, err := strconv.Atoi(portStr)
+			Expect(err).NotTo(HaveOccurred())
+
+			store := redisstorage.New(redisstorage.Config{Host: host, Port: port})
+			DeferCleanup(func() { _ = store.Close() })
+
+			httpServer := server.NewHTTPServer(
+				queueService,
+				config.ServerConfig{CORSOrigins: "*"},
+				store,
+				config.AuthConfig{Enabled: false},
+				prometheus.NewRegistry(),
+				userStore,
+				"dev",
+			)
+
+			for i := range 10 {
+				req := httptest.NewRequest("POST", "/api/auth/login",
+					strings.NewReader(`{"username":"x","password":"y"}`))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := httpServer.App.Test(req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).NotTo(Equal(429), "request %d should not be rate-limited yet", i+1)
+			}
+
+			req := httptest.NewRequest("POST", "/api/auth/login",
+				strings.NewReader(`{"username":"x","password":"y"}`))
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := httpServer.App.Test(req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(429))
 		})
 	})
 

@@ -13,6 +13,7 @@ type Config struct {
 	DB       DBConfig
 	Queue    QueueConfig
 	Auth     AuthConfig
+	Redis    RedisConfig
 	LogLevel string `mapstructure:"log_level"`
 }
 
@@ -47,6 +48,13 @@ type AuthConfig struct {
 	JWTSecret string `mapstructure:"jwt_secret"`
 }
 
+type RedisConfig struct {
+	Host       string `mapstructure:"host"`
+	Port       int    `mapstructure:"port"`
+	Password   string `mapstructure:"password"`
+	TLSEnabled bool   `mapstructure:"tls_enabled"`
+}
+
 func Load() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -76,6 +84,10 @@ func Load() (*Config, error) {
 	viper.SetDefault("auth.username", "")
 	viper.SetDefault("auth.password", "")
 	viper.SetDefault("auth.jwt_secret", "")
+	viper.SetDefault("redis.host", "")
+	viper.SetDefault("redis.port", 6379)
+	viper.SetDefault("redis.password", "")
+	viper.SetDefault("redis.tls_enabled", false)
 	viper.SetDefault("log_level", "info")
 
 	// Explicitly bind environment variables to config keys
@@ -98,6 +110,10 @@ func Load() (*Config, error) {
 	_ = viper.BindEnv("auth.username")
 	_ = viper.BindEnv("auth.password")
 	_ = viper.BindEnv("auth.jwt_secret")
+	_ = viper.BindEnv("redis.host")
+	_ = viper.BindEnv("redis.port")
+	_ = viper.BindEnv("redis.password")
+	_ = viper.BindEnv("redis.tls_enabled")
 	_ = viper.BindEnv("log_level")
 
 	if err := viper.ReadInConfig(); err != nil {

@@ -27,7 +27,9 @@ type HTTPServer struct {
 	version      string
 }
 
-func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, authCfg config.AuthConfig, gatherer prometheus.Gatherer, userStore *users.Store, version string) *HTTPServer {
+// NewHTTPServer creates the HTTP server. Pass a non-nil rateLimitStore (e.g. Redis) to
+// share rate-limit state across replicas; nil falls back to in-memory storage.
+func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, rateLimitStore fiber.Storage, authCfg config.AuthConfig, gatherer prometheus.Gatherer, userStore *users.Store, version string) *HTTPServer {
 	s := &HTTPServer{
 		queueService: qs,
 		authConfig:   authCfg,
@@ -38,6 +40,9 @@ func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, authCfg con
 
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
+		// Trust X-Real-IP set by a reverse proxy (nginx) so that the rate limiter
+		// keys on the actual client IP rather than the proxy's IP.
+		ProxyHeader: "X-Real-IP",
 	})
 
 	app.Use(cors.New(cors.Config{
@@ -78,10 +83,33 @@ func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, authCfg con
 		return nil
 	})
 
-	loginLimiter := limiter.New(limiter.Config{
-		Max:        10,
-		Expiration: 60 * time.Second,
-	})
+	// When X-Real-IP is absent (e.g. direct connections, tests) fall back to the
+	// actual socket IP so the limiter key is never empty. An empty key is silently
+	// ignored by the Redis storage backend, which would bypass rate limiting.
+	rateLimitKey := func(c *fiber.Ctx) string {
+		if ip := c.Get("X-Real-IP"); ip != "" {
+			return ip
+		}
+		return c.Context().RemoteIP().String()
+	}
+
+	var loginLimiter fiber.Handler
+	if rateLimitStore != nil {
+		loginLimiter = limiter.New(limiter.Config{
+			Max:          10,
+			Expiration:   60 * time.Second,
+			Storage:      rateLimitStore,
+			KeyGenerator: rateLimitKey,
+		})
+		slog.Info("login rate limiter using Redis storage")
+	} else {
+		loginLimiter = limiter.New(limiter.Config{
+			Max:          10,
+			Expiration:   60 * time.Second,
+			KeyGenerator: rateLimitKey,
+		})
+		slog.Info("login rate limiter using in-memory storage (single-instance only)")
+	}
 
 	api := app.Group("/api")
 	api.Get("/version", s.versionHandler)

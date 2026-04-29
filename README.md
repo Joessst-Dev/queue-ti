@@ -2037,7 +2037,23 @@ The `docker-compose.yaml` already restricts gRPC to `127.0.0.1:50051` to prevent
 The included `docker-compose.yaml` orchestrates PostgreSQL, the backend, and the admin UI:
 
 ```bash
+# Without Redis (in-memory rate limiter)
+make up
+# or
 docker-compose up -d
+
+# With Redis (shared rate limiter — recommended for multi-replica deployments)
+make up-redis
+# or
+docker-compose -f docker-compose.yaml -f docker-compose.redis.yaml up -d
+```
+
+`docker-compose.redis.yaml` is a Compose overlay that adds a `redis:7-alpine` service and wires `QUEUETI_REDIS_HOST`/`QUEUETI_REDIS_PORT` into the backend. When active, the login rate limiter state is shared across all backend replicas.
+
+To stop all services:
+
+```bash
+make down
 ```
 
 Access the admin UI at `http://localhost:8081` (login: `admin` / `secret`).

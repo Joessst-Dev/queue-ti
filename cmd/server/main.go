@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net"
@@ -10,9 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"google.golang.org/grpc"
-
+	"github.com/gofiber/fiber/v2"
+	redisstorage "github.com/gofiber/storage/redis/v3"
 	"github.com/prometheus/client_golang/prometheus"
+	"google.golang.org/grpc"
 
 	"github.com/Joessst-Dev/queue-ti/internal/auth"
 	"github.com/Joessst-Dev/queue-ti/internal/config"
@@ -136,7 +138,26 @@ func main() {
 		}
 	}()
 
-	httpServer := server.NewHTTPServer(queueService, cfg.Server, cfg.Auth, reg, userStore, version)
+	var rateLimitStore fiber.Storage
+	if cfg.Redis.Host != "" {
+		redisCfg := redisstorage.Config{
+			Host:     cfg.Redis.Host,
+			Port:     cfg.Redis.Port,
+			Password: cfg.Redis.Password,
+		}
+		if cfg.Redis.TLSEnabled {
+			redisCfg.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		store := redisstorage.New(redisCfg)
+		if err := store.Conn().Ping(ctx).Err(); err != nil {
+			slog.Error("redis ping failed — check QUEUETI_REDIS_HOST and QUEUETI_REDIS_PORT", "error", err)
+			os.Exit(1)
+		}
+		rateLimitStore = store
+		slog.Info("Redis connection verified for rate limiter", "host", cfg.Redis.Host, "port", cfg.Redis.Port)
+	}
+
+	httpServer := server.NewHTTPServer(queueService, cfg.Server, rateLimitStore, cfg.Auth, reg, userStore, version)
 	httpAddr := fmt.Sprintf(":%d", cfg.Server.HTTPPort)
 	go func() {
 		slog.Info("HTTP server listening", "addr", httpAddr)
