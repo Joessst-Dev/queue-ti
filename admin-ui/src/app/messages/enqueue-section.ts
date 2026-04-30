@@ -5,6 +5,8 @@ import {
   signal,
   effect,
   inject,
+  Injector,
+  runInInjectionContext,
   DestroyRef,
   ChangeDetectionStrategy,
 } from '@angular/core';
@@ -238,6 +240,7 @@ export class EnqueueSection {
 
   private readonly queue = inject(QueueService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
   private readonly topicChange$ = new Subject<string>();
   readonly topicSchema = signal<TopicSchema | null>(null);
   readonly fillExampleError = signal<string | null>(null);
@@ -267,7 +270,8 @@ export class EnqueueSection {
 
   addMetadataRow(): void {
     const model = signal<MetadataRowModel>({ key: '', value: '' });
-    this.metadataRows.update((rows) => [...rows, { model, form: form(model) }]);
+    const rowForm = runInInjectionContext(this.injector, () => form(model));
+    this.metadataRows.update((rows) => [...rows, { model, form: rowForm }]);
   }
 
   removeMetadataRow(index: number): void {
