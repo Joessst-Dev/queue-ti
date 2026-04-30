@@ -118,14 +118,16 @@ import { getErrorMessage } from '../utils/error';
                       />
                     </td>
                     <td class="px-3 py-2">
-                      <input
-                        type="checkbox"
-                        id="new-replayable"
-                        [checked]="editForm().replayable"
-                        (change)="patchEditForm('replayable', inputChecked($event))"
-                        class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
-                      />
-                      <label for="new-replayable" class="ml-1 text-sm text-gray-700">Replayable</label>
+                      <div class="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          id="new-replayable"
+                          [checked]="editForm().replayable"
+                          (change)="patchEditForm('replayable', inputChecked($event))"
+                          class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <label for="new-replayable" class="text-sm text-gray-700 whitespace-nowrap">Replayable</label>
+                      </div>
                     </td>
                     <td class="px-3 py-2">
                       @if (editForm().replayable) {
@@ -203,14 +205,16 @@ import { getErrorMessage } from '../utils/error';
                         />
                       </td>
                       <td class="px-3 py-2">
-                        <input
-                          type="checkbox"
-                          [id]="'replayable-' + cfg.topic"
-                          [checked]="editForm().replayable"
-                          (change)="patchEditForm('replayable', inputChecked($event))"
-                          class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
-                        />
-                        <label [for]="'replayable-' + cfg.topic" class="ml-1 text-sm text-gray-700">Replayable</label>
+                        <div class="flex items-center gap-1.5">
+                          <input
+                            type="checkbox"
+                            [id]="'replayable-' + cfg.topic"
+                            [checked]="editForm().replayable"
+                            (change)="patchEditForm('replayable', inputChecked($event))"
+                            class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
+                          />
+                          <label [for]="'replayable-' + cfg.topic" class="text-sm text-gray-700 whitespace-nowrap">Replayable</label>
+                        </div>
                       </td>
                       <td class="px-3 py-2">
                         @if (editForm().replayable) {

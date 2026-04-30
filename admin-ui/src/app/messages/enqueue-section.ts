@@ -131,14 +131,10 @@ interface MetadataRowModel {
           <!-- Metadata -->
           <div>
             <div class="flex items-center justify-between mb-2">
-              <label
-                for="add-metadata-field"
-                class="block text-sm font-medium text-gray-700"
-              >
+              <label class="block text-sm font-medium text-gray-700">
                 Metadata
               </label>
               <button
-                id="add-metadata-field"
                 type="button"
                 (click)="addMetadataRow()"
                 class="text-sm text-indigo-600 hover:text-indigo-800 cursor-pointer"
