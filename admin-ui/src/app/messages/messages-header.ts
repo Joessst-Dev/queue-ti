@@ -8,7 +8,7 @@ import { inject } from '@angular/core';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink, RouterLinkActive],
   template: `
-    <header class="bg-white shadow-sm">
+    <header class="bg-white shadow-sm sticky top-0 z-10">
       <div
         class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
       >

@@ -27,7 +27,7 @@ interface EnqueueState {
   imports: [MessagesHeader, MessagesTable, EnqueueSection, QueueStatsChart, TopicsSection, FooterComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="min-h-screen bg-gray-50">
+    <div class="min-h-screen bg-gray-50 flex flex-col">
       <app-messages-header [isAuthenticated]="auth.isAuthenticated()" (signOut)="onLogout()" />
 
       <div class="bg-white border-b border-gray-200">
@@ -50,7 +50,7 @@ interface EnqueueState {
         </div>
       </div>
 
-      <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         @if (activeTab() === 'messages') {
           @if (purgeResult(); as result) {
             <div class="mb-4 flex items-center justify-between p-3 bg-green-50 border border-green-200 text-green-800 rounded text-sm">

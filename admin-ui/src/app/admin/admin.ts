@@ -11,10 +11,10 @@ import { FooterComponent } from '../shared/footer.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MessagesHeader, UsersSection, MaintenanceSection, FooterComponent],
   template: `
-    <div class="min-h-screen bg-gray-50">
+    <div class="min-h-screen bg-gray-50 flex flex-col">
       <app-messages-header [isAuthenticated]="auth.isAuthenticated()" (signOut)="onLogout()" />
 
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <div class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <div><app-users-section /></div>
         <div><app-maintenance-section /></div>
       </div>

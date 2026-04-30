@@ -5,8 +5,11 @@ import { VersionService } from '../services/version.service';
   selector: 'app-footer',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <footer class="py-4 text-center text-xs text-gray-400">
-      queue-ti {{ version() }}
+    <footer class="border-t border-gray-200 py-3 px-4 sm:px-6 lg:px-8">
+      <div class="max-w-7xl mx-auto flex items-center justify-between text-xs text-gray-400">
+        <span>queue-ti</span>
+        <span>{{ version() }}</span>
+      </div>
     </footer>
   `,
 })
