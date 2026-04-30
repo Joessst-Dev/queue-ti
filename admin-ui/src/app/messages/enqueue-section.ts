@@ -131,9 +131,7 @@ interface MetadataRowModel {
           <!-- Metadata -->
           <div>
             <div class="flex items-center justify-between mb-2">
-              <label class="block text-sm font-medium text-gray-700">
-                Metadata
-              </label>
+              <span class="block text-sm font-medium text-gray-700">Metadata</span>
               <button
                 type="button"
                 (click)="addMetadataRow()"
