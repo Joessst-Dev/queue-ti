@@ -310,7 +310,7 @@ const ITEM_SIZE = 53;
                             ✓
                           </button>
                           <button
-                            (click)="nackOpenId.set(null)"
+                            (click)="nackOpenId.set(null); nackError.set('')"
                             title="Cancel"
                             class="px-1.5 py-0.5 text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
                           >
