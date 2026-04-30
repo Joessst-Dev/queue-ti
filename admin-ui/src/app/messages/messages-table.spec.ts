@@ -334,6 +334,82 @@ describe('MessagesTable', () => {
     });
   });
 
+  describe('nack overlay dismiss behaviour', () => {
+    const findNackBtn = (el: HTMLElement): HTMLButtonElement | undefined =>
+      Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Nack') as
+        | HTMLButtonElement
+        | undefined;
+
+    const openNackOverlay = async (
+      fixture: Awaited<ReturnType<typeof setup>>['fixture'],
+    ): Promise<void> => {
+      const btn = findNackBtn(fixture.nativeElement);
+      btn?.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+    };
+
+    describe('when the Nack button is clicked', () => {
+      it('should show the nack overlay', async () => {
+        const messages = [makeMessage({ status: 'processing' })];
+        const { fixture } = await setup({ messages });
+        await openNackOverlay(fixture);
+
+        expect(fixture.nativeElement.querySelector('[data-nack-overlay]')).not.toBeNull();
+      });
+    });
+
+    describe('when a click occurs outside the overlay', () => {
+      it('should dismiss the overlay', async () => {
+        const messages = [makeMessage({ status: 'processing' })];
+        const { fixture } = await setup({ messages });
+        await openNackOverlay(fixture);
+
+        document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(fixture.nativeElement.querySelector('[data-nack-overlay]')).toBeNull();
+      });
+    });
+
+    describe('when a click occurs inside the overlay', () => {
+      it('should keep the overlay open', async () => {
+        const messages = [makeMessage({ status: 'processing' })];
+        const { fixture } = await setup({ messages });
+        await openNackOverlay(fixture);
+
+        const overlay = fixture.nativeElement.querySelector('[data-nack-overlay]') as HTMLElement;
+        overlay.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(fixture.nativeElement.querySelector('[data-nack-overlay]')).not.toBeNull();
+      });
+    });
+
+    describe('when the Cancel button inside the overlay is clicked', () => {
+      it('should dismiss the overlay and reset nackError', async () => {
+        const messages = [makeMessage({ status: 'processing' })];
+        const { fixture, component } = await setup({ messages });
+        await openNackOverlay(fixture);
+
+        component.nackError.set('some error');
+        fixture.detectChanges();
+
+        const cancelBtn = Array.from(fixture.nativeElement.querySelectorAll('button')).find(
+          (b) => (b as HTMLButtonElement).title === 'Cancel',
+        ) as HTMLButtonElement;
+        cancelBtn.click();
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(fixture.nativeElement.querySelector('[data-nack-overlay]')).toBeNull();
+        expect(component.nackError()).toBe('');
+      });
+    });
+  });
+
   describe('Purge key button', () => {
     const findPurgeKeyBtn = (el: HTMLElement): HTMLButtonElement | undefined =>
       el.querySelector<HTMLButtonElement>('button[title*="Purge all messages with key"]') ?? undefined;
