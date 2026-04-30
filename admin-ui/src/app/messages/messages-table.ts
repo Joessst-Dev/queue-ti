@@ -1,5 +1,6 @@
 import {
   Component,
+  HostListener,
   input,
   output,
   signal,
@@ -24,9 +25,6 @@ const ITEM_SIZE = 53;
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormField, SlicePipe, DatePipe, CdkVirtualScrollViewport, CdkVirtualForOf, CdkFixedSizeVirtualScroll],
   template: `
-    @if (nackOpenId() !== null) {
-      <div class="fixed inset-0 z-10" (click)="nackOpenId.set(null); nackError.set('')" aria-hidden="true"></div>
-    }
     <section class="bg-white shadow rounded-lg">
       <div
         class="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-wrap gap-4"
@@ -294,7 +292,7 @@ const ITEM_SIZE = 53;
                       </button>
                     } @else if (msg.status === 'processing') {
                       @if (nackOpenId() === msg.id) {
-                        <div class="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white border border-gray-200 rounded shadow-md px-2 py-1 z-20">
+                        <div data-nack-overlay class="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white border border-gray-200 rounded shadow-md px-2 py-1 z-20">
                           <input
                             type="text"
                             [value]="nackError()"
@@ -319,7 +317,7 @@ const ITEM_SIZE = 53;
                         </div>
                       } @else {
                         <button
-                          (click)="nackOpenId.set(msg.id); nackError.set('')"
+                          (click)="$event.stopPropagation(); nackOpenId.set(msg.id); nackError.set('')"
                           [attr.aria-label]="'Nack message ' + msg.id"
                           class="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer whitespace-nowrap"
                         >
@@ -447,6 +445,15 @@ export class MessagesTable {
 
   onRefresh(): void {
     this.topicSearch.emit(this.filterForm().value() ?? '');
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (this.nackOpenId() === null) return;
+    if (!(event.target as Element).closest('[data-nack-overlay]')) {
+      this.nackOpenId.set(null);
+      this.nackError.set('');
+    }
   }
 
   onNackConfirm(id: string): void {
