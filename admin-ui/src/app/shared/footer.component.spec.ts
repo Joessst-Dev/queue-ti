@@ -23,8 +23,9 @@ describe('FooterComponent', () => {
     it('should render the loading placeholder', () => {
       setup();
       fixture.detectChanges();
-      const text: string = fixture.nativeElement.textContent.trim();
-      expect(text).toBe('queue-ti ...');
+      const spans = fixture.nativeElement.querySelectorAll('span');
+      expect(spans[0].textContent.trim()).toBe('queue-ti');
+      expect(spans[1].textContent.trim()).toBe('...');
       httpMock.expectOne('/api/version').flush({ version: '1.0.0' });
     });
   });
@@ -35,8 +36,9 @@ describe('FooterComponent', () => {
       fixture.detectChanges();
       httpMock.expectOne('/api/version').flush({ version: '2.5.0' });
       fixture.detectChanges();
-      const text: string = fixture.nativeElement.textContent.trim();
-      expect(text).toBe('queue-ti 2.5.0');
+      const spans = fixture.nativeElement.querySelectorAll('span');
+      expect(spans[0].textContent.trim()).toBe('queue-ti');
+      expect(spans[1].textContent.trim()).toBe('2.5.0');
     });
   });
 
@@ -46,8 +48,9 @@ describe('FooterComponent', () => {
       fixture.detectChanges();
       httpMock.expectOne('/api/version').error(new ProgressEvent('error'));
       fixture.detectChanges();
-      const text: string = fixture.nativeElement.textContent.trim();
-      expect(text).toBe('queue-ti unknown');
+      const spans = fixture.nativeElement.querySelectorAll('span');
+      expect(spans[0].textContent.trim()).toBe('queue-ti');
+      expect(spans[1].textContent.trim()).toBe('unknown');
     });
   });
 
