@@ -1,5 +1,5 @@
 import { Component, inject, computed, signal, ChangeDetectionStrategy, OnInit } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { toSignal, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { getErrorMessage } from '../utils/error';
 import { Subject, switchMap, map, catchError, of, startWith, tap } from 'rxjs';
@@ -151,37 +151,27 @@ export class Messages implements OnInit {
   readonly enqueueError = computed(() => this.enqueueState().error);
   readonly enqueueLoading = computed(() => this.enqueueState().loading);
 
-  private readonly requeueState = toSignal(
+  constructor() {
     this.requeueTrigger$.pipe(
       switchMap((id) =>
         this.queue.requeueMessage(id).pipe(
           tap(() => this.loadMessages()),
-          map(() => ({ loading: false, error: '' })),
-          catchError((err) =>
-            of({ loading: false, error: err.error?.error || 'Failed to requeue' }),
-          ),
-          startWith({ loading: true, error: '' }),
+          catchError(() => of(null)),
         ),
       ),
-    ),
-    { initialValue: { loading: false, error: '' } },
-  );
+      takeUntilDestroyed(),
+    ).subscribe();
 
-  private readonly nackState = toSignal(
     this.nackTrigger$.pipe(
       switchMap(({ id, error }) =>
         this.queue.nackMessage(id, error).pipe(
           tap(() => this.loadMessages()),
-          map(() => ({ loading: false, error: '' })),
-          catchError((err) =>
-            of({ loading: false, error: err.error?.error || 'Failed to nack' }),
-          ),
-          startWith({ loading: true, error: '' }),
+          catchError(() => of(null)),
         ),
       ),
-    ),
-    { initialValue: { loading: false, error: '' } },
-  );
+      takeUntilDestroyed(),
+    ).subscribe();
+  }
 
   ngOnInit(): void {
     this.loadMessages();
