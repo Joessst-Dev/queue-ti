@@ -5,6 +5,8 @@ import {
   signal,
   effect,
   inject,
+  Injector,
+  runInInjectionContext,
   DestroyRef,
   ChangeDetectionStrategy,
 } from '@angular/core';
@@ -131,14 +133,8 @@ interface MetadataRowModel {
           <!-- Metadata -->
           <div>
             <div class="flex items-center justify-between mb-2">
-              <label
-                for="add-metadata-field"
-                class="block text-sm font-medium text-gray-700"
-              >
-                Metadata
-              </label>
+              <span class="block text-sm font-medium text-gray-700">Metadata</span>
               <button
-                id="add-metadata-field"
                 type="button"
                 (click)="addMetadataRow()"
                 class="text-sm text-indigo-600 hover:text-indigo-800 cursor-pointer"
@@ -244,6 +240,7 @@ export class EnqueueSection {
 
   private readonly queue = inject(QueueService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
   private readonly topicChange$ = new Subject<string>();
   readonly topicSchema = signal<TopicSchema | null>(null);
   readonly fillExampleError = signal<string | null>(null);
@@ -273,7 +270,8 @@ export class EnqueueSection {
 
   addMetadataRow(): void {
     const model = signal<MetadataRowModel>({ key: '', value: '' });
-    this.metadataRows.update((rows) => [...rows, { model, form: form(model) }]);
+    const rowForm = runInInjectionContext(this.injector, () => form(model));
+    this.metadataRows.update((rows) => [...rows, { model, form: rowForm }]);
   }
 
   removeMetadataRow(index: number): void {

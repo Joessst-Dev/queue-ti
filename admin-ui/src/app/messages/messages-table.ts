@@ -1,5 +1,6 @@
 import {
   Component,
+  HostListener,
   input,
   output,
   signal,
@@ -280,7 +281,7 @@ const ITEM_SIZE = 53;
 
                 <!-- Actions — single row of compact buttons -->
                 <td class="px-6 py-4 text-sm overflow-visible">
-                  <div class="flex items-center gap-1 flex-nowrap">
+                  <div class="relative flex items-center gap-1 flex-nowrap">
                     @if (isDlq(msg)) {
                       <button
                         (click)="requeue.emit(msg.id)"
@@ -291,30 +292,32 @@ const ITEM_SIZE = 53;
                       </button>
                     } @else if (msg.status === 'processing') {
                       @if (nackOpenId() === msg.id) {
-                        <input
-                          type="text"
-                          [value]="nackError()"
-                          (input)="nackError.set(inputValue($event))"
-                          placeholder="Reason…"
-                          class="px-1 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-red-400 w-20 shrink-0"
-                        />
-                        <button
-                          (click)="onNackConfirm(msg.id)"
-                          title="Confirm nack"
-                          class="shrink-0 px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer"
-                        >
-                          ✓
-                        </button>
-                        <button
-                          (click)="nackOpenId.set(null)"
-                          title="Cancel"
-                          class="shrink-0 px-1.5 py-0.5 text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
-                        >
-                          ✗
-                        </button>
+                        <div data-nack-overlay class="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white border border-gray-200 rounded shadow-md px-2 py-1 z-20">
+                          <input
+                            type="text"
+                            [value]="nackError()"
+                            (input)="nackError.set(inputValue($event))"
+                            placeholder="Reason…"
+                            class="px-1 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-red-400 w-28"
+                          />
+                          <button
+                            (click)="onNackConfirm(msg.id)"
+                            title="Confirm nack"
+                            class="px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer whitespace-nowrap"
+                          >
+                            ✓
+                          </button>
+                          <button
+                            (click)="nackOpenId.set(null); nackError.set('')"
+                            title="Cancel"
+                            class="px-1.5 py-0.5 text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
+                          >
+                            ✗
+                          </button>
+                        </div>
                       } @else {
                         <button
-                          (click)="nackOpenId.set(msg.id); nackError.set('')"
+                          (click)="$event.stopPropagation(); nackOpenId.set(msg.id); nackError.set('')"
                           [attr.aria-label]="'Nack message ' + msg.id"
                           class="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer whitespace-nowrap"
                         >
@@ -442,6 +445,15 @@ export class MessagesTable {
 
   onRefresh(): void {
     this.topicSearch.emit(this.filterForm().value() ?? '');
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (this.nackOpenId() === null) return;
+    if (!(event.target as Element).closest('[data-nack-overlay]')) {
+      this.nackOpenId.set(null);
+      this.nackError.set('');
+    }
   }
 
   onNackConfirm(id: string): void {
