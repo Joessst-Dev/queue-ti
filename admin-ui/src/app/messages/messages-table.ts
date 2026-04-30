@@ -24,6 +24,9 @@ const ITEM_SIZE = 53;
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormField, SlicePipe, DatePipe, CdkVirtualScrollViewport, CdkVirtualForOf, CdkFixedSizeVirtualScroll],
   template: `
+    @if (nackOpenId() !== null) {
+      <div class="fixed inset-0 z-10" (click)="nackOpenId.set(null); nackError.set('')" aria-hidden="true"></div>
+    }
     <section class="bg-white shadow rounded-lg">
       <div
         class="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-wrap gap-4"
