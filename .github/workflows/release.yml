@@ -1,17 +1,12 @@
 name: Release
 
-# Triggered by semantic version tags pushed to any commit on main.
-# Workflow: test (backend + frontend in parallel) → release (image + tags + GH Release).
+# Triggered by CalVer tags: vYYYY.MM.PATCH with an optional pre-release suffix.
+# Examples: v2026.05.0, v2026.05.0-preview.1, v2026.05.1-rc.1
+# The pattern v[0-9]* excludes accidental non-version tags (e.g. vfoo).
 on:
   push:
     tags:
-      - "v*.*.*"
-
-# write: create the GitHub Release and push the client/ sub-module tag.
-# packages: write: push the Docker image to GHCR.
-permissions:
-  contents: write
-  packages: write
+      - "v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9]*"
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
@@ -24,9 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    permissions:
+      contents: read
+
     services:
-      # Satisfies internal/queue/service_test.go which hard-codes
-      # postgres://postgres:postgres@localhost:5432/queueti_test
       postgres:
         image: postgres:16-alpine
         env:
@@ -71,6 +67,9 @@ jobs:
     name: "Frontend: Build, Test & Lint"
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    permissions:
+      contents: read
 
     defaults:
       run:
@@ -122,66 +121,95 @@ jobs:
         run: npx nx lint
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 2: Release — build multi-arch image, push to GHCR, tag client module,
-  # create GitHub Release. Only runs after both test jobs pass.
+  # Job 2: Build & push Docker image to GHCR
+  # Only runs after both CI jobs pass. Builds a multi-platform manifest
+  # (linux/amd64 + linux/arm64) and pushes three conditional tags:
+  #   - exact tag  — always (e.g. v2026.05.0-preview.1)
+  #   - preview    — rolling pointer, only for tags containing "-preview"
+  #   - latest     — rolling pointer, only for stable releases
   # ─────────────────────────────────────────────────────────────────────────────
-  release:
-    name: "Release: Publish image, tag client module, create GitHub Release"
+  publish-image:
+    name: "Docker: Build & push multi-arch image"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [backend, frontend]
 
-    steps:
-      - name: Checkout repository (full history for tag push)
-        # fetch-depth: 0 is required so `git push origin client/<tag>` works —
-        # a shallow clone cannot push tags back to the remote.
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
+    permissions:
+      contents: read
+      packages: write
 
-      - name: Set up Go ${{ '1.25.5' }}
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version: "1.25.5"
-          cache: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Docker Buildx
         # Required for multi-platform builds (linux/amd64 + linux/arm64) and
-        # GitHub Actions cache backend (type=gha).
+        # the GitHub Actions cache backend (type=gha).
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version (strip v prefix)
-        # Produces outputs.version = "1.2.3" from tag "v1.2.3".
-        # Used to set the Go module version label on the image.
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+      - name: Generate Docker metadata and tags
+        # Produces three tags based on the release type:
+        #   1. Exact tag — always emitted (e.g. v2026.05.0-preview.1)
+        #   2. preview   — rolling pointer, only for tags containing "-preview"
+        #   3. latest    — rolling pointer, only for stable (no -preview, no -rc)
+        id: meta
+        uses: docker/metadata-action@902fa8ec7d6ecbea8a43bf5cd2f4da3f3c8de966 # v5.7.0
+        with:
+          images: ghcr.io/joessst-dev/queue-ti
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+            type=raw,value=preview,enable=${{ contains(github.ref_name, '-preview') }}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-preview') && !contains(github.ref_name, '-rc') }}
 
       - name: Build and push multi-arch Docker image
-        # Builds linux/amd64 and linux/arm64 in a single manifest and pushes
-        # both tags: the exact version tag and the rolling `latest` tag.
+        # Builds linux/amd64 and linux/arm64 in a single manifest list.
+        # GHA cache keeps layer reuse between release runs without an external
+        # registry cache — mode=max caches all intermediate layers.
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/queue-ti:${{ github.ref_name }}
-            ghcr.io/${{ github.repository_owner }}/queue-ti:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Tag client sub-module
-        # Creates the `client/v1.2.3` tag on the same commit as the release tag.
-        # This is the standard Go sub-module tagging convention: consumers run
-        # `go get github.com/Joessst-Dev/queue-ti/client@v1.2.3` and the Go
-        # toolchain resolves the `client/v1.2.3` tag automatically.
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 3: Create GitHub Release
+  # Runs after the image push succeeds. Uses the gh CLI (pre-installed on
+  # ubuntu-latest) to create the release with auto-generated notes from merged
+  # PRs. Pre-release flag is set automatically for -preview and -rc tags.
+  # ─────────────────────────────────────────────────────────────────────────────
+  create-release:
+    name: "GitHub: Create release"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [publish-image]
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        # fetch-depth: 0 required to push the client sub-module tag back to the remote.
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Tag client Go sub-module
+        # Creates client/vYYYY.MM.PATCH on the same commit so the client library
+        # is consumable as a Go module:
+        #   go get github.com/Joessst-Dev/queue-ti/client@vYYYY.MM.PATCH
+        # Note: replace directives in client/go.mod are ignored by downstream
+        # consumers, so the local ../  replace does not affect published releases.
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -189,21 +217,21 @@ jobs:
           git push origin "client/${{ github.ref_name }}"
 
       - name: Create GitHub Release
-        # Generates release notes automatically from merged PRs and commits
-        # since the previous tag, then prepends the Docker pull and Go get
-        # instructions for immediate usability.
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
-        with:
-          generate_release_notes: true
-          body: |
-            ## Docker
-
-            ```bash
-            docker pull ghcr.io/${{ github.repository_owner }}/queue-ti:${{ github.ref_name }}
-            ```
-
-            ## Go Client Library
-
-            ```bash
-            go get github.com/Joessst-Dev/queue-ti/client@${{ github.ref_name }}
-            ```
+        # --generate-notes  auto-generates release notes from merged PRs since
+        #                   the previous tag — no manual changelog needed.
+        # --prerelease      set when the tag contains "-preview" or "-rc".
+        # --verify-tag      fails fast if the tag does not exist on the remote,
+        #                   guarding against a race between push and release creation.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          PRERELEASE_FLAG=""
+          if [[ "$TAG" == *"-preview"* || "$TAG" == *"-rc"* ]]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes \
+            --verify-tag \
+            $PRERELEASE_FLAG
