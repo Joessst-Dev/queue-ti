@@ -2094,9 +2094,16 @@ queue-ti/
 
 ### Docker
 
-Build the Docker image:
+**Pull the latest released image from GHCR:**
+
+The easiest way to run queue-ti is to pull a pre-built Docker image from GitHub Container Registry (GHCR). Releases are published automatically and include backend, admin UI, and all dependencies.
+
 ```bash
-docker build -t queue-ti:latest .
+# Latest stable release
+docker pull ghcr.io/joessst-dev/queue-ti:latest
+
+# Or a specific version (e.g. v2026.05.0-preview.1)
+docker pull ghcr.io/joessst-dev/queue-ti:v2026.05.0-preview.1
 ```
 
 Run with Docker:
@@ -2108,7 +2115,21 @@ docker run -d \
   -e QUEUETI_DB_USER=postgres \
   -e QUEUETI_DB_PASSWORD=postgres \
   -e QUEUETI_DB_NAME=queueti \
-  queue-ti:latest
+  ghcr.io/joessst-dev/queue-ti:latest
+```
+
+**Build locally from source:**
+
+```bash
+docker build -t queue-ti:dev .
+docker run -d \
+  -p 50051:50051 \
+  -p 8080:8080 \
+  -e QUEUETI_DB_HOST=postgres \
+  -e QUEUETI_DB_USER=postgres \
+  -e QUEUETI_DB_PASSWORD=postgres \
+  -e QUEUETI_DB_NAME=queueti \
+  queue-ti:dev
 ```
 
 ### gRPC TLS
@@ -2155,52 +2176,82 @@ Access the admin UI at `http://localhost:8081` (login: `admin` / `secret`).
 
 ### Versioning
 
-queue-ti uses [Semantic Versioning](https://semver.org). A single `v1.2.3` tag on `main` drives all release artifacts:
+queue-ti uses [Calendar Versioning](https://calver.org) (CalVer) in the format `vYYYY.MM.PATCH`. A single version tag on `main` drives all release artifacts:
 
 | Artifact | Published as |
 |---|---|
-| Docker image | `ghcr.io/<owner>/queue-ti:v1.2.3` and `:latest` on GHCR |
-| Go client library | `github.com/Joessst-Dev/queue-ti/client@v1.2.3` (sub-module tag `client/v1.2.3`) |
-| GitHub Release | Auto-generated changelog with Docker pull and `go get` commands |
+| Docker image | Exact tag (e.g. `ghcr.io/joessst-dev/queue-ti:v2026.05.0`); rolling `preview` tag for preview releases; `latest` tag for stable releases |
+| Go client library | `github.com/Joessst-Dev/queue-ti/client@vYYYY.MM.PATCH` (separate sub-module tag `client/vYYYY.MM.PATCH`) |
+| GitHub Release | Auto-generated changelog from merged PR titles |
+
+**Release types:**
+- **Stable release** — Tag: `vYYYY.MM.PATCH` (e.g. `v2026.05.0`) — Published as `:vYYYY.MM.PATCH` and `:latest` on GHCR
+- **Preview release** — Tag: `vYYYY.MM.PATCH-preview.N` (e.g. `v2026.05.0-preview.1`) — Published as `:vYYYY.MM.PATCH-preview.N` and `:preview` rolling pointer on GHCR
+- **Release candidate** — Tag: `vYYYY.MM.PATCH-rc.N` (e.g. `v2026.05.0-rc.1`) — Published as `:vYYYY.MM.PATCH-rc.N` (no `:latest` tag)
 
 ### Cutting a Release
 
 1. Ensure `main` is in a releasable state — CI must be green.
-2. Push a version tag:
+2. Push a version tag in CalVer format:
    ```bash
-   git tag v1.2.3
-   git push origin v1.2.3
+   git tag v2026.05.0           # Stable release
+   git tag v2026.05.0-preview.1 # Preview release
+   git tag v2026.05.1-rc.1      # Release candidate
+   git push origin <tag>
    ```
-3. The release pipeline runs automatically and will:
-   - Run the full backend and frontend test suites (release is blocked on failure)
-   - Build and push a multi-arch Docker image (`linux/amd64` + `linux/arm64`) to GHCR
-   - Create the `client/v1.2.3` Go sub-module tag on the same commit
-   - Publish a GitHub Release with auto-generated notes
+3. The release pipeline runs automatically (only on tags matching `v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9]*`):
+   - Runs the full backend and frontend test suites (release is blocked on test failure)
+   - Builds and pushes a multi-arch Docker image (`linux/amd64` + `linux/arm64`) to GHCR
+     - Always pushes the exact tag (e.g. `:v2026.05.0-preview.1`)
+     - For preview releases (tag contains `-preview`), also pushes `:preview` rolling pointer
+     - For stable releases (no `-preview` or `-rc`), also pushes `:latest` rolling pointer
+   - Creates a Go sub-module tag `client/vYYYY.MM.PATCH` so the client library is consumable as `go get github.com/Joessst-Dev/queue-ti/client@vYYYY.MM.PATCH`
+   - Publishes a GitHub Release with auto-generated notes from merged PRs
 
 Monitor the run at **Actions → Release** in the GitHub repository.
 
 ### Using a Release
 
-**Docker:**
+**Docker — Pull a specific release:**
 ```bash
-docker pull ghcr.io/<owner>/queue-ti:v1.2.3
+# Stable release
+docker pull ghcr.io/joessst-dev/queue-ti:v2026.05.0
+
+# Preview release (rolling pointer)
+docker pull ghcr.io/joessst-dev/queue-ti:preview
+
+# Latest stable release (rolling pointer)
+docker pull ghcr.io/joessst-dev/queue-ti:latest
 ```
 
 Or with docker-compose, pin the image tag in `docker-compose.yaml`:
 ```yaml
 services:
   queueti:
-    image: ghcr.io/<owner>/queue-ti:v1.2.3
+    image: ghcr.io/joessst-dev/queue-ti:v2026.05.0
+    # OR: ghcr.io/joessst-dev/queue-ti:latest (always pulls the latest stable)
 ```
 
 **Go client library:**
 ```bash
-go get github.com/Joessst-Dev/queue-ti/client@v1.2.3
+# Pin to a specific version
+go get github.com/Joessst-Dev/queue-ti/client@v2026.05.0
+
+# Or latest
+go get github.com/Joessst-Dev/queue-ti/client@latest
 ```
 
-### CI Pipeline
+The client library is published as a Go sub-module, so it can be imported and used independently:
+```go
+import "github.com/Joessst-Dev/queue-ti/client"
 
-The CI pipeline (`.github/workflows/ci.yml`) runs on every push and pull request:
+c, _ := client.Dial("localhost:50051", client.WithInsecure())
+defer c.Close()
+```
+
+### CI/CD Pipelines
+
+**Continuous Integration (`.github/workflows/ci.yml`)** — Runs on every push and pull request:
 
 | Job | What it does |
 |---|---|
@@ -2208,7 +2259,16 @@ The CI pipeline (`.github/workflows/ci.yml`) runs on every push and pull request
 | `frontend` | Angular production build, Vitest unit tests, ESLint |
 | `build-image` | Docker image build (no push) — catches Dockerfile regressions early |
 
-The release pipeline (`.github/workflows/release.yml`) runs only on `v*.*.*` tag pushes and reuses the same test jobs as a gate before publishing any artifact.
+**Release Pipeline (`.github/workflows/release.yml`)** — Runs only on version tags matching `v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9]*`:
+
+| Job | What it does |
+|---|---|
+| `backend` | Same as CI: build and test (gates the release) |
+| `frontend` | Same as CI: build, test, and lint (gates the release) |
+| `publish-image` | Builds multi-arch Docker image (linux/amd64 + linux/arm64) and pushes to GHCR with appropriate tags (exact, `:preview`, and/or `:latest`) |
+| `create-release` | Creates GitHub Release with auto-generated notes and tags the client Go sub-module (`client/vYYYY.MM.PATCH`) |
+
+**Release tag format:** `vYYYY.MM.PATCH` or `vYYYY.MM.PATCH-preview.N` or `vYYYY.MM.PATCH-rc.N`
 
 ### Changelog
 
