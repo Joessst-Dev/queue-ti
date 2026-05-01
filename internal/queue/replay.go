@@ -50,30 +50,35 @@ func (s *Service) ReplayTopic(ctx context.Context, topic string, fromTime time.T
 		effectiveFrom = windowStart
 	}
 
+	_, expiresAt, _, err := s.resolveEnqueueParams(ctx, topic)
+	if err != nil {
+		return 0, fmt.Errorf("replay resolve params: %w", err)
+	}
+
 	var tag pgconn.CommandTag
 	if effectiveFrom.IsZero() {
 		tag, err = s.pool.Exec(ctx, `
 			INSERT INTO messages
 			    (id, topic, key, payload, metadata, retry_count, max_retries,
-			     last_error, original_topic, created_at, status)
+			     last_error, original_topic, created_at, status, expires_at)
 			SELECT gen_random_uuid(), topic, key, payload, metadata,
-			       0, max_retries, NULL, original_topic, now(), 'pending'
+			       0, max_retries, NULL, original_topic, now(), 'pending', $2
 			FROM message_log
 			WHERE topic = $1
 			ON CONFLICT DO NOTHING
-		`, topic)
+		`, topic, expiresAt)
 	} else {
 		tag, err = s.pool.Exec(ctx, `
 			INSERT INTO messages
 			    (id, topic, key, payload, metadata, retry_count, max_retries,
-			     last_error, original_topic, created_at, status)
+			     last_error, original_topic, created_at, status, expires_at)
 			SELECT gen_random_uuid(), topic, key, payload, metadata,
-			       0, max_retries, NULL, original_topic, now(), 'pending'
+			       0, max_retries, NULL, original_topic, now(), 'pending', $3
 			FROM message_log
 			WHERE topic = $1
 			  AND acked_at >= $2
 			ON CONFLICT DO NOTHING
-		`, topic, effectiveFrom)
+		`, topic, effectiveFrom, expiresAt)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("replay insert: %w", err)
