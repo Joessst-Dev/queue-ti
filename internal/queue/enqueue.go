@@ -28,30 +28,34 @@ func (s *Service) resolveExpiresAt(cfg *TopicConfig) *time.Time {
 	return expiresAt
 }
 
+type enqueueParams struct {
+	maxRetries int
+	expiresAt  *time.Time
+	maxDepth   int
+}
+
 // resolveEnqueueParams merges global service defaults with per-topic overrides
-// from topic_config. It returns the effective maxRetries, expiresAt, and
-// maxDepth (0 = unlimited) to use when inserting a new message.
-func (s *Service) resolveEnqueueParams(ctx context.Context, topic string) (maxRetries int, expiresAt *time.Time, maxDepth int, err error) {
-	maxRetries = s.maxRetries
-	maxDepth = 0 // 0 = unlimited
+// from topic_config. maxDepth 0 means unlimited.
+func (s *Service) resolveEnqueueParams(ctx context.Context, topic string) (enqueueParams, error) {
+	p := enqueueParams{maxRetries: s.maxRetries}
 
 	cfg, err := s.GetTopicConfig(ctx, topic)
 	if err != nil {
-		return 0, nil, 0, err
+		return enqueueParams{}, err
 	}
 
-	expiresAt = s.resolveExpiresAt(cfg)
+	p.expiresAt = s.resolveExpiresAt(cfg)
 
 	if cfg == nil {
-		return maxRetries, expiresAt, maxDepth, nil
+		return p, nil
 	}
 	if cfg.MaxRetries != nil {
-		maxRetries = *cfg.MaxRetries
+		p.maxRetries = *cfg.MaxRetries
 	}
 	if cfg.MaxDepth != nil {
-		maxDepth = *cfg.MaxDepth
+		p.maxDepth = *cfg.MaxDepth
 	}
-	return maxRetries, expiresAt, maxDepth, nil
+	return p, nil
 }
 
 // Enqueue inserts a new message onto the given topic. Topics ending in ".dlq"
@@ -83,13 +87,13 @@ func (s *Service) Enqueue(ctx context.Context, topic string, payload []byte, met
 		return "", err
 	}
 
-	maxRetries, expiresAt, maxDepth, err := s.resolveEnqueueParams(ctx, topic)
+	p, err := s.resolveEnqueueParams(ctx, topic)
 	if err != nil {
 		return "", fmt.Errorf("enqueue resolve params: %w", err)
 	}
 
 	// Depth guard — soft check, race is acceptable for a circuit-breaker use case.
-	if maxDepth > 0 {
+	if p.maxDepth > 0 {
 		var depth int
 		err := s.pool.QueryRow(ctx,
 			`SELECT COUNT(*) FROM messages WHERE topic = $1 AND status IN ('pending', 'processing')`,
@@ -98,7 +102,7 @@ func (s *Service) Enqueue(ctx context.Context, topic string, payload []byte, met
 		if err != nil {
 			return "", fmt.Errorf("enqueue depth check: %w", err)
 		}
-		if depth >= maxDepth {
+		if depth >= p.maxDepth {
 			return "", fmt.Errorf("enqueue: %w", ErrQueueFull)
 		}
 	}
@@ -119,7 +123,7 @@ func (s *Service) Enqueue(ctx context.Context, topic string, payload []byte, met
 		     max_retries = EXCLUDED.max_retries,
 		     updated_at  = now()
 		 RETURNING id`,
-		topic, payload, metaJSON, maxRetries, expiresAt, key,
+		topic, payload, metaJSON, p.maxRetries, p.expiresAt, key,
 	).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("enqueue: %w", err)
