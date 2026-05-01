@@ -199,7 +199,22 @@ jobs:
 
     steps:
       - name: Checkout repository
+        # fetch-depth: 0 required to push the client sub-module tag back to the remote.
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Tag client Go sub-module
+        # Creates client/vYYYY.MM.PATCH on the same commit so the client library
+        # is consumable as a Go module:
+        #   go get github.com/Joessst-Dev/queue-ti/client@vYYYY.MM.PATCH
+        # Note: replace directives in client/go.mod are ignored by downstream
+        # consumers, so the local ../  replace does not affect published releases.
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "client/${{ github.ref_name }}" "${{ github.sha }}"
+          git push origin "client/${{ github.ref_name }}"
 
       - name: Create GitHub Release
         # --generate-notes  auto-generates release notes from merged PRs since
