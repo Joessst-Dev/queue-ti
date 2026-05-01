@@ -1,25 +1,138 @@
 name: Release
 
-# Triggered by any tag matching the project version format: vYYYY.MM.PATCH
-# with an optional pre-release suffix (e.g. v2026.05.0-preview.1, v2026.05.0).
+# Triggered by CalVer tags: vYYYY.MM.PATCH with an optional pre-release suffix.
+# Examples: v2026.05.0, v2026.05.0-preview.1, v2026.05.1-rc.1
+# The pattern v[0-9]* excludes accidental non-version tags (e.g. vfoo).
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9]*"
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 1: Build & push Docker image to GHCR
-  # Builds a multi-platform manifest (linux/amd64 + linux/arm64) and pushes
-  # three conditional tags:
+  # Job 1a: Go backend — build + test (gates the release)
+  # Mirrors the backend job in ci.yml exactly so the release never ships code
+  # that would have failed a normal CI run.
+  # ─────────────────────────────────────────────────────────────────────────────
+  backend:
+    name: "Backend: Build & Test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: queueti_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go ${{ '1.25.5' }}
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: "1.25.5"
+          cache: true
+
+      - name: Install dependencies (go mod tidy)
+        run: make deps
+
+      - name: Build backend binary
+        run: go build -v ./cmd/server/...
+
+      - name: Install Ginkgo CLI
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.28.1
+
+      - name: Run Go tests (Ginkgo)
+        run: make test
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1b: Angular frontend — build, test, lint (gates the release)
+  # Runs in parallel with the backend job.
+  # ─────────────────────────────────────────────────────────────────────────────
+  frontend:
+    name: "Frontend: Build, Test & Lint"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+
+    defaults:
+      run:
+        working-directory: admin-ui
+
+    env:
+      NX_DAEMON: "false"
+      NX_CLOUD_NO_TIMEOUTS: "true"
+      NX_NO_CLOUD: "true"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: "admin-ui/.nvmrc"
+
+      - name: Cache npm packages
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}
+          restore-keys: npm-${{ runner.os }}-
+
+      - name: Pin npm version
+        run: npm install -g npm@11.10.1
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Cache Nx computation cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: admin-ui/.nx/cache
+          key: nx-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}-${{ hashFiles('admin-ui/src/**') }}
+          restore-keys: |
+            nx-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}-
+            nx-${{ runner.os }}-
+
+      - name: Build Angular application (production)
+        run: npx nx build
+
+      - name: Run unit tests (Vitest, headless)
+        run: npx nx test
+
+      - name: Run ESLint
+        run: npx nx lint
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2: Build & push Docker image to GHCR
+  # Only runs after both CI jobs pass. Builds a multi-platform manifest
+  # (linux/amd64 + linux/arm64) and pushes three conditional tags:
   #   - exact tag  — always (e.g. v2026.05.0-preview.1)
-  #   - preview    — only when the tag contains "-preview"
-  #   - latest     — only for stable releases (no -preview, no -rc suffix)
+  #   - preview    — rolling pointer, only for tags containing "-preview"
+  #   - latest     — rolling pointer, only for stable releases
   # ─────────────────────────────────────────────────────────────────────────────
   publish-image:
     name: "Docker: Build & push multi-arch image"
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: [backend, frontend]
 
     permissions:
       contents: read
@@ -70,7 +183,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 2: Create GitHub Release
+  # Job 3: Create GitHub Release
   # Runs after the image push succeeds. Uses the gh CLI (pre-installed on
   # ubuntu-latest) to create the release with auto-generated notes from merged
   # PRs. Pre-release flag is set automatically for -preview and -rc tags.
