@@ -50,10 +50,7 @@ func (s *Service) ReplayTopic(ctx context.Context, topic string, fromTime time.T
 		effectiveFrom = windowStart
 	}
 
-	_, expiresAt, _, err := s.resolveEnqueueParams(ctx, topic)
-	if err != nil {
-		return 0, fmt.Errorf("replay resolve params: %w", err)
-	}
+	expiresAt := s.resolveExpiresAt(cfg)
 
 	var tag pgconn.CommandTag
 	if effectiveFrom.IsZero() {

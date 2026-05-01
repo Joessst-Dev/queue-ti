@@ -12,14 +12,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var _ = Describe("ReplayTopic", func() {
+var _ = Describe("ReplayTopic", Ordered, func() {
 	var (
 		pool    *pgxpool.Pool
 		service *queue.Service
 		ctx     context.Context
 	)
 
-	BeforeEach(func() {
+	BeforeAll(func() {
 		ctx = context.Background()
 
 		var err error
@@ -28,21 +28,23 @@ var _ = Describe("ReplayTopic", func() {
 
 		err = db.Migrate(ctx, pool)
 		Expect(err).NotTo(HaveOccurred())
+	})
 
-		_, err = pool.Exec(ctx, "DELETE FROM messages")
+	AfterAll(func() {
+		if pool != nil {
+			pool.Close()
+		}
+	})
+
+	BeforeEach(func() {
+		service = queue.NewService(pool, 30*time.Second, 3, 0, 3, false, queue.NoopRecorder{})
+
+		_, err := pool.Exec(ctx, "DELETE FROM messages")
 		Expect(err).NotTo(HaveOccurred())
 		_, err = pool.Exec(ctx, "DELETE FROM message_log")
 		Expect(err).NotTo(HaveOccurred())
 		_, err = pool.Exec(ctx, "DELETE FROM topic_config")
 		Expect(err).NotTo(HaveOccurred())
-
-		service = queue.NewService(pool, 30*time.Second, 3, 0, 3, false, queue.NoopRecorder{})
-	})
-
-	AfterEach(func() {
-		if pool != nil {
-			pool.Close()
-		}
 	})
 
 	// seedArchivedMessage enqueues a message on topic, dequeues it, then acks it
@@ -205,6 +207,40 @@ var _ = Describe("ReplayTopic", func() {
 				`SELECT payload FROM messages WHERE topic = $1`, topic,
 			).Scan(&payload)).To(Succeed())
 			Expect(payload).To(Equal([]byte("recent-msg")))
+		})
+	})
+
+	Context("when fromTime is set and the topic has a TTL", func() {
+		const topic = "replay-fromtime-ttl-topic"
+		const ttlSeconds = 600
+
+		BeforeEach(func() {
+			ttl := ttlSeconds
+			Expect(service.UpsertTopicConfig(ctx, queue.TopicConfig{
+				Topic:             topic,
+				Replayable:        true,
+				MessageTTLSeconds: &ttl,
+			})).To(Succeed())
+
+			seedArchivedMessage(topic, []byte("msg"))
+		})
+
+		It("should set expires_at on replayed messages when using the fromTime branch", func() {
+			from := time.Now().Add(-1 * time.Hour)
+			before := time.Now()
+			_, err := service.ReplayTopic(ctx, topic, from)
+			after := time.Now()
+
+			Expect(err).NotTo(HaveOccurred())
+
+			var expiresAt *time.Time
+			Expect(pool.QueryRow(ctx,
+				`SELECT expires_at FROM messages WHERE topic = $1`, topic,
+			).Scan(&expiresAt)).To(Succeed())
+
+			Expect(expiresAt).NotTo(BeNil())
+			Expect(*expiresAt).To(BeTemporally(">=", before.Add(ttlSeconds*time.Second-time.Second)))
+			Expect(*expiresAt).To(BeTemporally("<=", after.Add(ttlSeconds*time.Second+time.Second)))
 		})
 	})
 

@@ -9,6 +9,25 @@ import (
 	"time"
 )
 
+// resolveExpiresAt computes the effective expiry time from a pre-loaded topic
+// config, applying the global messageTTL as the fallback. cfg may be nil.
+func (s *Service) resolveExpiresAt(cfg *TopicConfig) *time.Time {
+	var expiresAt *time.Time
+	if s.messageTTL > 0 {
+		t := time.Now().Add(s.messageTTL)
+		expiresAt = &t
+	}
+	if cfg != nil && cfg.MessageTTLSeconds != nil {
+		if *cfg.MessageTTLSeconds == 0 {
+			expiresAt = nil // explicitly no TTL
+		} else {
+			t := time.Now().Add(time.Duration(*cfg.MessageTTLSeconds) * time.Second)
+			expiresAt = &t
+		}
+	}
+	return expiresAt
+}
+
 // resolveEnqueueParams merges global service defaults with per-topic overrides
 // from topic_config. It returns the effective maxRetries, expiresAt, and
 // maxDepth (0 = unlimited) to use when inserting a new message.
@@ -16,29 +35,18 @@ func (s *Service) resolveEnqueueParams(ctx context.Context, topic string) (maxRe
 	maxRetries = s.maxRetries
 	maxDepth = 0 // 0 = unlimited
 
-	if s.messageTTL > 0 {
-		t := time.Now().Add(s.messageTTL)
-		expiresAt = &t
-	}
-
 	cfg, err := s.GetTopicConfig(ctx, topic)
 	if err != nil {
 		return 0, nil, 0, err
 	}
+
+	expiresAt = s.resolveExpiresAt(cfg)
+
 	if cfg == nil {
 		return maxRetries, expiresAt, maxDepth, nil
 	}
-
 	if cfg.MaxRetries != nil {
 		maxRetries = *cfg.MaxRetries
-	}
-	if cfg.MessageTTLSeconds != nil {
-		if *cfg.MessageTTLSeconds == 0 {
-			expiresAt = nil // explicitly no TTL
-		} else {
-			t := time.Now().Add(time.Duration(*cfg.MessageTTLSeconds) * time.Second)
-			expiresAt = &t
-		}
 	}
 	if cfg.MaxDepth != nil {
 		maxDepth = *cfg.MaxDepth
