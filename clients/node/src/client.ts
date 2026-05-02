@@ -1,14 +1,14 @@
 import * as protoLoader from '@grpc/proto-loader'
 import * as grpc from '@grpc/grpc-js'
 import path from 'path'
-import { ConnectOptions, TokenRefresher } from './options'
+import { ConnectOptions, ConsumerOptions, TokenRefresher } from './options'
 import { TokenStore, parseTokenExpiry } from './token-store'
 import { sleepUntilOrAbort } from './internal/sleep'
 import { Producer, ProducerStub } from './producer'
 import { Consumer, ConsumerStub } from './consumer'
-import { ConsumerOptions } from './options'
 
-const PROTO_PATH = path.join(__dirname, '..', 'proto', 'queue.proto')
+// Resolved relative to dist/ at runtime: dist/ → node/ → clients/ → repo root → proto/
+const PROTO_PATH = path.join(__dirname, '..', '..', '..', 'proto', 'queue.proto')
 
 const packageDef = protoLoader.loadSync(PROTO_PATH, {
   keepCase: false,
@@ -16,7 +16,7 @@ const packageDef = protoLoader.loadSync(PROTO_PATH, {
   enums: String,
   defaults: true,
   oneofs: true,
-  includeDirs: [path.join(__dirname, '..', 'proto')],
+  includeDirs: [path.join(__dirname, '..', '..', '..', 'proto')],
 })
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -51,7 +51,7 @@ export class Client {
     return new Consumer(this.stub as ConsumerStub, topic, options)
   }
 
-  async close(): Promise<void> {
+  close(): void {
     this.refreshController?.abort()
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     this.stub.getChannel().close()

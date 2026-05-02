@@ -12,8 +12,6 @@ function nextBackoff(current: number): number {
   return Math.min(current * 2, BACKOFF_MAX_MS)
 }
 
-
-
 function callbackToPromise<T>(
   fn: (cb: (err: Error | null, res: T) => void) => void,
 ): Promise<T> {
