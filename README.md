@@ -14,7 +14,7 @@ queue-ti is designed for teams who want reliable, observable message processing 
 - **Brute-force protection** — Login rate limiting (10 requests per 60-second window per IP) backed by Redis for multi-replica deployments, in-memory for single-instance setups.
 - **Per-topic configuration** — Override retry limits, TTLs, and queue depth per topic at runtime without restart.
 - **Avro schema validation** — Optional per-topic schemas enforce payload contracts at enqueue time.
-- **Go client library** — Drop-in Producer/Consumer with auto-reconnect, token refresh, and zero boilerplate.
+- **Go and Node.js client libraries** — Drop-in Producer/Consumer with auto-reconnect, token refresh, and zero boilerplate.
 
 ## Features
 
@@ -37,7 +37,7 @@ queue-ti is designed for teams who want reliable, observable message processing 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
-- [Go Client Library](#go-client-library)
+- [Client Libraries](#client-libraries)
 - [Configuration](#configuration)
 - [Login Rate Limiting](#login-rate-limiting)
 - [Authentication & User Management](#authentication--user-management)
@@ -120,11 +120,15 @@ docker-compose up
 
 The admin UI is available at `http://localhost:8081` (login: `admin` / `secret`).
 
-## Go Client Library
+## Client Libraries
+
+queue-ti provides official client libraries for Go and Node.js.
+
+### Go
 
 The `client/` package provides a high-level Producer/Consumer API for building applications that enqueue and dequeue messages from queue-ti's gRPC service.
 
-### Single-Message Consumer
+#### Single-Message Consumer
 
 ```go
 // Connect — token refreshes automatically before expiry
@@ -152,7 +156,7 @@ consumer.Consume(ctx, func(ctx context.Context, msg *queueti.Message) error {
 })
 ```
 
-### Batch Consumer
+#### Batch Consumer
 
 For high-throughput scenarios, use batch dequeue to consume multiple messages in a single RPC call:
 
@@ -195,6 +199,39 @@ consumer.ConsumeBatch(ctx, 10, func(ctx context.Context, messages []*queueti.Bat
 - Auto-reconnect and token refresh work the same as single-message `Consume`
 
 See [client/README.md](client/README.md) for the full API reference, authentication setup, error handling, and examples.
+
+### Node.js
+
+The `@queue-ti/client` npm package provides TypeScript-first Producer/Consumer APIs for Node.js applications. It connects via gRPC with automatic token refresh, graceful reconnection, and batch consumption support.
+
+**Quick Producer Example:**
+
+```typescript
+import { connect } from '@queue-ti/client'
+
+const client = await connect('localhost:50051', { insecure: true })
+const producer = client.producer()
+
+const id = await producer.publish('orders', Buffer.from(JSON.stringify({ amount: 99.99 })), {
+  metadata: { source: 'checkout' },
+})
+console.log('published:', id)
+client.close()
+```
+
+**Quick Consumer Example:**
+
+```typescript
+const consumer = client.consumer('orders', { concurrency: 4 })
+const signal = AbortSignal.timeout(60_000)
+
+await consumer.consume(async (msg) => {
+  console.log(`[${msg.id}] ${msg.payload.toString()}`)
+  // Return normally to Ack; throw to Nack
+})
+```
+
+See [clients/node/README.md](clients/node/README.md) for the full API reference, authentication setup, error handling, and examples.
 
 ## Configuration
 
@@ -2115,6 +2152,11 @@ queue-ti/
 │   ├── message.go           Message type with Ack/Nack methods
 │   ├── options.go           Dial and consumer functional options
 │   └── README.md            Full library documentation
+├── clients/                 Multi-language client libraries
+│   └── node/                Node.js client library
+│       ├── package.json
+│       ├── src/             TypeScript implementation
+│       └── README.md        Full library documentation
 ├── proto/
 │   └── queue.proto          gRPC service definition
 ├── pb/                      Generated protobuf Go bindings (read-only)
