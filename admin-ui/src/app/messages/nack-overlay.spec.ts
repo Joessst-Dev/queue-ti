@@ -56,9 +56,10 @@ describe('NackOverlay', () => {
         emitted.push(v),
       );
 
-      const input = el.querySelector<HTMLInputElement>('input[type="text"]')!;
-      input.value = 'downstream failure';
-      input.dispatchEvent(new Event('input'));
+      const input = el.querySelector<HTMLInputElement>('input[type="text"]');
+      expect(input).not.toBeNull();
+      (input as HTMLInputElement).value = 'downstream failure';
+      (input as HTMLInputElement).dispatchEvent(new Event('input'));
       fixture.detectChanges();
       await fixture.whenStable();
 
@@ -74,9 +75,10 @@ describe('NackOverlay', () => {
       const { fixture, component } = await setup();
       const el: HTMLElement = fixture.nativeElement;
 
-      const input = el.querySelector<HTMLInputElement>('input[type="text"]')!;
-      input.value = 'downstream failure';
-      input.dispatchEvent(new Event('input'));
+      const input = el.querySelector<HTMLInputElement>('input[type="text"]');
+      expect(input).not.toBeNull();
+      (input as HTMLInputElement).value = 'downstream failure';
+      (input as HTMLInputElement).dispatchEvent(new Event('input'));
       fixture.detectChanges();
       await fixture.whenStable();
 
