@@ -28,6 +28,14 @@ const (
 	deleteReaperLockKey int64 = 7_000_002
 )
 
+// PagedResult wraps a page of items and the total matching count.
+// It is the canonical return type for any service method that returns
+// a paginated list, keeping those methods within the 2-return-value rule.
+type PagedResult[T any] struct {
+	Items []T
+	Total int
+}
+
 type Message struct {
 	ID            string
 	Topic         string

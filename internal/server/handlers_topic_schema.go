@@ -37,7 +37,7 @@ func (s *HTTPServer) listTopicSchemas(c *fiber.Ctx) error {
 	schemas, err := queue.ListTopicSchemas(c.Context(), s.queueService.Pool())
 	if err != nil {
 		slog.Error("list topic schemas failed", "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 	items := make([]topicSchemaResponse, len(schemas))
 	for i, ts := range schemas {
@@ -51,16 +51,16 @@ func (s *HTTPServer) upsertTopicSchema(c *fiber.Ctx) error {
 
 	var req topicSchemaRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+		return jsonError(c, fiber.StatusBadRequest, "invalid request body")
 	}
 
 	ts, err := queue.UpsertTopicSchema(c.Context(), s.queueService.Pool(), topic, req.SchemaJSON)
 	if err != nil {
 		if errors.Is(err, queue.ErrInvalidSchema) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+			return jsonError(c, fiber.StatusBadRequest, err.Error())
 		}
 		slog.Error("upsert topic schema failed", "topic", topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 	return c.JSON(toTopicSchemaResponse(*ts))
 }
@@ -69,7 +69,7 @@ func (s *HTTPServer) deleteTopicSchema(c *fiber.Ctx) error {
 	topic := c.Params("topic")
 	if err := queue.DeleteTopicSchema(c.Context(), s.queueService.Pool(), topic); err != nil {
 		slog.Error("delete topic schema failed", "topic", topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
@@ -79,10 +79,10 @@ func (s *HTTPServer) getTopicSchema(c *fiber.Ctx) error {
 	ts, err := queue.GetTopicSchema(c.Context(), s.queueService.Pool(), topic)
 	if err != nil {
 		slog.Error("get topic schema failed", "topic", topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 	if ts == nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "schema not found"})
+		return jsonError(c, fiber.StatusNotFound, "schema not found")
 	}
 	return c.JSON(toTopicSchemaResponse(*ts))
 }

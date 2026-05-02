@@ -44,7 +44,7 @@ func (s *HTTPServer) replayTopic(c *fiber.Ctx) error {
 
 	var req replayRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+		return jsonError(c, fiber.StatusBadRequest, "invalid request body")
 	}
 
 	var fromTime time.Time
@@ -52,17 +52,17 @@ func (s *HTTPServer) replayTopic(c *fiber.Ctx) error {
 		var err error
 		fromTime, err = time.Parse(time.RFC3339, *req.FromTime)
 		if err != nil {
-			return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": "from_time must be RFC 3339"})
+			return jsonError(c, fiber.StatusUnprocessableEntity, "from_time must be RFC 3339")
 		}
 	}
 
 	n, err := s.queueService.ReplayTopic(c.Context(), topic, fromTime)
 	if err != nil {
 		if errors.Is(err, queue.ErrTopicNotReplayable) || errors.Is(err, queue.ErrReplayWindowTooOld) {
-			return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": err.Error()})
+			return jsonError(c, fiber.StatusUnprocessableEntity, err.Error())
 		}
 		slog.Error("replay topic failed", "topic", topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 
 	fromStr := ""
@@ -74,23 +74,16 @@ func (s *HTTPServer) replayTopic(c *fiber.Ctx) error {
 
 func (s *HTTPServer) listMessageLog(c *fiber.Ctx) error {
 	topic := c.Params("topic")
-	limit := c.QueryInt("limit", 50)
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	offset := c.QueryInt("offset", 0)
+	limit, offset, _ := parseLimitOffset(c, 50, 200)
 
-	msgs, total, err := s.queueService.ListMessageLog(c.Context(), topic, limit, offset)
+	result, err := s.queueService.ListMessageLog(c.Context(), topic, limit, offset)
 	if err != nil {
 		slog.Error("list message log failed", "topic", topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 
-	items := make([]archivedMessageResponse, len(msgs))
-	for i, m := range msgs {
+	items := make([]archivedMessageResponse, len(result.Items))
+	for i, m := range result.Items {
 		items[i] = archivedMessageResponse{
 			ID:            m.ID,
 			Topic:         m.Topic,
@@ -102,14 +95,14 @@ func (s *HTTPServer) listMessageLog(c *fiber.Ctx) error {
 			AckedAt:       m.AckedAt.UTC().Format(time.RFC3339),
 		}
 	}
-	return c.JSON(messageLogResponse{Items: items, Total: total, Limit: limit, Offset: offset})
+	return c.JSON(messageLogResponse{Items: items, Total: result.Total, Limit: limit, Offset: offset})
 }
 
 func (s *HTTPServer) runArchiveReaperOnce(c *fiber.Ctx) error {
 	n, err := s.queueService.RunArchiveReaperOnce(c.Context())
 	if err != nil {
 		slog.Error("archive reaper (manual) failed", "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 	return c.JSON(fiber.Map{"deleted": n})
 }
@@ -118,17 +111,17 @@ func (s *HTTPServer) trimMessageLog(c *fiber.Ctx) error {
 	topic := c.Params("topic")
 	beforeStr := c.Query("before")
 	if beforeStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "before query parameter is required"})
+		return jsonError(c, fiber.StatusBadRequest, "before query parameter is required")
 	}
 	before, err := time.Parse(time.RFC3339, beforeStr)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "before must be RFC 3339"})
+		return jsonError(c, fiber.StatusBadRequest, "before must be RFC 3339")
 	}
 
 	n, err := s.queueService.TrimMessageLog(c.Context(), topic, before)
 	if err != nil {
 		slog.Error("trim message log failed", "topic", topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 	return c.JSON(fiber.Map{"deleted": n})
 }

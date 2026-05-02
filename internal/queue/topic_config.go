@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -38,6 +39,9 @@ func (s *Service) GetTopicConfig(ctx context.Context, topic string) (*TopicConfi
 }
 
 func (s *Service) UpsertTopicConfig(ctx context.Context, cfg TopicConfig) error {
+	if strings.HasSuffix(cfg.Topic, ".dlq") {
+		return fmt.Errorf("upsert topic config: %w", ErrReservedTopic)
+	}
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO topic_config
 		    (topic, max_retries, message_ttl_seconds, max_depth, replayable, replay_window_seconds, throughput_limit, updated_at)

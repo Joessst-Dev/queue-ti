@@ -89,14 +89,15 @@ func (s *Service) ReplayTopic(ctx context.Context, topic string, fromTime time.T
 	return n, nil
 }
 
-// ListMessageLog returns paginated archived messages for topic ordered by
-// acked_at DESC. It returns the page, total count, and any error.
-func (s *Service) ListMessageLog(ctx context.Context, topic string, limit, offset int) ([]ArchivedMessage, int, error) {
+// ListMessageLog returns a paginated page of archived messages for topic,
+// ordered by acked_at DESC. The PagedResult carries both the page and the
+// total matching count.
+func (s *Service) ListMessageLog(ctx context.Context, topic string, limit, offset int) (PagedResult[ArchivedMessage], error) {
 	var total int
 	if err := s.pool.QueryRow(ctx,
 		`SELECT COUNT(*) FROM message_log WHERE topic = $1`, topic,
 	).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("list message log count: %w", err)
+		return PagedResult[ArchivedMessage]{}, fmt.Errorf("list message log count: %w", err)
 	}
 
 	rows, err := s.pool.Query(ctx, `
@@ -108,7 +109,7 @@ func (s *Service) ListMessageLog(ctx context.Context, topic string, limit, offse
 		LIMIT $2 OFFSET $3
 	`, topic, limit, offset)
 	if err != nil {
-		return nil, 0, fmt.Errorf("list message log: %w", err)
+		return PagedResult[ArchivedMessage]{}, fmt.Errorf("list message log: %w", err)
 	}
 	defer rows.Close()
 
@@ -120,16 +121,16 @@ func (s *Service) ListMessageLog(ctx context.Context, topic string, limit, offse
 			&msg.ID, &msg.Topic, &msg.Key, &msg.Payload, &metaJSON,
 			&msg.RetryCount, &msg.CreatedAt, &msg.AckedAt, &msg.OriginalTopic,
 		); err != nil {
-			return nil, 0, fmt.Errorf("list message log scan: %w", err)
+			return PagedResult[ArchivedMessage]{}, fmt.Errorf("list message log scan: %w", err)
 		}
 		if metaJSON != nil {
 			if err := json.Unmarshal(metaJSON, &msg.Metadata); err != nil {
-				return nil, 0, fmt.Errorf("list message log unmarshal metadata: %w", err)
+				return PagedResult[ArchivedMessage]{}, fmt.Errorf("list message log unmarshal metadata: %w", err)
 			}
 		}
 		msgs = append(msgs, msg)
 	}
-	return msgs, total, nil
+	return PagedResult[ArchivedMessage]{Items: msgs, Total: total}, nil
 }
 
 // TrimMessageLog permanently deletes message_log rows for topic where
