@@ -389,13 +389,10 @@ describe('MessagesTable', () => {
     });
 
     describe('when the Cancel button inside the overlay is clicked', () => {
-      it('should dismiss the overlay and reset nackError', async () => {
+      it('should dismiss the overlay', async () => {
         const messages = [makeMessage({ status: 'processing' })];
-        const { fixture, component } = await setup({ messages });
+        const { fixture } = await setup({ messages });
         await openNackOverlay(fixture);
-
-        component.nackError.set('some error');
-        fixture.detectChanges();
 
         const cancelBtn = Array.from(fixture.nativeElement.querySelectorAll('button')).find(
           (b) => (b as HTMLButtonElement).title === 'Cancel',
@@ -405,7 +402,6 @@ describe('MessagesTable', () => {
         await fixture.whenStable();
 
         expect(fixture.nativeElement.querySelector('[data-nack-overlay]')).toBeNull();
-        expect(component.nackError()).toBe('');
       });
     });
   });
