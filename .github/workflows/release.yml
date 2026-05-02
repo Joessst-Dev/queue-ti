@@ -165,8 +165,49 @@ jobs:
         run: npm run lint
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1d: Python client — test & lint (gates the release)
+  # Mirrors the python-client job in ci.yml exactly.
+  # ─────────────────────────────────────────────────────────────────────────────
+  python-client:
+    name: "Python client: Test & lint"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+
+    defaults:
+      run:
+        working-directory: clients/python
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version-file: "clients/python/.python-version"
+
+      - name: Cache pip packages
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('clients/python/pyproject.toml') }}
+          restore-keys: pip-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest tests/ -q
+
+      - name: Run mypy
+        run: python -m mypy queueti/
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Job 2: Build & push Docker image to GHCR
-  # Only runs after all three gate jobs pass. Builds a multi-platform manifest
+  # Only runs after all four gate jobs pass. Builds a multi-platform manifest
   # (linux/amd64 + linux/arm64) and pushes three conditional tags:
   #   - exact tag  — always (e.g. v2026.05.0-preview.1)
   #   - preview    — rolling pointer, only for tags containing "-preview"
@@ -176,7 +217,7 @@ jobs:
     name: "Docker: Build & push multi-arch image"
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [backend, frontend, node-client]
+    needs: [backend, frontend, node-client, python-client]
 
     permissions:
       contents: read
@@ -298,16 +339,98 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 4: Create GitHub Release
-  # Runs after the image push succeeds. Uses the gh CLI (pre-installed on
-  # ubuntu-latest) to create the release with auto-generated notes from merged
-  # PRs. Pre-release flag is set automatically for -preview and -rc tags.
+  # Job 4: Publish queue-ti-client to PyPI
+  # Runs in parallel with publish-image and publish-npm after all gate jobs pass.
+  # Uses OIDC trusted publishing — no API token required. Requires a trusted
+  # publisher configured on PyPI for this repo + workflow + environment.
+  # CalVer tag is converted to PEP 440 before stamping pyproject.toml:
+  #   v2026.05.0          → 2026.5.0     (stable)
+  #   v2026.05.0-preview.1 → 2026.5.0a1  (alpha)
+  #   v2026.05.0-rc.1     → 2026.5.0rc1  (release candidate)
+  # Leading zeros are stripped from the month component (05 → 5).
+  # ─────────────────────────────────────────────────────────────────────────────
+  publish-pypi:
+    name: "PyPI: Publish queue-ti-client"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [backend, frontend, node-client, python-client]
+
+    permissions:
+      contents: read
+      id-token: write  # required for OIDC trusted publishing
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/queue-ti-client
+
+    defaults:
+      run:
+        working-directory: clients/python
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version-file: "clients/python/.python-version"
+
+      - name: Cache pip packages
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('clients/python/pyproject.toml') }}
+          restore-keys: pip-${{ runner.os }}-
+
+      - name: Set version from tag
+        # Convert CalVer tag to PEP 440 and stamp pyproject.toml.
+        # The inline Python script handles three cases:
+        #   -preview.N  → aN  (alpha pre-release)
+        #   -rc.N       → rcN (release candidate)
+        #   stable      → no suffix
+        # Leading zeros are stripped from all numeric components (05 → 5).
+        run: |
+          PEP440=$(python3 - "${{ github.ref_name }}" <<'EOF'
+          import re, sys
+          v = sys.argv[1].lstrip('v')
+          v = re.sub(r'-preview\.(\d+)$', lambda m: f'a{m.group(1)}', v)
+          v = re.sub(r'-rc\.(\d+)$', lambda m: f'rc{m.group(1)}', v)
+          # Strip leading zeros from each numeric component
+          v = '.'.join(str(int(p)) if p.isdigit() else p for p in v.split('.'))
+          print(v)
+          EOF
+          )
+          echo "PEP440 version: $PEP440"
+          sed -i "s/^version = .*/version = \"$PEP440\"/" pyproject.toml
+
+      - name: Install build dependencies
+        run: pip install build && pip install -e .
+
+      - name: Build distribution packages
+        run: python -m build
+
+      - name: Publish to PyPI
+        # OIDC trusted publishing — no PYPI_TOKEN secret needed.
+        # Requires a trusted publisher configured on PyPI:
+        #   Owner: Joessst-Dev  Repository: queue-ti
+        #   Workflow: release.yml  Environment: pypi
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # release/v1
+        with:
+          packages-dir: dist/
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 5: Create GitHub Release
+  # Runs after the image push and all publish jobs succeed. Uses the gh CLI
+  # (pre-installed on ubuntu-latest) to create the release with auto-generated
+  # notes from merged PRs. Pre-release flag is set automatically for -preview
+  # and -rc tags.
   # ─────────────────────────────────────────────────────────────────────────────
   create-release:
     name: "GitHub: Create release"
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [publish-image, publish-npm]
+    needs: [publish-image, publish-npm, publish-pypi]
 
     permissions:
       contents: write
