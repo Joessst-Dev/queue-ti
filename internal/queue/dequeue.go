@@ -10,11 +10,18 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func (s *Service) Dequeue(ctx context.Context, topic string, visibilityTimeout time.Duration) (*Message, error) {
-	vt := s.visibilityTimeout
-	if visibilityTimeout > 0 {
-		vt = visibilityTimeout
+// resolveVisibilityTimeout returns the effective visibility timeout to use for
+// a dequeue operation. When requested is positive it takes precedence; otherwise
+// the service default is used.
+func (s *Service) resolveVisibilityTimeout(requested time.Duration) time.Duration {
+	if requested > 0 {
+		return requested
 	}
+	return s.visibilityTimeout
+}
+
+func (s *Service) Dequeue(ctx context.Context, topic string, visibilityTimeout time.Duration) (*Message, error) {
+	vt := s.resolveVisibilityTimeout(visibilityTimeout)
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -108,10 +115,7 @@ func (s *Service) DequeueN(ctx context.Context, topic string, n int, visibilityT
 		return nil, ErrInvalidBatchSize
 	}
 
-	vt := s.visibilityTimeout
-	if visibilityTimeout > 0 {
-		vt = visibilityTimeout
-	}
+	vt := s.resolveVisibilityTimeout(visibilityTimeout)
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

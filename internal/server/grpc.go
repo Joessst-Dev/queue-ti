@@ -26,6 +26,20 @@ func NewGRPCServer(qs *queue.Service, us *users.Store) *GRPCServer {
 	return &GRPCServer{queueService: qs, userStore: us}
 }
 
+// resolveVisibilityTimeoutFromProto converts the optional uint32 proto field
+// into a time.Duration. A nil pointer means "use server default" and returns
+// zero. A zero value is explicitly rejected with an error because clients that
+// set the field to zero almost certainly intended a positive value.
+func resolveVisibilityTimeoutFromProto(ptr *uint32) (time.Duration, error) {
+	if ptr == nil {
+		return 0, nil
+	}
+	if *ptr == 0 {
+		return 0, status.Error(codes.InvalidArgument, "visibility_timeout_seconds must be greater than zero")
+	}
+	return time.Duration(*ptr) * time.Second, nil
+}
+
 // checkGrant verifies the caller has the required action/topic permission.
 // It is a no-op when auth is disabled (userStore is nil) or when claims are
 // absent (interceptor didn't run). Admins are unconditionally allowed.
@@ -83,12 +97,9 @@ func (s *GRPCServer) Dequeue(ctx context.Context, req *pb.DequeueRequest) (*pb.D
 		return nil, status.Error(codes.InvalidArgument, "topic is required")
 	}
 
-	var vt time.Duration
-	if req.VisibilityTimeoutSeconds != nil {
-		if *req.VisibilityTimeoutSeconds == 0 {
-			return nil, status.Error(codes.InvalidArgument, "visibility_timeout_seconds must be greater than zero")
-		}
-		vt = time.Duration(*req.VisibilityTimeoutSeconds) * time.Second
+	vt, err := resolveVisibilityTimeoutFromProto(req.VisibilityTimeoutSeconds)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := s.checkGrant(ctx, "write", req.Topic); err != nil {
@@ -126,12 +137,9 @@ func (s *GRPCServer) BatchDequeue(ctx context.Context, req *pb.BatchDequeueReque
 		return nil, status.Error(codes.InvalidArgument, "count must be between 1 and 1000")
 	}
 
-	var vt time.Duration
-	if req.VisibilityTimeoutSeconds != nil {
-		if *req.VisibilityTimeoutSeconds == 0 {
-			return nil, status.Error(codes.InvalidArgument, "visibility_timeout_seconds must be greater than zero")
-		}
-		vt = time.Duration(*req.VisibilityTimeoutSeconds) * time.Second
+	vt, err := resolveVisibilityTimeoutFromProto(req.VisibilityTimeoutSeconds)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := s.checkGrant(ctx, "write", req.Topic); err != nil {
@@ -196,12 +204,9 @@ func (s *GRPCServer) Subscribe(req *pb.SubscribeRequest, stream pb.QueueService_
 		return status.Error(codes.InvalidArgument, "topic is required")
 	}
 
-	var vt time.Duration
-	if req.VisibilityTimeoutSeconds != nil {
-		if *req.VisibilityTimeoutSeconds == 0 {
-			return status.Error(codes.InvalidArgument, "visibility_timeout_seconds must be greater than zero")
-		}
-		vt = time.Duration(*req.VisibilityTimeoutSeconds) * time.Second
+	vt, err := resolveVisibilityTimeoutFromProto(req.VisibilityTimeoutSeconds)
+	if err != nil {
+		return err
 	}
 
 	if err := s.checkGrant(stream.Context(), "write", req.Topic); err != nil {

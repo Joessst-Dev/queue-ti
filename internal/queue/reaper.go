@@ -98,21 +98,6 @@ func (s *Service) RunExpiryReaperOnce(ctx context.Context) (int64, error) {
 	return n, nil
 }
 
-// RunDeleteReaperOnce permanently deletes all messages with status 'expired'
-// and returns the number of rows deleted.
-func (s *Service) RunDeleteReaperOnce(ctx context.Context) (int64, error) {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM messages WHERE status = 'expired'`)
-	if err != nil {
-		return 0, fmt.Errorf("run delete reaper: %w", err)
-	}
-	n := tag.RowsAffected()
-	if n > 0 {
-		s.recorder.RecordDeleted(n)
-		slog.Info("delete reaper removed expired messages", "count", n)
-	}
-	return n, nil
-}
-
 const archiveReaperSQL = `
 	DELETE FROM message_log ml
 	USING topic_config tc
@@ -122,6 +107,51 @@ const archiveReaperSQL = `
 	  AND tc.replay_window_seconds > 0
 	  AND ml.acked_at < now() - (tc.replay_window_seconds || ' seconds')::interval
 `
+
+// runDeleteWork deletes all expired messages and expired message_log rows
+// inside an existing transaction. source ("manual" or "scheduled") is included
+// in log output so that the two callers remain distinguishable in production.
+// Returns the number of messages rows deleted.
+func (s *Service) runDeleteWork(ctx context.Context, tx pgx.Tx, source string) (int64, error) {
+	tag, err := tx.Exec(ctx, `DELETE FROM messages WHERE status = 'expired'`)
+	if err != nil {
+		return 0, err
+	}
+	n := tag.RowsAffected()
+	if n > 0 {
+		s.recorder.RecordDeleted(n)
+		slog.Info("delete reaper removed expired messages", "source", source, "count", n)
+	}
+	archiveTag, err := tx.Exec(ctx, archiveReaperSQL)
+	if err != nil {
+		return 0, err
+	}
+	if an := archiveTag.RowsAffected(); an > 0 {
+		slog.Info("archive reaper removed expired message_log rows", "source", source, "count", an)
+	}
+	return n, nil
+}
+
+// RunDeleteReaperOnce permanently deletes all messages with status 'expired'
+// and expired message_log rows in a single pass, returning the number of
+// messages rows deleted.
+func (s *Service) RunDeleteReaperOnce(ctx context.Context) (int64, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("run delete reaper begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	n, err := s.runDeleteWork(ctx, tx, "manual")
+	if err != nil {
+		return 0, fmt.Errorf("run delete reaper: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("run delete reaper commit: %w", err)
+	}
+	return n, nil
+}
 
 // RunArchiveReaperOnce deletes message_log rows that have aged past each
 // topic's replay_window_seconds. Topics with replayable = false or no window
@@ -155,22 +185,8 @@ func (s *Service) StartDeleteReaper(ctx context.Context, schedule string) (stop 
 	c := cron.New()
 	_, err = c.AddFunc(schedule, func() {
 		runErr := s.tryWithReaperLock(ctx, deleteReaperLockKey, func(tx pgx.Tx) error {
-			tag, err := tx.Exec(ctx, `DELETE FROM messages WHERE status = 'expired'`)
-			if err != nil {
-				return err
-			}
-			if n := tag.RowsAffected(); n > 0 {
-				s.recorder.RecordDeleted(n)
-				slog.Info("delete reaper (scheduled) removed expired messages", "count", n)
-			}
-			archiveTag, err := tx.Exec(ctx, archiveReaperSQL)
-			if err != nil {
-				return err
-			}
-			if n := archiveTag.RowsAffected(); n > 0 {
-				slog.Info("archive reaper (scheduled) removed expired message_log rows", "count", n)
-			}
-			return nil
+			_, err := s.runDeleteWork(ctx, tx, "scheduled")
+			return err
 		})
 		if runErr != nil {
 			slog.Error("delete reaper failed", "error", runErr)

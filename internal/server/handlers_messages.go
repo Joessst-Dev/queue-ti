@@ -91,30 +91,22 @@ func toMessageResponse(m queue.Message) messageResponse {
 
 func (s *HTTPServer) listMessages(c *fiber.Ctx) error {
 	topic := c.Query("topic")
+	limit, offset := parseLimitOffset(c, 50, 200)
 
-	limit := c.QueryInt("limit", 50)
-	if limit < 1 {
-		limit = 1
-	} else if limit > 200 {
-		limit = 200
-	}
-
-	offset := max(c.QueryInt("offset", 0), 0)
-
-	messages, total, err := s.queueService.List(c.Context(), topic, limit, offset)
+	result, err := s.queueService.List(c.Context(), topic, limit, offset)
 	if err != nil {
 		slog.Error("list messages failed", "topic", topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 
-	items := make([]messageResponse, 0, len(messages))
-	for _, m := range messages {
+	items := make([]messageResponse, 0, len(result.Items))
+	for _, m := range result.Items {
 		items = append(items, toMessageResponse(m))
 	}
 
 	return c.JSON(listResponse{
 		Items:  items,
-		Total:  total,
+		Total:  result.Total,
 		Limit:  limit,
 		Offset: offset,
 	})
@@ -123,26 +115,26 @@ func (s *HTTPServer) listMessages(c *fiber.Ctx) error {
 func (s *HTTPServer) enqueueMessage(c *fiber.Ctx) error {
 	var req enqueueRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+		return jsonError(c, fiber.StatusBadRequest, "invalid request body")
 	}
 
 	if req.Topic == "" || req.Payload == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "topic and payload are required"})
+		return jsonError(c, fiber.StatusBadRequest, "topic and payload are required")
 	}
 
 	id, err := s.queueService.Enqueue(c.Context(), req.Topic, []byte(req.Payload), req.Metadata, req.Key)
 	if err != nil {
 		if errors.Is(err, queue.ErrSchemaValidation) {
-			return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": err.Error()})
+			return jsonError(c, fiber.StatusUnprocessableEntity, err.Error())
 		}
 		if errors.Is(err, queue.ErrTopicNotRegistered) {
-			return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": err.Error()})
+			return jsonError(c, fiber.StatusUnprocessableEntity, err.Error())
 		}
 		if errors.Is(err, queue.ErrQueueFull) {
-			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{"error": err.Error()})
+			return jsonError(c, fiber.StatusTooManyRequests, err.Error())
 		}
 		slog.Error("enqueue failed", "topic", req.Topic, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"id": id})
@@ -151,11 +143,11 @@ func (s *HTTPServer) enqueueMessage(c *fiber.Ctx) error {
 func (s *HTTPServer) batchDequeueMessages(c *fiber.Ctx) error {
 	var req batchDequeueRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+		return jsonError(c, fiber.StatusBadRequest, "invalid request body")
 	}
 
 	if req.Topic == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "topic is required"})
+		return jsonError(c, fiber.StatusBadRequest, "topic is required")
 	}
 
 	if req.Count == 0 {
@@ -163,7 +155,7 @@ func (s *HTTPServer) batchDequeueMessages(c *fiber.Ctx) error {
 	}
 
 	if req.Count < 1 || req.Count > 1000 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "count must be between 1 and 1000"})
+		return jsonError(c, fiber.StatusBadRequest, "count must be between 1 and 1000")
 	}
 
 	var vt time.Duration
@@ -174,10 +166,10 @@ func (s *HTTPServer) batchDequeueMessages(c *fiber.Ctx) error {
 	batch, err := s.queueService.DequeueN(c.Context(), req.Topic, req.Count, vt)
 	if err != nil {
 		if errors.Is(err, queue.ErrInvalidBatchSize) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+			return jsonError(c, fiber.StatusBadRequest, err.Error())
 		}
 		slog.Error("batch dequeue failed", "topic", req.Topic, "count", req.Count, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 
 	items := make([]messageResponse, 0, len(batch))
@@ -197,10 +189,10 @@ func (s *HTTPServer) nackMessage(c *fiber.Ctx) error {
 
 	if err := s.queueService.Nack(c.Context(), id, req.Error); err != nil {
 		if errors.Is(err, queue.ErrNotFound) || errors.Is(err, queue.ErrNotProcessing) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+			return jsonError(c, fiber.StatusNotFound, err.Error())
 		}
 		slog.Error("nack failed", "id", id, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
@@ -210,7 +202,7 @@ func (s *HTTPServer) statsHandler(c *fiber.Ctx) error {
 	stats, err := s.queueService.Stats(c.Context())
 	if err != nil {
 		slog.Error("stats failed", "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 	items := make([]topicStatResponse, len(stats))
 	for i, st := range stats {
@@ -224,10 +216,10 @@ func (s *HTTPServer) requeueMessage(c *fiber.Ctx) error {
 
 	if err := s.queueService.Requeue(c.Context(), id); err != nil {
 		if errors.Is(err, queue.ErrNotFound) || errors.Is(err, queue.ErrNotDLQ) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+			return jsonError(c, fiber.StatusNotFound, err.Error())
 		}
 		slog.Error("requeue failed", "id", id, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)

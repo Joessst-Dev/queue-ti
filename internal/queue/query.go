@@ -16,9 +16,9 @@ type TopicStat struct {
 	Count  int
 }
 
-// List returns paginated messages, optionally filtered by topic.
-// Returns the page of messages, the total matching count, and any error.
-func (s *Service) List(ctx context.Context, topic string, limit, offset int) ([]Message, int, error) {
+// List returns a paginated page of messages, optionally filtered by topic.
+// The PagedResult carries both the page and the total matching count.
+func (s *Service) List(ctx context.Context, topic string, limit, offset int) (PagedResult[Message], error) {
 	var countQuery, selectQuery string
 	var args []any
 
@@ -42,12 +42,12 @@ func (s *Service) List(ctx context.Context, topic string, limit, offset int) ([]
 		countArgs = []any{topic}
 	}
 	if err := s.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("list count: %w", err)
+		return PagedResult[Message]{}, fmt.Errorf("list count: %w", err)
 	}
 
 	rows, err := s.pool.Query(ctx, selectQuery, args...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("list: %w", err)
+		return PagedResult[Message]{}, fmt.Errorf("list: %w", err)
 	}
 	defer rows.Close()
 
@@ -62,16 +62,16 @@ func (s *Service) List(ctx context.Context, topic string, limit, offset int) ([]
 			&msg.ExpiresAt, &msg.CreatedAt,
 			&msg.OriginalTopic, &msg.DLQMovedAt, &msg.Key,
 		); err != nil {
-			return nil, 0, fmt.Errorf("list scan: %w", err)
+			return PagedResult[Message]{}, fmt.Errorf("list scan: %w", err)
 		}
 		if err := hydrateMessage(&msg, metaJSON, lastError); err != nil {
-			return nil, 0, err
+			return PagedResult[Message]{}, err
 		}
 		messages = append(messages, msg)
 	}
 
 	slog.Debug("list messages", "topic", topic, "limit", limit, "offset", offset, "total", total, "returned", len(messages))
-	return messages, total, nil
+	return PagedResult[Message]{Items: messages, Total: total}, nil
 }
 
 // Stats returns the message count grouped by topic and status, ordered by
