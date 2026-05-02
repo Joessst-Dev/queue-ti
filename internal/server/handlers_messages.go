@@ -91,7 +91,7 @@ func toMessageResponse(m queue.Message) messageResponse {
 
 func (s *HTTPServer) listMessages(c *fiber.Ctx) error {
 	topic := c.Query("topic")
-	limit, offset, _ := parseLimitOffset(c, 50, 200)
+	limit, offset := parseLimitOffset(c, 50, 200)
 
 	result, err := s.queueService.List(c.Context(), topic, limit, offset)
 	if err != nil {

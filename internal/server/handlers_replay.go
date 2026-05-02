@@ -74,7 +74,7 @@ func (s *HTTPServer) replayTopic(c *fiber.Ctx) error {
 
 func (s *HTTPServer) listMessageLog(c *fiber.Ctx) error {
 	topic := c.Params("topic")
-	limit, offset, _ := parseLimitOffset(c, 50, 200)
+	limit, offset := parseLimitOffset(c, 50, 200)
 
 	result, err := s.queueService.ListMessageLog(c.Context(), topic, limit, offset)
 	if err != nil {

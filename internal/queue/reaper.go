@@ -108,27 +108,28 @@ const archiveReaperSQL = `
 	  AND ml.acked_at < now() - (tc.replay_window_seconds || ' seconds')::interval
 `
 
-// runDeleteWork executes the shared DELETE queries for expired messages and
-// expired message_log rows inside an existing transaction. It is the single
-// authoritative implementation called by both the manual trigger and the
-// scheduled cron.
-func (s *Service) runDeleteWork(ctx context.Context, tx pgx.Tx) error {
+// runDeleteWork deletes all expired messages and expired message_log rows
+// inside an existing transaction. source ("manual" or "scheduled") is included
+// in log output so that the two callers remain distinguishable in production.
+// Returns the number of messages rows deleted.
+func (s *Service) runDeleteWork(ctx context.Context, tx pgx.Tx, source string) (int64, error) {
 	tag, err := tx.Exec(ctx, `DELETE FROM messages WHERE status = 'expired'`)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if n := tag.RowsAffected(); n > 0 {
+	n := tag.RowsAffected()
+	if n > 0 {
 		s.recorder.RecordDeleted(n)
-		slog.Info("delete reaper removed expired messages", "count", n)
+		slog.Info("delete reaper removed expired messages", "source", source, "count", n)
 	}
 	archiveTag, err := tx.Exec(ctx, archiveReaperSQL)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if n := archiveTag.RowsAffected(); n > 0 {
-		slog.Info("archive reaper removed expired message_log rows", "count", n)
+	if an := archiveTag.RowsAffected(); an > 0 {
+		slog.Info("archive reaper removed expired message_log rows", "source", source, "count", an)
 	}
-	return nil
+	return n, nil
 }
 
 // RunDeleteReaperOnce permanently deletes all messages with status 'expired'
@@ -141,23 +142,9 @@ func (s *Service) RunDeleteReaperOnce(ctx context.Context) (int64, error) {
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	// Count before so we can return the messages-deleted count to the caller.
-	tag, err := tx.Exec(ctx, `DELETE FROM messages WHERE status = 'expired'`)
+	n, err := s.runDeleteWork(ctx, tx, "manual")
 	if err != nil {
 		return 0, fmt.Errorf("run delete reaper: %w", err)
-	}
-	n := tag.RowsAffected()
-	if n > 0 {
-		s.recorder.RecordDeleted(n)
-		slog.Info("delete reaper (manual) removed expired messages", "count", n)
-	}
-
-	archiveTag, err := tx.Exec(ctx, archiveReaperSQL)
-	if err != nil {
-		return 0, fmt.Errorf("run delete reaper (archive): %w", err)
-	}
-	if an := archiveTag.RowsAffected(); an > 0 {
-		slog.Info("archive reaper (manual) removed expired message_log rows", "count", an)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -198,7 +185,8 @@ func (s *Service) StartDeleteReaper(ctx context.Context, schedule string) (stop 
 	c := cron.New()
 	_, err = c.AddFunc(schedule, func() {
 		runErr := s.tryWithReaperLock(ctx, deleteReaperLockKey, func(tx pgx.Tx) error {
-			return s.runDeleteWork(ctx, tx)
+			_, err := s.runDeleteWork(ctx, tx, "scheduled")
+			return err
 		})
 		if runErr != nil {
 			slog.Error("delete reaper failed", "error", runErr)
