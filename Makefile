@@ -1,10 +1,13 @@
-.PHONY: proto deps test run build bench bench-mem bench-queue bench-loadtest install-hooks up up-redis down build-nocache build-nocache-redis
+.PHONY: proto proto-node deps test run build bench bench-mem bench-queue bench-loadtest install-hooks up up-redis down build-nocache build-nocache-redis
 
 proto:
 	protoc --go_out=backend/pb --go_opt=paths=source_relative \
 		--go-grpc_out=backend/pb --go-grpc_opt=paths=source_relative \
 		--proto_path=proto \
 		proto/queue.proto
+
+proto-node:
+	cp proto/queue.proto clients/node/proto/queue.proto
 
 deps:
 	cd backend && go mod tidy

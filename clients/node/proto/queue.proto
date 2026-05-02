@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package queue;
+
+option go_package = "github.com/Joessst-Dev/queue-ti/pb";
+
+import "google/protobuf/timestamp.proto";
+
+service QueueService {
+  rpc Enqueue(EnqueueRequest) returns (EnqueueResponse);
+  rpc Dequeue(DequeueRequest) returns (DequeueResponse);
+  rpc BatchDequeue(BatchDequeueRequest) returns (BatchDequeueResponse);
+  rpc Ack(AckRequest) returns (AckResponse);
+  rpc Nack(NackRequest) returns (NackResponse);
+  rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse);
+}
+
+message EnqueueRequest {
+  string topic = 1;
+  bytes payload = 2;
+  map<string, string> metadata = 3;
+  optional string key = 4;
+}
+
+message EnqueueResponse {
+  string id = 1;
+}
+
+message DequeueRequest {
+  string topic = 1;
+  optional uint32 visibility_timeout_seconds = 2;
+}
+
+message DequeueResponse {
+  string id = 1;
+  string topic = 2;
+  bytes payload = 3;
+  map<string, string> metadata = 4;
+  google.protobuf.Timestamp created_at = 5;
+  int32 retry_count = 6;
+  int32 max_retries = 7;
+  optional string key = 8;
+}
+
+message BatchDequeueRequest {
+  string topic = 1;
+  uint32 count = 2;
+  optional uint32 visibility_timeout_seconds = 3;
+}
+
+message BatchDequeueResponse {
+  repeated DequeueResponse messages = 1;
+}
+
+message AckRequest {
+  string id = 1;
+}
+
+message AckResponse {}
+
+message NackRequest {
+  string id = 1;
+  string error = 2;
+}
+
+message NackResponse {}
+
+message SubscribeRequest {
+  string topic = 1;
+  optional uint32 visibility_timeout_seconds = 2;
+}
+
+message SubscribeResponse {
+  string id = 1;
+  string topic = 2;
+  bytes payload = 3;
+  map<string, string> metadata = 4;
+  google.protobuf.Timestamp created_at = 5;
+  int32 retry_count = 6;
+}

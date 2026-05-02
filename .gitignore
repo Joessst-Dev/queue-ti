@@ -52,6 +52,10 @@ ui/out-tsc
 # Root dev tooling - dependencies
 node_modules
 
+# Node.js client
+clients/node/node_modules
+clients/node/dist
+
 # Frontend - dependencies
 ui/node_modules
 
