@@ -4,6 +4,8 @@
 *.so
 *.dylib
 queue-ti
+bin/
+loadtest
 
 # Test
 *.test
