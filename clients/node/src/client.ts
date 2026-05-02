@@ -53,7 +53,6 @@ export class Client {
 
   close(): void {
     this.refreshController?.abort()
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     this.stub.getChannel().close()
   }
 
@@ -132,7 +131,6 @@ export async function connect(address: string, options?: ConnectOptions): Promis
     credentials = grpc.credentials.combineChannelCredentials(credentials, callCredentials)
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
   const stub = new proto.queue.QueueService(address, credentials) as unknown
 
   return new Client(stub, store, options?.tokenRefresher)
