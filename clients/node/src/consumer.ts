@@ -1,5 +1,6 @@
 import { ConsumerOptions, BatchOptions } from './options'
 import { Message, buildMessage } from './message'
+import { sleep } from './internal/sleep'
 
 export type MessageHandler = (msg: Message) => Promise<void>
 export type BatchHandler = (messages: Message[]) => Promise<void>
@@ -11,22 +12,17 @@ function nextBackoff(current: number): number {
   return Math.min(current * 2, BACKOFF_MAX_MS)
 }
 
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new DOMException('Aborted', 'AbortError'))
-      return
-    }
-    const id = setTimeout(resolve, ms)
-    signal?.addEventListener('abort', () => {
-      clearTimeout(id)
-      reject(new DOMException('Aborted', 'AbortError'))
-    }, { once: true })
-  })
-}
 
-function isAbortError(err: unknown): boolean {
-  return err instanceof Error && err.name === 'AbortError'
+
+function callbackToPromise<T>(
+  fn: (cb: (err: Error | null, res: T) => void) => void,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    fn((err, res) => {
+      if (err) reject(err)
+      else resolve(res)
+    })
+  })
 }
 
 // ProtoTimestamp mirrors the shape @grpc/proto-loader produces for google.protobuf.Timestamp.
@@ -113,7 +109,7 @@ export class Consumer {
         continue
       }
 
-      const cleanExit = await this.drainStream(stream, handler, backoff)
+      const cleanExit = await this.drainStream(stream, handler)
 
       if (cleanExit) {
         backoff = BACKOFF_START_MS
@@ -135,7 +131,6 @@ export class Consumer {
   private drainStream(
     stream: SubscribeStream,
     handler: MessageHandler,
-    currentBackoff: number,
   ): Promise<boolean> {
     // Semaphore: track active handler slots via a counter + a queue of resolvers
     // waiting for a free slot.
@@ -190,10 +185,6 @@ export class Consumer {
       stream.on('end', () => settle(true))
 
       stream.on('data', (raw: RawMessage) => {
-        // Reset backoff reference on first successful message — caller checks this
-        // by treating cleanExit=true on a non-error drain.
-        void (currentBackoff)
-
         const msg = this.rawToMessage(raw)
 
         const handlerPromise = acquireSlot().then(async () => {
@@ -294,30 +285,19 @@ export class Consumer {
     count: number
     visibilityTimeoutSeconds?: number
   }): Promise<RawMessage[]> {
-    return new Promise<RawMessage[]>((resolve, reject) => {
-      this.stub.batchDequeue(req, (err, response) => {
-        if (err) reject(err)
-        else resolve(response.messages ?? [])
-      })
-    })
+    return callbackToPromise<{ messages: RawMessage[] }>(
+      (cb) => this.stub.batchDequeue(req, cb),
+    ).then((response) => response.messages ?? [])
   }
 
   private rawToMessage(raw: RawMessage): Message {
     const ackFn = (id: string): Promise<void> =>
-      new Promise<void>((resolve, reject) => {
-        this.stub.ack({ id }, (err) => {
-          if (err) reject(new Error(`ack message ${id}: ${err.message}`))
-          else resolve()
-        })
-      })
+      callbackToPromise<void>((cb) => this.stub.ack({ id }, cb))
+        .catch((err: Error) => { throw new Error(`ack message ${id}: ${err.message}`) })
 
     const nackFn = (id: string, reason: string): Promise<void> =>
-      new Promise<void>((resolve, reject) => {
-        this.stub.nack({ id, error: reason }, (err) => {
-          if (err) reject(new Error(`nack message ${id}: ${err.message}`))
-          else resolve()
-        })
-      })
+      callbackToPromise<void>((cb) => this.stub.nack({ id, error: reason }, cb))
+        .catch((err: Error) => { throw new Error(`nack message ${id}: ${err.message}`) })
 
     return buildMessage(
       raw.id,
@@ -332,5 +312,3 @@ export class Consumer {
   }
 }
 
-// Re-export for tests
-export { isAbortError }

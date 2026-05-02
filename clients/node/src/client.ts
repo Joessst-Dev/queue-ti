@@ -3,6 +3,7 @@ import * as grpc from '@grpc/grpc-js'
 import path from 'path'
 import { ConnectOptions, TokenRefresher } from './options'
 import { TokenStore, parseTokenExpiry } from './token-store'
+import { sleepUntilOrAbort } from './internal/sleep'
 import { Producer, ProducerStub } from './producer'
 import { Consumer, ConsumerStub } from './consumer'
 import { ConsumerOptions } from './options'
@@ -52,11 +53,8 @@ export class Client {
 
   async close(): Promise<void> {
     this.refreshController?.abort()
-    return new Promise<void>((resolve, reject) => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-      this.stub.getChannel().close()
-      resolve()
-    })
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    this.stub.getChannel().close()
   }
 
   setToken(token: string): void {
@@ -112,19 +110,6 @@ export class Client {
   }
 }
 
-function sleepUntilOrAbort(ms: number, signal: AbortSignal): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    if (signal.aborted) {
-      resolve(false)
-      return
-    }
-    const id = setTimeout(() => resolve(true), ms)
-    signal.addEventListener('abort', () => {
-      clearTimeout(id)
-      resolve(false)
-    }, { once: true })
-  })
-}
 
 export async function connect(address: string, options?: ConnectOptions): Promise<Client> {
   let credentials: grpc.ChannelCredentials
@@ -144,10 +129,7 @@ export async function connect(address: string, options?: ConnectOptions): Promis
       meta.add('authorization', `Bearer ${store!.get()}`)
       callback(null, meta)
     })
-    credentials = grpc.credentials.combineChannelCredentials(
-      options.insecure ? grpc.credentials.createInsecure() : grpc.credentials.createSsl(),
-      callCredentials,
-    )
+    credentials = grpc.credentials.combineChannelCredentials(credentials, callCredentials)
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unsafe-call
