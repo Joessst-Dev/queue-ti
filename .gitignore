@@ -56,6 +56,19 @@ node_modules
 clients/node/node_modules
 clients/node/dist
 
+# Python client
+clients/python/__pycache__/
+clients/python/**/__pycache__/
+clients/python/*.egg-info/
+clients/python/.eggs/
+clients/python/dist/
+clients/python/build/
+clients/python/.venv/
+clients/python/.pytest_cache/
+clients/python/.mypy_cache/
+clients/python/.ruff_cache/
+clients/python/run_tests.sh
+
 # Frontend - dependencies
 ui/node_modules
 

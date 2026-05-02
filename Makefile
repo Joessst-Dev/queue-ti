@@ -1,10 +1,19 @@
-.PHONY: proto deps test run build bench bench-mem bench-queue bench-loadtest install-hooks up up-redis down build-nocache build-nocache-redis
+.PHONY: proto proto-python deps test test-python run build bench bench-mem bench-queue bench-loadtest install-hooks up up-redis down build-nocache build-nocache-redis
 
 proto:
 	protoc --go_out=backend/pb --go_opt=paths=source_relative \
 		--go-grpc_out=backend/pb --go-grpc_opt=paths=source_relative \
 		--proto_path=proto \
 		proto/queue.proto
+
+proto-python:
+	python3 -m grpc_tools.protoc \
+		-I proto \
+		--python_out=clients/python/queueti/pb \
+		--grpc_python_out=clients/python/queueti/pb \
+		proto/queue.proto
+	sed -i '' 's/^import queue_pb2/from queueti.pb import queue_pb2/' \
+		clients/python/queueti/pb/queue_pb2_grpc.py
 
 deps:
 	cd backend && go mod tidy
@@ -16,6 +25,9 @@ install-hooks:
 
 test:
 	cd backend && ginkgo ./...
+
+test-python:
+	cd clients/python && python3 -m pytest tests/ --tb=short -q
 
 build:
 	cd backend && go build -ldflags="-X main.version=$$(git describe --tags --always --dirty)" -o ../bin/queue-ti ./cmd/server
