@@ -39,8 +39,9 @@ class AsyncConsumer:
     ) -> None:
         self._stub = stub
         self._topic = topic
-        self._concurrency = (options or ConsumerOptions()).concurrency
-        self._visibility_timeout = (options or ConsumerOptions()).visibility_timeout_seconds
+        opts = options or ConsumerOptions()
+        self._concurrency = opts.concurrency
+        self._visibility_timeout = opts.visibility_timeout_seconds
 
     async def consume(self, handler: MessageHandler) -> None:
         """Stream messages from the topic, calling handler for each one.

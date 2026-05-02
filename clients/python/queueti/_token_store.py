@@ -30,8 +30,10 @@ def parse_token_expiry(token: str) -> float:
     parts = token.split(".")
     if len(parts) != 3:
         raise ValueError("not a valid JWT")
-    # Add padding so base64 doesn't complain about missing '='
-    payload = parts[1] + "=="
+    # Add correct padding so base64 doesn't complain about missing '='
+    raw = parts[1]
+    padding = "=" * (-len(raw) % 4)
+    payload = raw + padding
     try:
         data = json.loads(base64.urlsafe_b64decode(payload))
     except Exception as exc:

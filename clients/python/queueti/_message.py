@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Awaitable, Callable
 
@@ -23,8 +23,8 @@ class Message:
     metadata: dict[str, str]
     created_at: datetime
     retry_count: int
-    _ack_fn: Callable[[], Awaitable[None]]
-    _nack_fn: Callable[[str], Awaitable[None]]
+    _ack_fn: Callable[[], Awaitable[None]] = field(repr=False)
+    _nack_fn: Callable[[str], Awaitable[None]] = field(repr=False)
 
     async def ack(self) -> None:
         try:
@@ -55,8 +55,8 @@ class SyncMessage:
     metadata: dict[str, str]
     created_at: datetime
     retry_count: int
-    _ack_fn: Callable[[], None]
-    _nack_fn: Callable[[str], None]
+    _ack_fn: Callable[[], None] = field(repr=False)
+    _nack_fn: Callable[[str], None] = field(repr=False)
 
     def ack(self) -> None:
         try:

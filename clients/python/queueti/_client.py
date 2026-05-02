@@ -7,7 +7,7 @@ import grpc
 import grpc.aio
 
 from queueti._consumer import AsyncConsumer
-from queueti._options import ConnectOptions, ConsumerOptions
+from queueti._options import ConnectOptions, ConsumerOptions, TokenRefresher
 from queueti._producer import AsyncProducer
 from queueti._token_store import TokenStore, seconds_until_expiry
 from queueti.pb import queue_pb2_grpc
@@ -56,9 +56,7 @@ class AsyncClient:
                 pass
         await self._channel.close()
 
-    async def _run_refresher(self, refresher: object, store: TokenStore) -> None:
-        from collections.abc import Awaitable, Callable
-        _refresher = refresher  # type: ignore[assignment]
+    async def _run_refresher(self, refresher: TokenRefresher, store: TokenStore) -> None:
         retry_backoff = _RETRY_BACKOFF_START
 
         while True:
@@ -78,7 +76,7 @@ class AsyncClient:
                     return
 
             try:
-                new_token: str = await _refresher()  # type: ignore[operator]
+                new_token: str = await refresher()
             except asyncio.CancelledError:
                 return
             except Exception as exc:
@@ -108,18 +106,6 @@ async def connect(address: str, options: ConnectOptions | None = None) -> AsyncC
 
     if options and options.token:
         store = TokenStore(options.token)
-
-    def _call_credentials() -> grpc.CallCredentials | None:
-        if store is None:
-            return None
-
-        def _interceptor(
-            _context: grpc.AuthMetadataContext,
-            callback: grpc.AuthMetadataPluginCallback,
-        ) -> None:
-            callback((("authorization", f"Bearer {store.get()}"),), None)
-
-        return grpc.metadata_call_credentials(grpc.metadata_call_credentials(_interceptor))
 
     if options and options.insecure:
         channel_creds = None

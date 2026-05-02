@@ -40,6 +40,9 @@ class _LoopThread(threading.Thread):
     def run_sync(self, coro: object) -> T:  # type: ignore[type-var]
         return self.submit(coro).result()
 
+    def wait_ready(self) -> None:
+        self._ready.wait()
+
     def stop(self) -> None:
         self._loop.call_soon_threadsafe(self._loop.stop)
         self.join()
@@ -78,7 +81,7 @@ class Consumer:
 
         async def async_handler(msg: Message) -> None:
             sync_msg = self._to_sync_message(msg)
-            await asyncio.get_event_loop().run_in_executor(None, handler, sync_msg)
+            await asyncio.get_running_loop().run_in_executor(None, handler, sync_msg)
 
         self._loop.run_sync(self._async.consume(async_handler))
 
@@ -95,7 +98,7 @@ class Consumer:
 
         async def async_handler(msgs: list[Message]) -> None:
             sync_msgs = [self._to_sync_message(m) for m in msgs]
-            await asyncio.get_event_loop().run_in_executor(None, handler, sync_msgs)
+            await asyncio.get_running_loop().run_in_executor(None, handler, sync_msgs)
 
         self._loop.run_sync(self._async.consume_batch(options, async_handler))
 
@@ -147,6 +150,6 @@ def connect_sync(address: str, options: ConnectOptions | None = None) -> Client:
     """
     loop = _LoopThread()
     loop.start()
-    loop._ready.wait()
+    loop.wait_ready()
     async_client = loop.run_sync(connect(address, options))
     return Client(async_client, loop)

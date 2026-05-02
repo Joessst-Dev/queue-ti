@@ -21,8 +21,16 @@ class ConsumerOptions:
     concurrency: int = 1
     visibility_timeout_seconds: int | None = None
 
+    def __post_init__(self) -> None:
+        if self.concurrency < 1:
+            raise ValueError(f"concurrency must be >= 1, got {self.concurrency}")
+
 
 @dataclass
 class BatchOptions:
     batch_size: int
     visibility_timeout_seconds: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.batch_size < 1:
+            raise ValueError(f"batch_size must be >= 1, got {self.batch_size}")
