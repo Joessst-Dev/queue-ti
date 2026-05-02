@@ -1,0 +1,146 @@
+[33m❯[39m Building...
+[32m✔[39m Building...
+[37m[1mInitial chunk files[22m                      [2m | [22m[1mNames[22m                                 [2m | [22m [1mRaw size[22m
+[32mchunk-4CHL6LKE.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m79.89 kB[37m[2m | [22m
+[32mchunk-XDZPW2S3.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m53.76 kB[37m[2m | [22m
+[32mchunk-GBPRGKCG.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m45.67 kB[37m[2m | [22m
+[32mstyles.css[37m                               [2m | [22m[2mstyles[22m                                [2m | [22m [36m32.09 kB[37m[2m | [22m
+[32mspec-app-messages-messages.js[37m            [2m | [22m[2mspec-app-messages-messages[22m            [2m | [22m [36m30.10 kB[37m[2m | [22m
+[32mchunk-NQWB7NFD.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m27.94 kB[37m[2m | [22m
+[32mchunk-7SRRQO6N.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m24.07 kB[37m[2m | [22m
+[32mchunk-FCNYYVF4.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m23.12 kB[37m[2m | [22m
+[32mspec-app-login-login.js[37m                  [2m | [22m[2mspec-app-login-login[22m                  [2m | [22m [36m15.33 kB[37m[2m | [22m
+[32mspec-app-messages-messages-table.js[37m      [2m | [22m[2mspec-app-messages-messages-table[22m      [2m | [22m [36m14.90 kB[37m[2m | [22m
+[32mspec-app-admin-users-section.js[37m          [2m | [22m[2mspec-app-admin-users-section[22m          [2m | [22m [36m13.99 kB[37m[2m | [22m
+[32mspec-app-app.js[37m                          [2m | [22m[2mspec-app-app[22m                          [2m | [22m [36m11.49 kB[37m[2m | [22m
+[32mspec-ap[39m[37mp-admin-maintenance-section.js[37m    [2m | [22m[2mspec-app-admin-maintenance-section[22m    [2m | [22m [36m10.77 kB[37m[2m | [22m
+[32mspec-app-messages-topic-schema-section.js[37m[2m | [22m[2mspec-app-messages-topic-schema-section[22m[2m | [22m [36m10.54 kB[37m[2m | [22m
+[32mchunk-SJFZOHJ6.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m10.45 kB[37m[2m | [22m
+[32mspec-app-messages-topic-config-section.js[37m[2m | [22m[2mspec-app-messages-topic-config-section[22m[2m | [22m [36m10.22 kB[37m[2m | [22m
+[32mspec-app-services-session.service.js[37m     [2m | [22m[2mspec-app-services-session.service[22m     [2m | [22m  [36m9.56 kB[37m[2m | [22m
+[32mspec-app-services-auth.service.js[37m        [2m | [22m[2mspec-app-services-auth.service[22m        [2m | [22m  [36m9.36 kB[37m[2m | [22m
+[32mchunk-4ACYGJET.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m9.03 kB[37m[2m | [22m
+[32mspec-app-admin-admin.js[37m                  [2m | [22m[2mspec-app-admin-admin[22m                  [2m | [22m  [36m8.27 kB[37m[2m | [22m
+[32mspec-app-messages-enqueue-section.js[37m     [2m | [22m[2mspec-app-messages-enqueue-section[22m     [2m | [22m  [36m8.11 kB[37m[2m | [22m
+[32mspec-app-services-queue.service.js[37m       [2m | [22m[2mspec-app-services-queue.service[22m       [2m | [22m  [36m7.80 kB[37m[2m | [22m
+[32mspec-app-messages-avro-example.js[37m        [2m | [22m[2mspec-app-messages-avro-example[22m        [2m | [22m  [36m5.25 kB[37m[2m | [22m
+[32mspec-app-services-user.service.js[37m        [2m | [22m[2mspec-app-services-user.service[22m        [2m | [22m  [36m4.82 kB[37m[2m | [22m
+[32mspec-app-guards-auth.guard.js[37m            [2m | [22m[2mspec-app-guards-auth.guard[22m            [2m | [22m  [36m4.82 kB[37m[2m | [22m
+[32mspec-[39m[37mapp-interceptors-auth.interceptor.js[37m[2m | [22m[2mspec-app-interceptors-auth.interceptor[22m[2m | [22m  [36m4.81 kB[37m[2m | [22m
+[32mchunk-RSTWSNOR.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m4.75 kB[37m[2m | [22m
+[32mspec-app-messages-topics-section.js[37m      [2m | [22m[2mspec-app-messages-topics-section[22m      [2m | [22m  [36m3.78 kB[37m[2m | [22m
+[32mchunk-OXQK2A2X.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m3.50 kB[37m[2m | [22m
+[32mchunk-DJ7KF6TG.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m3.24 kB[37m[2m | [22m
+[32mchunk-NOATAUGV.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m3.21 kB[37m[2m | [22m
+[32mspec-app-messages-queue-stats-chart.js[37m   [2m | [22m[2mspec-app-messages-queue-stats-chart[22m   [2m | [22m  [36m2.54 kB[37m[2m | [22m
+[32mspec-app-shared-footer.component.js[37m      [2m | [22m[2mspec-app-shared-footer.component[22m      [2m | [22m  [36m2.48 kB[37m[2m | [22m
+[32mspec-app-messages-messages-header.js[37m     [2m | [22m[2mspec-app-messages-messages-header[22m     [2m | [22m  [36m2.38 kB[37m[2m | [22m
+[32mchunk-BWRGCPNH.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m2.15 kB[37m[2m | [22m
+[32mchunk-4CJGAJEB.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m1.98 kB[37m[2m | [22m
+[32mspec-app-utils-error.js[37m                  [2m | [22m[2mspec-app-utils-error[22m                  [2m | [22m  [36m1.93 kB[37m[2m | [22m
+[32mchunk-44WRAYSQ.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m1.85 kB[37m[2m | [22m
+[32mspe[39m[37mc-app-guards-admin.guard.js[37m           [2m | [22m[2mspec-app-guards-admin.guard[22m           [2m | [22m  [36m1.79 kB[37m[2m | [22m
+[32mspec-app-services-version.service.js[37m     [2m | [22m[2mspec-app-services-version.service[22m     [2m | [22m  [36m1.60 kB[37m[2m | [22m
+[32mchunk-3NRNQFH7.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m1.45 kB[37m[2m | [22m
+[32mchunk-QTTS56XK.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m1.23 kB[37m[2m | [22m
+[32minit-testbed.js[37m                          [2m | [22m[2minit-testbed[22m                          [2m | [22m  [36m1.21 kB[37m[2m | [22m
+[32mchunk-DRGCPL2U.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m1.11 kB[37m[2m | [22m
+[32mvitest-mock-patch.js[37m                     [2m | [22m[2mvitest-mock-patch[22m                     [2m | [22m[36m969 bytes[37m[2m | [22m
+[32mchunk-K4VB5BHC.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m[36m331 bytes[37m[2m | [22m
+
+[1m [22m                                        [2m | [22m[1mInitial total[22m                         [2m | [22m[1m529.62 kB[22m
+
+Application bundle generation complete. [4.213 seconds] - 2026-04-30T22:03:48.727Z
+[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.4 [39m[90m/Users/jost.weyers/Documents/dev/queue-ti/admin-ui[39m
+
+[90mstderr[2m | src/app/messages/messages-table.spec.ts[2m > [22m[2mMessagesTable[2m > [22m[2mnack overlay dismiss behaviour[2m > [22m[2mwhen a click occurs outside the overlay[2m > [22m[2mshould dismiss the overlay
+[22m[39mERROR TypeError: event.target.closest is not a function
+    at _MessagesTable.onDocumentClick (/Users/jost.weyers/Documents/dev/queue-ti/admin-ui/src/app/messages/messages-table.ts:453:36)
+    at MessagesTable_click_HostBindingHandler (/Users/jost.weyers/Documents/dev/queue-ti/admin-ui/src/app/messages/messages-table.ts:366:14)
+    at executeListenerWithErrorHandling (file:///Users/jost.weyers/Documents/dev/queue-ti/admin-ui/node_modules/@angular/core/fesm2022/_debug_node-chunk.mjs:8204:12)
+    at wrapListenerIn_markDirtyAndPreventDefault (file:///Users/jost.weyers/Documents/dev/queue-ti/admin-ui/node_modules/@angular/core/fesm2022/_debug_node-chunk.mjs:8191:18)
+    at Document.<anonymous> (file:///Users/jost.weyers/Documents/dev/queue-ti/admin-ui/node_modules/@angular/platform-browser/fesm2022/_dom_renderer-chunk.mjs:651:142)
+    at Document.callTheUserObjectsOperation (/Users/jost.weyers/Documents/dev/queue-ti/admin-ui/node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+    at innerInvokeEventListeners (/Users/jost.weyers/Documents/dev/queue-ti/admin-ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+    at invokeEventListeners (/Users/jost.weyers/Documents/dev/queue-ti/admin-ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:296:3)
+    at DocumentImpl._dispatch (/Users/jost.weyers/Documents/dev/queue-ti/admin-ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:243:9)
+    at DocumentImpl.dispatchEvent (/Users/jost.weyers/Documents/dev/queue-ti/admin-ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:114:17)
+
+ [31m❯[39m [30m[43m admin-ui [49m[39m src/app/messages/messages-table.spec.ts [2m([22m[2m24 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 425[2mms[22m[39m
+[31m         [31m×[31m should dismiss the overlay[39m[32m 18[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages-table.spec.ts[2m > [22mMessagesTable[2m > [22mnack overlay dismiss behaviour[2m > [22mwhen a click occurs outside the overlay[2m > [22mshould dismiss the overlay
+[31m[1mAssertionError[22m: expected <div data-nack-overlay …(1)>…(3)</div> to be null[39m
+
+- Expected:
+null
+
++ Received:
+<div
+  class="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white border border-gray-200 rounded shadow-md px-2 py-1 z-20"
+  data-nack-overlay=""
+>
+  <input
+    class="px-1 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-red-400 w-28"
+    placeholder="Reason…"
+    type="text"
+  />
+  <button
+    class="px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer whitespace-nowrap"
+    title="Confirm nack"
+  >
+     ✓ 
+  </button>
+  <button
+    class="px-1.5 py-0.5 text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
+    title="Cancel"
+  >
+     ✗ 
+  </button>
+</div>
+
+[36m [2m❯[22m src/app/messages/messages-table.spec.ts:[2m372:76[22m[39m
+    [90m370|[39m         [35mawait[39m fixture[33m.[39m[34mwhenStable[39m()[33m;[39m
+    [90m371|[39m
+    [90m372|[39m         expect(fixture.nativeElement.querySelector('[data-nack-overlay…
+    [90m   |[39m                                                                            [31m^[39m
+    [90m373|[39m       })[33m;[39m
+    [90m374|[39m     })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Unhandled Errors [49m[22m[31m⎯⎯⎯⎯⎯⎯[39m
+[31m[1m
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.[22m[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: event.target.closest is not a function[39m
+[90m [2m❯[22m _MessagesTable.onDocumentClick src/app/messages/messages-table.ts:[2m453:36[22m[39m
+[90m [2m❯[22m MessagesTable_click_HostBindingHandler src/app/messages/messages-table.ts:[2m366:14[22m[39m
+[90m [2m❯[22m executeListenerWithErrorHandling node_modules/@angular/core/fesm2022/_debug_node-chunk.mjs:[2m8204:12[22m[39m
+[90m [2m❯[22m wrapListenerIn_markDirtyAndPreventDefault node_modules/@angular/core/fesm2022/_debug_node-chunk.mjs:[2m8191:18[22m[39m
+[90m [2m❯[22m Document.<anonymous> node_modules/@angular/platform-browser/fesm2022/_dom_renderer-chunk.mjs:[2m651:142[22m[39m
+[90m [2m❯[22m Document.callTheUserObjectsOperation node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:[2m26:30[22m[39m
+[90m [2m❯[22m innerInvokeEventListeners node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:[2m360:16[22m[39m
+[90m [2m❯[22m invokeEventListeners node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:[2m296:3[22m[39m
+[90m [2m❯[22m DocumentImpl._dispatch node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:[2m243:9[22m[39m
+[90m [2m❯[22m DocumentImpl.dispatchEvent node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:[2m114:17[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages-table.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould dismiss the overlay[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+[31m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m23 passed[39m[22m[90m (24)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m253 passed[39m[22m[90m (254)[39m
+[2m     Errors [22m [1m[31m1 error[39m[22m
+[2m   Start at [22m 00:03:49
+[2m   Duration [22m 6.66s[2m (transform 2.45s, setup 4.25s, import 4.19s, tests 2.45s, environment 123.95s)[22m
+

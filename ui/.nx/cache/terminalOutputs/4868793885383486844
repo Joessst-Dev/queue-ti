@@ -1,0 +1,17 @@
+
+Linting "admin-ui"...
+[0m[0m
+[0m[4m/Users/jost.weyers/Documents/dev/queue-ti/admin-ui/src/app/messages/messages-table.ts[24m[0m
+[0m  [2m21:10[22m  [33mwarning[39m  'STATUS_CLASS_MAP' is defined but never used      [2m@typescript-eslint/no-unused-vars[22m[0m
+[0m  [2m21:28[22m  [33mwarning[39m  'DEFAULT_STATUS_CLASS' is defined but never used  [2m@typescript-eslint/no-unused-vars[22m[0m
+[0m[0m
+[0m[4m/Users/jost.weyers/Documents/dev/queue-ti/admin-ui/src/app/messages/nack-overlay.ts[24m[0m
+[0m  [2m39:12[22m  [31merror[39m  Output bindings, including aliases, should not be named as standard DOM events  [2m@angular-eslint/no-output-native[22m[0m
+[0m[0m
+[0m[4m/Users/jost.weyers/Documents/dev/queue-ti/admin-ui/src/app/messages/purge-confirm-panel.ts[24m[0m
+[0m  [2m46:12[22m  [31merror[39m  Output bindings, including aliases, should not be named as standard DOM events  [2m@angular-eslint/no-output-native[22m[0m
+[0m[0m
+[0m[31m[1m✖ 4 problems (2 errors, 2 warnings)[22m[39m[0m
+[0m[31m[1m[22m[39m[0m
+✖ 4 problems (2 errors, 2 warnings)
+

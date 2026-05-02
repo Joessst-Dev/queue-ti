@@ -42,31 +42,31 @@ pgdata/
 vendor/
 
 # Frontend - compiled output
-admin-ui/dist
-admin-ui/tmp
-admin-ui/out-tsc
+ui/dist
+ui/tmp
+ui/out-tsc
 
 # Root dev tooling - dependencies
 node_modules
 
 # Frontend - dependencies
-admin-ui/node_modules
+ui/node_modules
 
 # Frontend - misc
-admin-ui/.sass-cache
-admin-ui/connect.lock
-admin-ui/coverage
-admin-ui/libpeerconnection.log
-admin-ui/npm-debug.log
-admin-ui/yarn-error.log
-admin-ui/testem.log
-admin-ui/typings
-admin-ui/.eslintcache
-admin-ui/.angular
+ui/.sass-cache
+ui/connect.lock
+ui/coverage
+ui/libpeerconnection.log
+ui/npm-debug.log
+ui/yarn-error.log
+ui/testem.log
+ui/typings
+ui/.eslintcache
+ui/.angular
 
 # Nx
-admin-ui/.nx/cache
-admin-ui/.nx/workspace-data
+ui/.nx/cache
+ui/.nx/workspace-data
 
 # Claude
 .claude/worktrees
@@ -75,4 +75,4 @@ admin-ui/.nx/workspace-data
 .claude/projects/
 
 # Vitest
-admin-ui/__screenshots__/
+ui/__screenshots__/

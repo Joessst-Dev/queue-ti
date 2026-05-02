@@ -51,7 +51,7 @@ jobs:
         run: make deps
 
       - name: Build backend binary
-        run: go build -v ./cmd/server/...
+        run: go build -v ./backend/cmd/server/...
 
       - name: Install Ginkgo CLI
         run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.28.1
@@ -73,7 +73,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: admin-ui
+        working-directory: ui
 
     env:
       NX_DAEMON: "false"
@@ -87,13 +87,13 @@ jobs:
       - name: Set up Node.js 24
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version-file: "admin-ui/.nvmrc"
+          node-version-file: "ui/.nvmrc"
 
       - name: Cache npm packages
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}
+          key: npm-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
           restore-keys: npm-${{ runner.os }}-
 
       - name: Pin npm version
@@ -105,10 +105,10 @@ jobs:
       - name: Cache Nx computation cache
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          path: admin-ui/.nx/cache
-          key: nx-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}-${{ hashFiles('admin-ui/src/**') }}
+          path: ui/.nx/cache
+          key: nx-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}-${{ hashFiles('ui/src/**') }}
           restore-keys: |
-            nx-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}-
+            nx-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}-
             nx-${{ runner.os }}-
 
       - name: Build Angular application (production)
@@ -174,7 +174,8 @@ jobs:
         # registry cache — mode=max caches all intermediate layers.
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
-          context: .
+          context: ./backend
+          file: ./backend/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}

@@ -1,0 +1,82 @@
+[33m❯[39m Building...
+[32m✔[39m Building...
+[37m[1mInitial chunk files[22m                      [2m | [22m[1mNames[22m                                 [2m | [22m [1mRaw size[22m
+[32mchunk-6YYBVUQA.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m44.87 kB[37m[2m | [22m
+[32mchunk-ZVXQRCLM.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m37.72 kB[37m[2m | [22m
+[32mchunk-EWJMRR55.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m37.53 kB[37m[2m | [22m
+[32mspec-app-messages-messages.js[37m            [2m | [22m[2mspec-app-messages-messages[22m            [2m | [22m [36m29.05 kB[37m[2m | [22m
+[32mchunk-UWBBWIIA.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m27.63 kB[37m[2m | [22m
+[32mstyles.css[37m                               [2m | [22m[2mstyles[22m                                [2m | [22m [36m22.87 kB[37m[2m | [22m
+[32mchunk-7QPEEQZ2.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m18.62 kB[37m[2m | [22m
+[32mspec-app-login-login.js[37m                  [2m | [22m[2mspec-app-login-login[22m                  [2m | [22m [36m16.04 kB[37m[2m | [22m
+[32mspec-app-messages-users-section.js[37m       [2m | [22m[2mspec-app-messages-users-section[22m       [2m | [22m [36m13.94 kB[37m[2m | [22m
+[32mspec-app-messages-topic-schema-section.js[37m[2m | [22m[2mspec-app-messages-topic-schema-section[22m[2m | [22m [36m10.50 kB[37m[2m | [22m
+[32mspec-app-messages-topic-config-section.js[37m[2m | [22m[2mspec-app-messages-topic-config-section[22m[2m | [22m [36m10.16 kB[37m[2m | [22m
+[32mchunk-OHD3FVBB.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m9.03 kB[37m[2m | [22m
+[32mspec-ap[39m[37mp-services-auth.service.js[37m        [2m | [22m[2mspec-app-services-auth.service[22m        [2m | [22m  [36m8.39 kB[37m[2m | [22m
+[32mspec-app-services-queue.service.js[37m       [2m | [22m[2mspec-app-services-queue.service[22m       [2m | [22m  [36m7.80 kB[37m[2m | [22m
+[32mspec-app-services-user.service.js[37m        [2m | [22m[2mspec-app-services-user.service[22m        [2m | [22m  [36m4.82 kB[37m[2m | [22m
+[32mspec-app-guards-auth.guard.js[37m            [2m | [22m[2mspec-app-guards-auth.guard[22m            [2m | [22m  [36m4.82 kB[37m[2m | [22m
+[32mchunk-RSTWSNOR.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m4.75 kB[37m[2m | [22m
+[32mspec-app-interceptors-auth.interceptor.js[37m[2m | [22m[2mspec-app-interceptors-auth.interceptor[22m[2m | [22m  [36m4.75 kB[37m[2m | [22m
+[32mspec-app-messages-messages-table.js[37m      [2m | [22m[2mspec-app-messages-messages-table[22m      [2m | [22m  [36m4.40 kB[37m[2m | [22m
+[32mspec-app-messages-enqueue-section.js[37m     [2m | [22m[2mspec-app-messages-enqueue-section[22m     [2m | [22m  [36m3.22 kB[37m[2m | [22m
+[32mchunk-TZLC2IOY.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m3.00 kB[37m[2m | [22m
+[32mspec-app-messages-queue-stats-chart.js[37m   [2m | [22m[2mspec-app-messages-queue-stats-chart[22m   [2m | [22m  [36m2.54 kB[37m[2m | [22m
+[32mchunk-3LAC6DMK.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m2.08 kB[37m[2m | [22m
+[32mspec-app-app.js[37m                          [2m | [22m[2mspec-app-app[22m                          [2m | [22m  [36m1.76 kB[37m[2m | [22m
+[32mchunk-3NRNQFH7.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m1.45 kB[37m[2m | [22m
+[32minit-[39m[37mtestbed.js[37m                          [2m | [22m[2minit-testbed[22m                          [2m | [22m  [36m1.21 kB[37m[2m | [22m
+[32mvitest-mock-patch.js[37m                     [2m | [22m[2mvitest-mock-patch[22m                     [2m | [22m[36m969 bytes[37m[2m | [22m
+
+[1m [22m                                        [2m | [22m[1mInitial total[22m                         [2m | [22m[1m333.94 kB[22m
+
+Application bundle generation complete. [1.977 seconds] - 2026-04-26T22:36:52.038Z
+[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.4 [39m[90m/Users/jost.weyers/Documents/dev/queue-ti/admin-ui[39m
+
+ [31m❯[39m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts [2m([22m[2m10 tests[22m[2m | [22m[31m10 failed[39m[2m)[22m[32m 63[2mms[22m[39m
+[31m       [31m×[31m should trigger listMessages automatically[39m[32m 28[2mms[22m[39m
+[31m       [31m×[31m should display one table row per message[39m[32m 5[2mms[22m[39m
+[31m       [31m×[31m should show "No messages found" empty state[39m[32m 4[2mms[22m[39m
+[31m       [31m×[31m should call auth.logout()[39m[32m 4[2mms[22m[39m
+[31m       [31m×[31m should navigate to /login[39m[32m 4[2mms[22m[39m
+[31m       [31m×[31m should show a success banner with the returned ID[39m[32m 3[2mms[22m[39m
+[31m       [31m×[31m should show an error banner[39m[32m 3[2mms[22m[39m
+[31m       [31m×[31m should show a Requeue button for the DLQ message[39m[32m 3[2mms[22m[39m
+[31m       [31m×[31m should NOT show a Requeue button for a regular message[39m[32m 5[2mms[22m[39m
+[31m       [31m×[31m should call queue.requeueMessage and refresh when Requeue is clicked[39m[32m 3[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 10 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mon component initialisation[2m > [22mshould trigger listMessages automatically
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mwhen messages are returned by the API[2m > [22mshould display one table row per message
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mwhen the message list is empty and not loading[2m > [22mshould show "No messages found" empty state
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mwhen "Sign out" is clicked[2m > [22mshould call auth.logout()
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mwhen "Sign out" is clicked[2m > [22mshould navigate to /login
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mon enqueue success[2m > [22mshould show a success banner with the returned ID
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mon enqueue error[2m > [22mshould show an error banner
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mwhen a DLQ message is displayed (topic ends with .dlq)[2m > [22mshould show a Requeue button for the DLQ message
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mwhen a DLQ message is displayed (topic ends with .dlq)[2m > [22mshould NOT show a Requeue button for a regular message
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mwhen a DLQ message is displayed (topic ends with .dlq)[2m > [22mshould call queue.requeueMessage and refresh when Requeue is clicked
+[31m[1mTypeError[22m: this.auth.isAdmin is not a function[39m
+[90m [2m❯[22m Object.Messages.tabs.computed.ngDevMode.debugName [as computation] src/app/messages/messages.ts:[2m103:19[22m[39m
+[90m [2m❯[22m computation ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/primitives/signals/src/computed.ts:[2m147:24[22m[39m
+[90m [2m❯[22m producerRecomputeValue ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/primitives/signals/src/graph.ts:[2m318:7[22m[39m
+[90m [2m❯[22m producerUpdateValueVersion ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/primitives/signals/src/computed.ts:[2m72:4[22m[39m
+[90m [2m❯[22m Messages_Template src/app/messages/messages.ts:[2m37:13[22m[39m
+[90m [2m❯[22m templateFn ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/src/render3/instructions/shared.ts:[2m109:4[22m[39m
+[90m [2m❯[22m executeTemplate ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/src/render3/instructions/change_detection.ts:[2m232:6[22m[39m
+[90m [2m❯[22m refreshView ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/src/render3/instructions/change_detection.ts:[2m497:4[22m[39m
+[90m [2m❯[22m detectChangesInView ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/src/render3/instructions/change_detection.ts:[2m445:2[22m[39m
+[90m [2m❯[22m detectChangesInViewIfAttached ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/src/render3/instructions/change_detection.ts:[2m430:4[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m13 passed[39m[22m[90m (14)[39m
+[2m      Tests [22m [1m[31m10 failed[39m[22m[2m | [22m[1m[32m134 passed[39m[22m[90m (144)[39m
+[2m   Start at [22m 00:36:53
+[2m   Duration [22m 7.27s[2m (transform 1.69s, setup 6.05s, import 2.82s, tests 968ms, environment 65.24s)[22m
+

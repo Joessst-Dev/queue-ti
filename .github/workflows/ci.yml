@@ -64,7 +64,7 @@ jobs:
       - name: Build backend binary
         # Compile the server to catch any build-breaking errors before running
         # the full test suite, which is slower due to testcontainers startup.
-        run: go build -v ./cmd/server/...
+        run: go build -v ./backend/cmd/server/...
 
       - name: Install Ginkgo CLI
         # Install the ginkgo binary so `make test` / `ginkgo ./...` works.
@@ -94,8 +94,7 @@ jobs:
 
     defaults:
       run:
-        # Run every step inside the admin-ui workspace directory.
-        working-directory: admin-ui
+        working-directory: ui
 
     env:
       # Disable the Nx daemon in CI — it adds no benefit and can leave orphan
@@ -112,13 +111,13 @@ jobs:
       - name: Set up Node.js 24
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version-file: "admin-ui/.nvmrc"
+          node-version-file: "ui/.nvmrc"
 
       - name: Cache npm packages
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}
+          key: npm-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
           restore-keys: npm-${{ runner.os }}-
 
       - name: Pin npm version
@@ -130,13 +129,13 @@ jobs:
       - name: Cache Nx computation cache
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          path: admin-ui/.nx/cache
+          path: ui/.nx/cache
           # Nx cache is keyed on the lockfile + all source files via a hash;
           # we use the lockfile as the primary key and fall back to any prior
           # cache for the same branch prefix for partial hits.
-          key: nx-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}-${{ hashFiles('admin-ui/src/**') }}
+          key: nx-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}-${{ hashFiles('ui/src/**') }}
           restore-keys: |
-            nx-${{ runner.os }}-${{ hashFiles('admin-ui/package-lock.json') }}-
+            nx-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}-
             nx-${{ runner.os }}-
 
       - name: Build Angular application (production)
@@ -158,7 +157,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: admin-ui-dist-${{ github.sha }}
-          path: admin-ui/dist/admin-ui/
+          path: ui/dist/admin-ui/
           retention-days: 7
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -185,7 +184,8 @@ jobs:
       - name: Build Docker image (no push)
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
-          context: .
+          context: ./backend
+          file: ./backend/Dockerfile
           push: false
           platforms: linux/amd64
           # Build arm64 in CI would double the time; amd64 is sufficient for

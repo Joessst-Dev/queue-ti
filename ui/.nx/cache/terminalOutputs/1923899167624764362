@@ -1,0 +1,20 @@
+[33m❯[39m Building...
+[32m✔[39m Building...
+[37m[1mInitial chunk files[22m[2m | [22m[1mNames[22m        [2m | [22m [1mRaw size[22m[2m | [22m[1mEstimated transfer size[22m
+[32mchunk-MVATCUJQ.js[37m  [2m | [22m[2m-[22m            [2m | [22m[36m298.33 kB[37m[2m | [22m               [36m80.46 kB[37m
+[32mstyles-2WDXYCV4.css[37m[2m | [22m[2mstyles[22m       [2m | [22m [36m21.54 kB[37m[2m | [22m                [36m4.20 kB[37m
+[32mmain-L34GLXKK.js[37m   [2m | [22m[2mmain[22m         [2m | [22m  [36m7.30 kB[37m[2m | [22m                [36m2.44 kB[37m
+
+[1m [22m                  [2m | [22m[1mInitial total[22m[2m | [22m[1m327.17 kB[22m[2m | [22m               [1m87.11 kB[22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m        [2m | [22m [1mRaw size[22m[2m | [22m[1mEstimated transfer size[22m
+[32mchunk-5ZPEMZ5G.js[37m  [2m | [22m[2mmessages[22m     [2m | [22m[36m239.21 kB[37m[2m | [22m               [36m66.22 kB[37m
+[32mchunk-7BIO34IE.js[37m  [2m | [22m[2m-[22m            [2m | [22m [36m55.17 kB[37m[2m | [22m               [36m13.74 kB[37m
+[32mchunk-2WSY4GI5.js[37m  [2m | [22m[2madmin[22m        [2m | [22m [36m17.88 kB[37m[2m | [22m                [36m4.26 kB[37m
+[32mchunk-MS6O66ZT.js[37m  [2m | [22m[2m-[22m            [2m | [22m  [36m4.68 kB[37m[2m | [22m                [36m1.53 kB[37m
+[32mchunk-B2MBX274.js[37m  [2m | [22m[2mlogin[22m        [2m | [22m  [36m4.12 kB[37m[2m | [22m                [36m1.54 kB[37m
+
+Application bundle generation complete. [4.625 seconds] - 2026-04-27T20:02:08.098Z
+[39m
+[37mOutput location: /Users/jost.weyers/Documents/dev/queue-ti/admin-ui/dist/admin-ui
+[39m

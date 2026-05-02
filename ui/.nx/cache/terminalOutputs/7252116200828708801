@@ -1,0 +1,126 @@
+[33m❯[39m Building...
+[32m✔[39m Building...
+[37m[1mInitial chunk files[22m                 [2m | [22m[1mNames[22m                            [2m | [22m [1mRaw size[22m
+[32mstyles.css[37m                          [2m | [22m[2mstyles[22m                           [2m | [22m [36m30.98 kB[37m[2m | [22m
+[32mspec-app-services-session.service.js[37m[2m | [22m[2mspec-app-services-session.service[22m[2m | [22m [36m15.01 kB[37m[2m | [22m
+[32mchunk-SHTMZ5XJ.js[37m                   [2m | [22m[2m-[22m                                [2m | [22m  [36m4.57 kB[37m[2m | [22m
+[32minit-testbed.js[37m                     [2m | [22m[2minit-testbed[22m                     [2m | [22m  [36m1.21 kB[37m[2m | [22m
+[32mvitest-mock-patch.js[37m                [2m | [22m[2mvitest-mock-patch[22m                [2m | [22m[36m969 bytes[37m[2m | [22m
+
+[1m [22m                                   [2m | [22m[1mInitial total[22m                    [2m | [22m [1m52.74 kB[22m
+
+Application bundle generation complete. [2.735 seconds] - 2026-04-29T07:46:21.965Z
+[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.4 [39m[90m/Users/jost.weyers/Documents/dev/queue-ti/admin-ui[39m
+
+ [31m❯[39m [30m[43m admin-ui [49m[39m src/app/services/session.service.spec.ts [2m([22m[2m15 tests[22m[2m | [22m[31m5 failed[39m[2m)[22m[32m 43[2mms[22m[39m
+[31m         [31m×[31m should set showWarning to true[39m[32m 6[2mms[22m[39m
+[31m         [31m×[31m should set showWarning back to false[39m[32m 3[2mms[22m[39m
+[31m         [31m×[31m should set showWarning to false[39m[32m 2[2mms[22m[39m
+[31m         [31m×[31m should reset lastActivity so a subsequent tick no longer treats the user as inactive[39m[32m 2[2mms[22m[39m
+[31m       [31m×[31m should reset msInactive so a subsequent tick no longer considers the user inactive[39m[32m 2[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 5 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/services/session.service.spec.ts[2m > [22mSessionService[2m > [22mtick() — called immediately via startWith(0)[2m > [22mwhen user has been inactive for >= 15 min and token expires within 2 min[2m > [22mshould set showWarning to true
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+- Expected
++ Received
+
+- true
++ false
+
+[36m [2m❯[22m src/app/services/session.service.spec.ts:[2m121:39[22m[39m
+    [90m119|[39m         vi[33m.[39m[34madvanceTimersByTime[39m([33mTOKEN_LIFETIME_MS[39m)[33m;[39m
+    [90m120|[39m
+    [90m121|[39m         [34mexpect[39m(service[33m.[39m[34mshowWarning[39m())[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m                                       [31m^[39m
+    [90m122|[39m       })[33m;[39m
+    [90m123|[39m     })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/services/session.service.spec.ts[2m > [22mSessionService[2m > [22mtick() — called immediately via startWith(0)[2m > [22mwhen showWarning is true and token time recovers above threshold[2m > [22mshould set showWarning back to false
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+- Expected
++ Received
+
+- true
++ false
+
+[36m [2m❯[22m src/app/services/session.service.spec.ts:[2m147:39[22m[39m
+    [90m145|[39m
+    [90m146|[39m         vi[33m.[39m[34madvanceTimersByTime[39m([33mTOKEN_LIFETIME_MS[39m)[33m;[39m
+    [90m147|[39m         [34mexpect[39m(service[33m.[39m[34mshowWarning[39m())[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m                                       [31m^[39m
+    [90m148|[39m
+    [90m149|[39m         expiresAt[33m.[39m[35mset[39m([33mDate[39m[33m.[39m[34mnow[39m() [33m+[39m [33mWARNING_THRESHOLD_MS[39m [33m+[39m [34m60_000[39m)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/services/session.service.spec.ts[2m > [22mSessionService[2m > [22mextendSession()[2m > [22mwhen refreshToken succeeds[2m > [22mshould set showWarning to false
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+- Expected
++ Received
+
+- true
++ false
+
+[36m [2m❯[22m src/app/services/session.service.spec.ts:[2m193:39[22m[39m
+    [90m191|[39m
+    [90m192|[39m         vi[33m.[39m[34madvanceTimersByTime[39m([33mTOKEN_LIFETIME_MS[39m)[33m;[39m
+    [90m193|[39m         [34mexpect[39m(service[33m.[39m[34mshowWarning[39m())[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m                                       [31m^[39m
+    [90m194|[39m
+    [90m195|[39m         expiresAt[33m.[39m[35mset[39m([33mDate[39m[33m.[39m[34mnow[39m() [33m+[39m [33mTOKEN_LIFETIME_MS[39m)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/services/session.service.spec.ts[2m > [22mSessionService[2m > [22mextendSession()[2m > [22mwhen refreshToken succeeds[2m > [22mshould reset lastActivity so a subsequent tick no longer treats the user as inactive
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+- Expected
++ Received
+
+- true
++ false
+
+[36m [2m❯[22m src/app/services/session.service.spec.ts:[2m208:39[22m[39m
+    [90m206|[39m
+    [90m207|[39m         vi[33m.[39m[34madvanceTimersByTime[39m([33mTOKEN_LIFETIME_MS[39m)[33m;[39m
+    [90m208|[39m         [34mexpect[39m(service[33m.[39m[34mshowWarning[39m())[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m                                       [31m^[39m
+    [90m209|[39m
+    [90m210|[39m         expiresAt[33m.[39m[35mset[39m([33mDate[39m[33m.[39m[34mnow[39m() [33m+[39m [33mTOKEN_LIFETIME_MS[39m)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/services/session.service.spec.ts[2m > [22mSessionService[2m > [22mrecordActivity()[2m > [22mshould reset msInactive so a subsequent tick no longer considers the user inactive
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+- Expected
++ Received
+
+- true
++ false
+
+[36m [2m❯[22m src/app/services/session.service.spec.ts:[2m254:37[22m[39m
+    [90m252|[39m
+    [90m253|[39m       vi[33m.[39m[34madvanceTimersByTime[39m([33mTOKEN_LIFETIME_MS[39m)[33m;[39m
+    [90m254|[39m       [34mexpect[39m(service[33m.[39m[34mshowWarning[39m())[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m                                     [31m^[39m
+    [90m255|[39m
+    [90m256|[39m       service[33m.[39m[34mrecordActivity[39m()[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m5 failed[39m[22m[2m | [22m[1m[32m10 passed[39m[22m[90m (15)[39m
+[2m   Start at [22m 09:46:22
+[2m   Duration [22m 1.13s[2m (transform 65ms, setup 240ms, import 73ms, tests 43ms, environment 671ms)[22m
+

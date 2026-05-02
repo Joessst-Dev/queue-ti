@@ -1,0 +1,401 @@
+[33m❯[39m Building...
+[32m✔[39m Building...
+[37m[1mInitial chunk files[22m                      [2m | [22m[1mNames[22m                                 [2m | [22m [1mRaw size[22m
+[32mspec-app-messages-messages.js[37m            [2m | [22m[2mspec-app-messages-messages[22m            [2m | [22m [36m71.11 kB[37m[2m | [22m
+[32mstyles.css[37m                               [2m | [22m[2mstyles[22m                                [2m | [22m [36m20.66 kB[37m[2m | [22m
+[32mspec-app-login-login.js[37m                  [2m | [22m[2mspec-app-login-login[22m                  [2m | [22m [36m15.94 kB[37m[2m | [22m
+[32mspec-app-services-auth.service.js[37m        [2m | [22m[2mspec-app-services-auth.service[22m        [2m | [22m  [36m6.61 kB[37m[2m | [22m
+[32mspec-app-services-queue.service.js[37m       [2m | [22m[2mspec-app-services-queue.service[22m       [2m | [22m  [36m5.02 kB[37m[2m | [22m
+[32mspec-app-guards-auth.guard.js[37m            [2m | [22m[2mspec-app-guards-auth.guard[22m            [2m | [22m  [36m4.82 kB[37m[2m | [22m
+[32mspec-app-interceptors-auth.interceptor.js[37m[2m | [22m[2mspec-app-interceptors-auth.interceptor[22m[2m | [22m  [36m4.72 kB[37m[2m | [22m
+[32mchunk-SHTMZ5XJ.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m4.57 kB[37m[2m | [22m
+[32mchunk-4SJF2O52.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m2.24 kB[37m[2m | [22m
+[32mspec-app-app.js[37m                          [2m | [22m[2mspec-app-app[22m                          [2m | [22m  [36m1.76 kB[37m[2m | [22m
+[32mchunk-XB5CNLKF.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m1.30 kB[37m[2m | [22m
+[32minit-testbed.js[37m                          [2m | [22m[2minit-testbed[22m                          [2m | [22m  [36m1.21 kB[37m[2m | [22m
+[32mvitest-[39m[37mmock-patch.js[37m                     [2m | [22m[2mvitest-mock-patch[22m                     [2m | [22m[36m969 bytes[37m[2m | [22m
+
+[1m [22m                                        [2m | [22m[1mInitial total[22m                         [2m | [22m[1m140.93 kB[22m
+
+Application bundle generation complete. [1.597 seconds] - 2026-04-26T18:19:18.835Z
+[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.4 [39m[90m/Users/jost.weyers/Documents/dev/queue-ti/admin-ui[39m
+
+ [31m❯[39m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts [2m([22m[2m17 tests[22m[2m | [22m[31m4 failed[39m[2m)[22m[32m 248[2mms[22m[39m
+[31m       [31m×[31m should display one table row per message[39m[32m 19[2mms[22m[39m
+[31m       [31m×[31m should show "No messages found" empty state[39m[32m 15[2mms[22m[39m
+[31m       [31m×[31m should show a Requeue button for the DLQ message[39m[32m 11[2mms[22m[39m
+[31m       [31m×[31m should call queue.requeueMessage and refresh when Requeue is clicked[39m[32m 8[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 4 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mwhen messages are returned by the API[2m > [22mshould display one table row per message
+[31m[1mAssertionError[22m: expected 1 to be 3 // Object.is equality[39m
+
+- Expected
++ Received
+
+- 3
++ 1
+
+[36m [2m❯[22m src/app/messages/messages.spec.ts:[2m133:27[22m[39m
+    [90m131|[39m       [35mconst[39m el[33m:[39m [33mHTMLElement[39m [33m=[39m fixture[33m.[39mnativeElement[33m;[39m
+    [90m132|[39m       [35mconst[39m rows [33m=[39m el[33m.[39m[34mquerySelectorAll[39m([32m'tbody tr'[39m)[33m;[39m
+    [90m133|[39m       [34mexpect[39m(rows[33m.[39mlength)[33m.[39m[34mtoBe[39m([34m3[39m)[33m;[39m
+    [90m   |[39m                           [31m^[39m
+    [90m134|[39m     })[33m;[39m
+    [90m135|[39m   })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mwhen the message list is empty and not loading[2m > [22mshould show "No messages found" empty state
+[31m[1mAssertionError[22m: expected 'QueueTI Admin Sign out  Messages  Ref…' to contain 'No messages found'[39m
+
+Expected: "No messages found"
+Received: "QueueTI Admin Sign out  Messages  Refresh  ID  Topic  Payload  Status  Retries  Expires  Metadata  Created  Actions  Loading messages...  Enqueue Message Topic Payload  Metadata  Add field  Enqueue "
+
+[36m [2m❯[22m src/app/messages/messages.spec.ts:[2m142:30[22m[39m
+    [90m140|[39m
+    [90m141|[39m       [35mconst[39m el[33m:[39m [33mHTMLElement[39m [33m=[39m fixture[33m.[39mnativeElement[33m;[39m
+    [90m142|[39m       [34mexpect[39m(el[33m.[39mtextContent)[33m.[39m[34mtoContain[39m([32m'No messages found'[39m)[33m;[39m
+    [90m   |[39m                              [31m^[39m
+    [90m143|[39m     })[33m;[39m
+    [90m144|[39m   })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mwhen a DLQ message is displayed (topic ends with .dlq)[2m > [22mshould show a Requeue button for the DLQ message
+[31m[1mAssertionError[22m: expected undefined not to be undefined[39m
+[36m [2m❯[22m src/app/messages/messages.spec.ts:[2m281:33[22m[39m
+    [90m279|[39m         b[33m.[39mtextContent[33m?.[39m[34mtrim[39m()[33m.[39m[34mincludes[39m([32m'Requeue'[39m)[33m,[39m
+    [90m280|[39m       )[33m;[39m
+    [90m281|[39m       [34mexpect[39m(requeueButton)[33m.[39mnot[33m.[39m[34mtoBeUndefined[39m()[33m;[39m
+    [90m   |[39m                                 [31m^[39m
+    [90m282|[39m     })[33m;[39m
+    [90m283|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mwhen a DLQ message is displayed (topic ends with .dlq)[2m > [22mshould call queue.requeueMessage and refresh when Requeue is clicked
+[31m[1mTypeError[22m: Cannot read properties of undefined (reading 'click')[39m
+[36m [2m❯[22m src/app/messages/messages.spec.ts:[2m304:21[22m[39m
+    [90m302|[39m       ) [35mas[39m [33mHTMLButtonElement[39m[33m;[39m
+    [90m303|[39m
+    [90m304|[39m       requeueButton[33m.[39m[34mclick[39m()[33m;[39m
+    [90m   |[39m                     [31m^[39m
+    [90m305|[39m       [35mawait[39m fixture[33m.[39m[34mwhenStable[39m()[33m;[39m
+    [90m306|[39m       fixture[33m.[39m[34mdetectChanges[39m()[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Unhandled Errors [49m[22m[31m⎯⎯⎯⎯⎯⎯[39m
+[31m[1m
+Vitest caught 17 unhandled errors during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.[22m[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould show a success banner with the returned ID[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould show a success banner with the returned ID[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould show a success banner with the returned ID[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould show a success banner with the returned ID[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould show a success banner with the returned ID[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould show a success banner with the returned ID[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould show a success banner with the returned ID[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould show a success banner with the returned ID[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould show a success banner with the returned ID[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould show a success banner with the returned ID[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould show a success banner with the returned ID[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould show a success banner with the returned ID[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould show a success banner with the returned ID[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshould show an error banner[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: page.items is not iterable[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m716:61[22m[39m
+[90m [2m❯[22m signalUpdateFn node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m378:21[22m[39m
+[90m [2m❯[22m Function.update node_modules/@angular/core/fesm2022/_effect-chunk.mjs:[2m353:30[22m[39m
+[90m [2m❯[22m Object.next src/app/messages/messages.ts:[2m716:26[22m[39m
+[90m [2m❯[22m ConsumerObserver.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m113:33[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber._next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m80:26[22m[39m
+[90m [2m❯[22m SafeSubscriber.Subscriber.next node_modules/rxjs/dist/cjs/internal/Subscriber.js:[2m51:18[22m[39m
+[90m [2m❯[22m Observable._subscribe node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:[2m109:24[22m[39m
+[90m [2m❯[22m Observable._trySubscribe node_modules/rxjs/dist/cjs/internal/Observable.js:[2m41:25[22m[39m
+[90m [2m❯[22m node_modules/rxjs/dist/cjs/internal/Observable.js:[2m35:31[22m[39m
+
+[31mThis error originated in "[1msrc/app/messages/messages.spec.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m6 passed[39m[22m[90m (7)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m60 passed[39m[22m[90m (64)[39m
+[2m     Errors [22m [1m[31m17 errors[39m[22m
+[2m   Start at [22m 20:19:19
+[2m   Duration [22m 1.62s[2m (transform 503ms, setup 1.65s, import 849ms, tests 448ms, environment 5.80s)[22m
+

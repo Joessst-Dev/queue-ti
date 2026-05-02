@@ -1,0 +1,12 @@
+.git
+.gitignore
+*.md
+LICENSE
+.DS_Store
+Thumbs.db
+vendor/
+**/*_test.go
+**/suite_test.go
+internal/db/migrations/*.down.sql
+coverage.html
+*.out
