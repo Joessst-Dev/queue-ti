@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "queue-ti-client"
+version = "0.1.0"
+description = "Python client for the queue-ti message queue service"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "grpcio>=1.60.0",
+    "protobuf>=4.25.0",
+]
+
+[project.urls]
+Repository = "https://github.com/Joessst-Dev/queue-ti"
+
+[project.optional-dependencies]
+dev = [
+    "grpcio-tools>=1.60.0",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "mypy>=1.8",
+    "grpc-stubs>=1.53",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["queueti"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+ignore_missing_imports = true
+exclude = ["queueti/pb/"]
+
+[[tool.mypy.overrides]]
+# Generated protobuf code has no type annotations; treat all imports as Any.
+module = ["queueti.pb", "queueti.pb.*"]
+follow_imports = "skip"
