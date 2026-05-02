@@ -1,11 +1,15 @@
 package queue
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Joessst-Dev/queue-ti/internal/broadcast"
 )
 
 var (
@@ -60,6 +64,7 @@ type Service struct {
 	dlqThreshold             int
 	requireTopicRegistration bool
 	recorder                 MetricsRecorder
+	broadcaster              broadcast.Broadcaster
 
 	deleteReaperMu   sync.Mutex
 	deleteReaperStop func()
@@ -84,5 +89,48 @@ func NewService(pool *pgxpool.Pool, visibilityTimeout time.Duration, maxRetries 
 		dlqThreshold:             dlqThreshold,
 		requireTopicRegistration: requireTopicRegistration,
 		recorder:                 recorder,
+		broadcaster:              broadcast.Noop{},
+	}
+}
+
+func (s *Service) SetBroadcaster(b broadcast.Broadcaster) {
+	s.broadcaster = b
+}
+
+func (s *Service) StartBroadcastListener(ctx context.Context) {
+	go s.listenSchemaChanges(ctx)
+	go s.listenConfigChanges(ctx)
+}
+
+func (s *Service) listenSchemaChanges(ctx context.Context) {
+	ch, cancel := s.broadcaster.Subscribe(ctx, broadcast.ChannelSchemaChanged)
+	defer cancel()
+	for {
+		select {
+		case topic, ok := <-ch:
+			if !ok {
+				return
+			}
+			globalSchemaCache.m.Delete(topic)
+			slog.Info("schema cache invalidated via broadcast", "topic", topic)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (s *Service) listenConfigChanges(ctx context.Context) {
+	ch, cancel := s.broadcaster.Subscribe(ctx, broadcast.ChannelConfigChanged)
+	defer cancel()
+	for {
+		select {
+		case topic, ok := <-ch:
+			if !ok {
+				return
+			}
+			slog.Info("config change received via broadcast", "topic", topic)
+		case <-ctx.Done():
+			return
+		}
 	}
 }

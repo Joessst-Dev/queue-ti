@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/hamba/avro/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Joessst-Dev/queue-ti/internal/broadcast"
 )
 
 var (
@@ -117,6 +120,27 @@ func DeleteTopicSchema(ctx context.Context, pool *pgxpool.Pool, topic string) er
 	globalSchemaCache.m.Delete(topic)
 	if _, err := pool.Exec(ctx, `DELETE FROM topic_schemas WHERE topic = $1`, topic); err != nil {
 		return fmt.Errorf("delete topic schema: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) UpsertTopicSchemaAndNotify(ctx context.Context, topic, schemaJSON string) (*TopicSchema, error) {
+	ts, err := UpsertTopicSchema(ctx, s.pool, topic, schemaJSON)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.broadcaster.Publish(ctx, broadcast.ChannelSchemaChanged, topic); err != nil {
+		slog.Warn("broadcast schema change failed", "topic", topic, "error", err)
+	}
+	return ts, nil
+}
+
+func (s *Service) DeleteTopicSchemaAndNotify(ctx context.Context, topic string) error {
+	if err := DeleteTopicSchema(ctx, s.pool, topic); err != nil {
+		return err
+	}
+	if err := s.broadcaster.Publish(ctx, broadcast.ChannelSchemaChanged, topic); err != nil {
+		slog.Warn("broadcast schema delete failed", "topic", topic, "error", err)
 	}
 	return nil
 }
