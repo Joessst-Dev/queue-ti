@@ -14,7 +14,7 @@ queue-ti is designed for teams who want reliable, observable message processing 
 - **Brute-force protection** — Login rate limiting (10 requests per 60-second window per IP) backed by Redis for multi-replica deployments, in-memory for single-instance setups.
 - **Per-topic configuration** — Override retry limits, TTLs, and queue depth per topic at runtime without restart.
 - **Avro schema validation** — Optional per-topic schemas enforce payload contracts at enqueue time.
-- **Go and Node.js client libraries** — Drop-in Producer/Consumer with auto-reconnect, token refresh, and zero boilerplate.
+- **Go, Node.js, and Python client libraries** — Drop-in Producer/Consumer with auto-reconnect, token refresh, and zero boilerplate.
 
 ## Features
 
@@ -32,7 +32,7 @@ queue-ti is designed for teams who want reliable, observable message processing 
 - **Throughput throttling** — Optional per-topic message rate limits (messages/second) enforced at dequeue time using PostgreSQL token-bucket algorithm
 - **Admin UI** — Angular web interface for message inspection, manual enqueue, DLQ requeue, and topic management
 - **Prometheus metrics** — Real-time counters and gauges (`/metrics` endpoint, unauthenticated)
-- **Go client library** — Drop-in `Producer` and `Consumer` with auto-reconnection and token refresh
+- **Client libraries** — Go, Node.js, and Python with async-first design, auto-reconnection, and token refresh
 
 ## Table of Contents
 
@@ -122,7 +122,7 @@ The admin UI is available at `http://localhost:8081` (login: `admin` / `secret`)
 
 ## Client Libraries
 
-queue-ti provides official client libraries for Go and Node.js.
+queue-ti provides official client libraries for Go, Node.js, and Python.
 
 ### Go
 
@@ -232,6 +232,83 @@ await consumer.consume(async (msg) => {
 ```
 
 See [clients/node/README.md](clients/node/README.md) for the full API reference, authentication setup, error handling, and examples.
+
+### Python
+
+The `queue-ti-client` PyPI package provides async-first Producer/Consumer APIs for Python 3.11+ applications. It features automatic token refresh, graceful reconnection, and batch consumption, with both async and synchronous wrapper interfaces.
+
+**Installation:**
+
+```bash
+pip install queue-ti-client
+```
+
+**Quick Async Producer Example:**
+
+```python
+import asyncio
+from queueti import connect, ConnectOptions
+
+async def main():
+    client = await connect(
+        "localhost:50051",
+        options=ConnectOptions(insecure=True),
+    )
+    producer = client.producer()
+    
+    msg_id = await producer.publish(
+        "orders",
+        b'{"amount": 99.99}',
+    )
+    print(f"Published: {msg_id}")
+    await client.close()
+
+asyncio.run(main())
+```
+
+**Quick Async Consumer Example:**
+
+```python
+import asyncio
+from queueti import connect, ConnectOptions, ConsumerOptions
+
+async def main():
+    client = await connect(
+        "localhost:50051",
+        options=ConnectOptions(insecure=True),
+    )
+    consumer = client.consumer(
+        "orders",
+        options=ConsumerOptions(concurrency=4),
+    )
+    
+    async def handle(msg):
+        print(f"[{msg.id}] {msg.payload.decode()}")
+        # Return normally to auto-ack; raise to auto-nack
+    
+    await consumer.consume(handle)
+
+asyncio.run(main())
+```
+
+**Synchronous API:**
+
+For sync-only applications, use `connect_sync()` which runs async operations on a background thread:
+
+```python
+from queueti import connect_sync, ConnectOptions
+
+client = connect_sync(
+    "localhost:50051",
+    options=ConnectOptions(insecure=True),
+)
+producer = client.producer()
+msg_id = producer.publish("orders", b'{"amount": 99.99}')
+print(f"Published: {msg_id}")
+client.close()
+```
+
+See [clients/python/README.md](clients/python/README.md) for the full API reference, authentication setup, error handling, and examples.
 
 ## Configuration
 
