@@ -1,0 +1,67 @@
+[33m❯[39m Building...
+[32m✔[39m Building...
+[37m[1mInitial chunk files[22m                      [2m | [22m[1mNames[22m                                 [2m | [22m [1mRaw size[22m
+[32mchunk-HE2ONEIX.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m37.55 kB[37m[2m | [22m
+[32mspec-app-messages-messages.js[37m            [2m | [22m[2mspec-app-messages-messages[22m            [2m | [22m [36m22.17 kB[37m[2m | [22m
+[32mstyles.css[37m                               [2m | [22m[2mstyles[22m                                [2m | [22m [36m20.86 kB[37m[2m | [22m
+[32mchunk-7QPEEQZ2.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m18.62 kB[37m[2m | [22m
+[32mspec-app-login-login.js[37m                  [2m | [22m[2mspec-app-login-login[22m                  [2m | [22m [36m16.04 kB[37m[2m | [22m
+[32mchunk-XUWIEPS6.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m9.03 kB[37m[2m | [22m
+[32mspec-app-services-auth.service.js[37m        [2m | [22m[2mspec-app-services-auth.service[22m        [2m | [22m  [36m6.61 kB[37m[2m | [22m
+[32mspec-app-services-queue.service.js[37m       [2m | [22m[2mspec-app-services-queue.service[22m       [2m | [22m  [36m5.78 kB[37m[2m | [22m
+[32mspec-app-guards-auth.guard.js[37m            [2m | [22m[2mspec-app-guards-auth.guard[22m            [2m | [22m  [36m4.82 kB[37m[2m | [22m
+[32mspec-app-interceptors-auth.interceptor.js[37m[2m | [22m[2mspec-app-interceptors-auth.interceptor[22m[2m | [22m  [36m4.72 kB[37m[2m | [22m
+[32mchunk-SHTMZ5XJ.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m4.57 kB[37m[2m | [22m
+[32mspec-app-messages-messages-table.js[37m      [2m | [22m[2mspec-app-messages-messages-table[22m      [2m | [22m  [36m4.40 kB[37m[2m | [22m
+[32mspec-ap[39m[37mp-messages-enqueue-section.js[37m     [2m | [22m[2mspec-app-messages-enqueue-section[22m     [2m | [22m  [36m3.22 kB[37m[2m | [22m
+[32mspec-app-messages-queue-stats-chart.js[37m   [2m | [22m[2mspec-app-messages-queue-stats-chart[22m   [2m | [22m  [36m2.54 kB[37m[2m | [22m
+[32mchunk-4SJF2O52.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m2.24 kB[37m[2m | [22m
+[32mspec-app-app.js[37m                          [2m | [22m[2mspec-app-app[22m                          [2m | [22m  [36m1.76 kB[37m[2m | [22m
+[32mchunk-GI5LHWLM.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m1.36 kB[37m[2m | [22m
+[32minit-testbed.js[37m                          [2m | [22m[2minit-testbed[22m                          [2m | [22m  [36m1.21 kB[37m[2m | [22m
+[32mvitest-mock-patch.js[37m                     [2m | [22m[2mvitest-mock-patch[22m                     [2m | [22m[36m969 bytes[37m[2m | [22m
+
+[1m [22m                                        [2m | [22m[1mInitial total[22m                         [2m | [22m[1m168.47 kB[22m
+
+Application bundle generation complete. [1.735 seconds] - 2026-04-26T20:15:26.830Z
+[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.4 [39m[90m/Users/jost.weyers/Documents/dev/queue-ti/admin-ui[39m
+
+ [31m❯[39m [30m[43m admin-ui [49m[39m src/app/messages/queue-stats-chart.spec.ts [2m([22m[2m0 test[22m[2m)[22m
+ [31m❯[39m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts [2m([22m[2m0 test[22m[2m)[22m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Suites 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m [ src/app/messages/messages.spec.ts ][22m
+[31m[1mTypeError[22m: Chart.register is not a function[39m
+[90m [2m❯[22m src/app/messages/queue-stats-chart.ts:[2m24:7[22m[39m
+[36m [2m❯[22m src/app/messages/messages.spec.ts:[2m17:25[22m[39m
+    [90m 15|[39m }))[33m;[39m
+    [90m 16|[39m
+    [90m 17|[39m [35mimport[39m { [33mTestBed[39m } [35mfrom[39m [32m'@angular/core/testing'[39m[33m;[39m
+    [90m   |[39m                         [31m^[39m
+    [90m 18|[39m [35mimport[39m { provideZonelessChangeDetection } [35mfrom[39m [32m'@angular/core'[39m[33m;[39m
+    [90m 19|[39m [35mimport[39m { provideRouter } [35mfrom[39m [32m'@angular/router'[39m[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/queue-stats-chart.spec.ts[2m [ src/app/messages/queue-stats-chart.spec.ts ][22m
+[31m[1mTypeError[22m: Chart.register is not a function[39m
+[90m [2m❯[22m src/app/messages/queue-stats-chart.ts:[2m24:7[22m[39m
+[36m [2m❯[22m src/app/messages/queue-stats-chart.spec.ts:[2m15:25[22m[39m
+    [90m 15|[39m }))[33m;[39m
+    [90m 16|[39m
+    [90m 17|[39m [35mimport[39m { [33mTestBed[39m } [35mfrom[39m [32m'@angular/core/testing'[39m[33m;[39m
+    [90m   |[39m         [31m^[39m
+    [90m 18|[39m [35mimport[39m { provideZonelessChangeDetection } [35mfrom[39m [32m'@angular/core'[39m[33m;[39m
+    [90m 19|[39m [35mimport[39m { [35mof[39m } [35mfrom[39m [32m'rxjs'[39m[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m8 passed[39m[22m[90m (10)[39m
+[2m      Tests [22m [1m[32m61 passed[39m[22m[90m (61)[39m
+[2m   Start at [22m 22:15:27
+[2m   Duration [22m 1.56s[2m (transform 1.02s, setup 2.90s, import 1.27s, tests 404ms, environment 7.60s)[22m
+

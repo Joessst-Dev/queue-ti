@@ -1,0 +1,57 @@
+[33m❯[39m Building...
+[32m✔[39m Building...
+[37m[1mInitial chunk files[22m                      [2m | [22m[1mNames[22m                                 [2m | [22m [1mRaw size[22m
+[32mchunk-WW4XSSGG.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m74.84 kB[37m[2m | [22m
+[32mchunk-S7FH6ZDP.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m52.54 kB[37m[2m | [22m
+[32mchunk-GBPRGKCG.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m45.67 kB[37m[2m | [22m
+[32mspec-app-messages-messages.js[37m            [2m | [22m[2mspec-app-messages-messages[22m            [2m | [22m [36m30.13 kB[37m[2m | [22m
+[32mstyles.css[37m                               [2m | [22m[2mstyles[22m                                [2m | [22m [36m28.23 kB[37m[2m | [22m
+[32mchunk-5JZO3QSR.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m27.94 kB[37m[2m | [22m
+[32mchunk-XW7ZOM6H.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m24.07 kB[37m[2m | [22m
+[32mchunk-YMBLIRL5.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m23.43 kB[37m[2m | [22m
+[32mspec-app-login-login.js[37m                  [2m | [22m[2mspec-app-login-login[22m                  [2m | [22m [36m15.20 kB[37m[2m | [22m
+[32mspec-app-admin-users-section.js[37m          [2m | [22m[2mspec-app-admin-users-section[22m          [2m | [22m [36m13.99 kB[37m[2m | [22m
+[32mspec-app-messages-messages-table.js[37m      [2m | [22m[2mspec-app-messages-messages-table[22m      [2m | [22m [36m12.22 kB[37m[2m | [22m
+[32mspec-app-admin-maintenance-section.js[37m    [2m | [22m[2mspec-app-admin-maintenance-section[22m    [2m | [22m [36m10.77 kB[37m[2m | [22m
+[32mspec-ap[39m[37mp-messages-topic-schema-section.js[37m[2m | [22m[2mspec-app-messages-topic-schema-section[22m[2m | [22m [36m10.54 kB[37m[2m | [22m
+[32mchunk-DJMS6XXQ.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m10.40 kB[37m[2m | [22m
+[32mspec-app-messages-topic-config-section.js[37m[2m | [22m[2mspec-app-messages-topic-config-section[22m[2m | [22m [36m10.22 kB[37m[2m | [22m
+[32mchunk-XRLF7HLJ.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m9.03 kB[37m[2m | [22m
+[32mspec-app-services-auth.service.js[37m        [2m | [22m[2mspec-app-services-auth.service[22m        [2m | [22m  [36m8.39 kB[37m[2m | [22m
+[32mspec-app-messages-enqueue-section.js[37m     [2m | [22m[2mspec-app-messages-enqueue-section[22m     [2m | [22m  [36m8.11 kB[37m[2m | [22m
+[32mspec-app-admin-admin.js[37m                  [2m | [22m[2mspec-app-admin-admin[22m                  [2m | [22m  [36m7.98 kB[37m[2m | [22m
+[32mspec-app-services-queue.service.js[37m       [2m | [22m[2mspec-app-services-queue.service[22m       [2m | [22m  [36m7.80 kB[37m[2m | [22m
+[32mspec-app-messages-avro-example.js[37m        [2m | [22m[2mspec-app-messages-avro-example[22m        [2m | [22m  [36m5.25 kB[37m[2m | [22m
+[32mspec-app-services-user.service.js[37m        [2m | [22m[2mspec-app-services-user.service[22m        [2m | [22m  [36m4.82 kB[37m[2m | [22m
+[32mspec-app-guards-auth.guard.js[37m            [2m | [22m[2mspec-app-guards-auth.guard[22m            [2m | [22m  [36m4.82 kB[37m[2m | [22m
+[32mchunk-RSTWSNOR.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m4.75 kB[37m[2m | [22m
+[32mspec-app-interceptors-auth.interceptor.js[37m[2m | [22m[2mspec-app-interceptors-auth.interceptor[22m[2m | [22m  [36m4.75 kB[37m[2m | [22m
+[32mspec-[39m[37mapp-messages-topics-section.js[37m      [2m | [22m[2mspec-app-messages-topics-section[22m      [2m | [22m  [36m3.78 kB[37m[2m | [22m
+[32mchunk-YBFIIEO2.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m3.24 kB[37m[2m | [22m
+[32mchunk-TZLC2IOY.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m3.00 kB[37m[2m | [22m
+[32mspec-app-messages-queue-stats-chart.js[37m   [2m | [22m[2mspec-app-messages-queue-stats-chart[22m   [2m | [22m  [36m2.54 kB[37m[2m | [22m
+[32mspec-app-messages-messages-header.js[37m     [2m | [22m[2mspec-app-messages-messages-header[22m     [2m | [22m  [36m2.38 kB[37m[2m | [22m
+[32mchunk-4CJGAJEB.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m1.98 kB[37m[2m | [22m
+[32mspec-app-utils-error.js[37m                  [2m | [22m[2mspec-app-utils-error[22m                  [2m | [22m  [36m1.93 kB[37m[2m | [22m
+[32mchunk-PKGPSKM4.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m1.85 kB[37m[2m | [22m
+[32mspec-app-guards-admin.guard.js[37m           [2m | [22m[2mspec-app-guards-admin.guard[22m           [2m | [22m  [36m1.79 kB[37m[2m | [22m
+[32mspec-app-app.js[37m                          [2m | [22m[2mspec-app-app[22m                          [2m | [22m  [36m1.76 kB[37m[2m | [22m
+[32mchunk-3NRNQFH7.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m1.45 kB[37m[2m | [22m
+[32mchunk-QTTS56XK.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m1.23 kB[37m[2m | [22m
+[32minit-testbed.js[37m                          [2m | [22m[2minit-testbed[22m                          [2m | [22m  [36m1.21 kB[37m[2m | [22m
+[32mvit[39m[37mest-mock-patch.js[37m                     [2m | [22m[2mvitest-mock-patch[22m                     [2m | [22m[36m969 bytes[37m[2m | [22m
+[32mchunk-K4VB5BHC.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m[36m331 bytes[37m[2m | [22m
+
+[1m [22m                                        [2m | [22m[1mInitial total[22m                         [2m | [22m[1m485.32 kB[22m
+
+Application bundle generation complete. [2.437 seconds] - 2026-04-28T22:20:32.893Z
+[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.4 [39m[90m/Users/jost.weyers/Documents/dev/queue-ti/admin-ui[39m
+
+
+[2m Test Files [22m [1m[32m21 passed[39m[22m[90m (21)[39m
+[2m      Tests [22m [1m[32m223 passed[39m[22m[90m (223)[39m
+[2m   Start at [22m 00:20:33
+[2m   Duration [22m 2.50s[2m (transform 1.99s, setup 4.03s, import 3.60s, tests 1.81s, environment 24.71s)[22m
+

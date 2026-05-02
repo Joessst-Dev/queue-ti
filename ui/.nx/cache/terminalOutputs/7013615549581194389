@@ -1,0 +1,12 @@
+
+Linting "admin-ui"...
+[0m[0m
+[0m[4m/Users/jost.weyers/Documents/dev/queue-ti/admin-ui/src/app/messages/topic-config-section.ts[24m[0m
+[0m  [2m188:30[22m  [31merror[39m  Expected `!==` but received `!=`  [2m@angular-eslint/template/eqeqeq[22m[0m
+[0m  [2m195:30[22m  [31merror[39m  Expected `!==` but received `!=`  [2m@angular-eslint/template/eqeqeq[22m[0m
+[0m  [2m202:30[22m  [31merror[39m  Expected `!==` but received `!=`  [2m@angular-eslint/template/eqeqeq[22m[0m
+[0m[0m
+[0m[31m[1m✖ 3 problems (3 errors, 0 warnings)[22m[39m[0m
+[0m[31m[1m[22m[39m[0m
+✖ 3 problems (3 errors, 0 warnings)
+

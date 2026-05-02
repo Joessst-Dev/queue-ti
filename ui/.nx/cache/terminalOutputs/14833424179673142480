@@ -1,0 +1,25 @@
+[33m❯[39m Building...
+[32m✔[39m Building...
+[37mApplication bundle generation failed. [3.444 seconds] - 2026-04-24T22:02:55.730Z
+[39m
+[1m[31m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mCould not resolve "./nx-welcome"[0m
+
+    src/app/app.spec.ts:3:26:
+[37m      3 │ import { NxWelcome } from [32m'./nx-welcome'[37m;
+        ╵                           [32m~~~~~~~~~~~~~~[0m
+
+
+[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mTS2307: Cannot find module './nx-welcome' or its corresponding type declarations.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/app.spec.ts:3:26:
+[37m      3 │ import { NxWelcome } from [32m'./nx-welcome'[37m;
+        ╵                           [32m~~~~~~~~~~~~~~[0m
+
+
+[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mTS2591: Cannot find name 'require'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/login/login.spec.ts:119:15:
+[37m      119 │           new ([32mrequire[37m('rxjs').Observable)((observer: { next: (v:...
+          ╵                [32m~~~~~~~[0m
+
+[39m[22m

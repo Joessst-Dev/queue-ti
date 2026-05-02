@@ -1,0 +1,34 @@
+[33m❯[39m Building...
+[32m✔[39m Building...
+[37m[1mInitial chunk files[22m                      [2m | [22m[1mNames[22m                                 [2m | [22m [1mRaw size[22m
+[32mchunk-HE2ONEIX.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m37.55 kB[37m[2m | [22m
+[32mspec-app-messages-messages.js[37m            [2m | [22m[2mspec-app-messages-messages[22m            [2m | [22m [36m21.48 kB[37m[2m | [22m
+[32mstyles.css[37m                               [2m | [22m[2mstyles[22m                                [2m | [22m [36m20.61 kB[37m[2m | [22m
+[32mchunk-7QPEEQZ2.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m [36m18.62 kB[37m[2m | [22m
+[32mspec-app-login-login.js[37m                  [2m | [22m[2mspec-app-login-login[22m                  [2m | [22m [36m15.94 kB[37m[2m | [22m
+[32mspec-app-services-auth.service.js[37m        [2m | [22m[2mspec-app-services-auth.service[22m        [2m | [22m  [36m6.61 kB[37m[2m | [22m
+[32mspec-app-services-queue.service.js[37m       [2m | [22m[2mspec-app-services-queue.service[22m       [2m | [22m  [36m5.02 kB[37m[2m | [22m
+[32mspec-app-guards-auth.guard.js[37m            [2m | [22m[2mspec-app-guards-auth.guard[22m            [2m | [22m  [36m4.82 kB[37m[2m | [22m
+[32mspec-app-interceptors-auth.interceptor.js[37m[2m | [22m[2mspec-app-interceptors-auth.interceptor[22m[2m | [22m  [36m4.72 kB[37m[2m | [22m
+[32mchunk-SHTMZ5XJ.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m4.57 kB[37m[2m | [22m
+[32mspec-app-messages-messages-table.js[37m      [2m | [22m[2mspec-app-messages-messages-table[22m      [2m | [22m  [36m4.40 kB[37m[2m | [22m
+[32mspec-app-messages-enqueue-section.js[37m     [2m | [22m[2mspec-app-messages-enqueue-section[22m     [2m | [22m  [36m3.22 kB[37m[2m | [22m
+[32mchunk-4[39m[37mSJF2O52.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m2.24 kB[37m[2m | [22m
+[32mspec-app-app.js[37m                          [2m | [22m[2mspec-app-app[22m                          [2m | [22m  [36m1.76 kB[37m[2m | [22m
+[32mchunk-XB5CNLKF.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m1.30 kB[37m[2m | [22m
+[32minit-testbed.js[37m                          [2m | [22m[2minit-testbed[22m                          [2m | [22m  [36m1.21 kB[37m[2m | [22m
+[32mvitest-mock-patch.js[37m                     [2m | [22m[2mvitest-mock-patch[22m                     [2m | [22m[36m969 bytes[37m[2m | [22m
+
+[1m [22m                                        [2m | [22m[1mInitial total[22m                         [2m | [22m[1m155.05 kB[22m
+
+Application bundle generation complete. [1.519 seconds] - 2026-04-26T19:43:23.957Z
+[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.4 [39m[90m/Users/jost.weyers/Documents/dev/queue-ti/admin-ui[39m
+
+
+[2m Test Files [22m [1m[32m9 passed[39m[22m[90m (9)[39m
+[2m      Tests [22m [1m[32m69 passed[39m[22m[90m (69)[39m
+[2m   Start at [22m 21:43:25
+[2m   Duration [22m 5.86s[2m (transform 972ms, setup 4.95s, import 1.62s, tests 587ms, environment 41.92s)[22m
+

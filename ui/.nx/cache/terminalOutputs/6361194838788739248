@@ -1,0 +1,76 @@
+[33m❯[39m Building...
+[32m✔[39m Building...
+[37m[1mInitial chunk files[22m                      [2m | [22m[1mNames[22m                                 [2m | [22m [1mRaw size[22m
+[32mspec-app-messages-messages.js[37m            [2m | [22m[2mspec-app-messages-messages[22m            [2m | [22m [36m47.90 kB[37m[2m | [22m
+[32mstyles.css[37m                               [2m | [22m[2mstyles[22m                                [2m | [22m [36m19.92 kB[37m[2m | [22m
+[32mspec-app-login-login.js[37m                  [2m | [22m[2mspec-app-login-login[22m                  [2m | [22m [36m16.05 kB[37m[2m | [22m
+[32mspec-app-services-auth.service.js[37m        [2m | [22m[2mspec-app-services-auth.service[22m        [2m | [22m  [36m6.61 kB[37m[2m | [22m
+[32mspec-app-guards-auth.guard.js[37m            [2m | [22m[2mspec-app-guards-auth.guard[22m            [2m | [22m  [36m4.82 kB[37m[2m | [22m
+[32mspec-app-interceptors-auth.interceptor.js[37m[2m | [22m[2mspec-app-interceptors-auth.interceptor[22m[2m | [22m  [36m4.75 kB[37m[2m | [22m
+[32mchunk-SHTMZ5XJ.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m4.57 kB[37m[2m | [22m
+[32mspec-app-services-queue.service.js[37m       [2m | [22m[2mspec-app-services-queue.service[22m       [2m | [22m  [36m3.19 kB[37m[2m | [22m
+[32mchunk-IAZJZWM6.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m2.24 kB[37m[2m | [22m
+[32mspec-app-app.js[37m                          [2m | [22m[2mspec-app-app[22m                          [2m | [22m  [36m1.76 kB[37m[2m | [22m
+[32minit-testbed.js[37m                          [2m | [22m[2minit-testbed[22m                          [2m | [22m  [36m1.21 kB[37m[2m | [22m
+[32mchunk-PJ4VUSSV.js[37m                        [2m | [22m[2m-[22m                                     [2m | [22m  [36m1.03 kB[37m[2m | [22m
+[32mvitest-[39m[37mmock-patch.js[37m                     [2m | [22m[2mvitest-mock-patch[22m                     [2m | [22m[36m969 bytes[37m[2m | [22m
+
+[1m [22m                                        [2m | [22m[1mInitial total[22m                         [2m | [22m[1m115.01 kB[22m
+
+Application bundle generation complete. [1.495 seconds] - 2026-04-24T22:04:44.936Z
+[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.4 [39m[90m/Users/jost.weyers/Documents/dev/queue-ti/admin-ui[39m
+
+ [31m❯[39m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts [2m([22m[2m12 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 119[2mms[22m[39m
+[31m       [31m×[31m should push a new entry onto metadataRows signal[39m[32m 7[2mms[22m[39m
+[31m       [31m×[31m should remove the entry at the given index[39m[32m 5[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22maddMetadataRow()[2m > [22mshould push a new entry onto metadataRows signal
+[31m[1mError[22m: NG0203: The `Injector` token injection failed. `inject()` function must be called from an injection context such as a constructor, a factory function, a field initializer, or a function used with `runInInjectionContext`. Find more at https://v21.angular.dev/errors/NG0203[39m
+[90m [2m❯[22m injectInjectorOnly ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/src/di/injector_compatibility.ts:[2m99:10[22m[39m
+[90m [2m❯[22m resolveForwardRef ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/src/di/injector_compatibility.ts:[2m145:4[22m[39m
+[90m [2m❯[22m ɵɵinject ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/src/di/injector_compatibility.ts:[2m296:9[22m[39m
+[90m [2m❯[22m inject ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/forms/signals/src/api/structure.ts:[2m189:40[22m[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m555:65[22m[39m
+[90m [2m❯[22m updater ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/primitives/signals/src/signal.ts:[2m102:20[22m[39m
+[90m [2m❯[22m signalUpdateFn ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/primitives/signals/src/signal.ts:[2m71:48[22m[39m
+[90m [2m❯[22m _Messages.addMetadataRow src/app/messages/messages.ts:[2m555:23[22m[39m
+[36m [2m❯[22m src/app/messages/messages.spec.ts:[2m151:17[22m[39m
+    [90m149|[39m
+    [90m150|[39m       [34mexpect[39m(component[33m.[39m[34mmetadataRows[39m()[33m.[39mlength)[33m.[39m[34mtoBe[39m([34m0[39m)[33m;[39m
+    [90m151|[39m       component[33m.[39m[34maddMetadataRow[39m()[33m;[39m
+    [90m   |[39m                 [31m^[39m
+    [90m152|[39m       [34mexpect[39m(component[33m.[39m[34mmetadataRows[39m()[33m.[39mlength)[33m.[39m[34mtoBe[39m([34m1[39m)[33m;[39m
+    [90m153|[39m       component[33m.[39m[34maddMetadataRow[39m()[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[43m admin-ui [49m[39m src/app/messages/messages.spec.ts[2m > [22mMessages[2m > [22mremoveMetadataRow()[2m > [22mshould remove the entry at the given index
+[31m[1mError[22m: NG0203: The `Injector` token injection failed. `inject()` function must be called from an injection context such as a constructor, a factory function, a field initializer, or a function used with `runInInjectionContext`. Find more at https://v21.angular.dev/errors/NG0203[39m
+[90m [2m❯[22m injectInjectorOnly ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/src/di/injector_compatibility.ts:[2m99:10[22m[39m
+[90m [2m❯[22m resolveForwardRef ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/src/di/injector_compatibility.ts:[2m145:4[22m[39m
+[90m [2m❯[22m ɵɵinject ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/src/di/injector_compatibility.ts:[2m296:9[22m[39m
+[90m [2m❯[22m inject ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/forms/signals/src/api/structure.ts:[2m189:40[22m[39m
+[90m [2m❯[22m src/app/messages/messages.ts:[2m555:65[22m[39m
+[90m [2m❯[22m updater ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/primitives/signals/src/signal.ts:[2m102:20[22m[39m
+[90m [2m❯[22m signalUpdateFn ../darwin_arm64-fastbuild-ST-fdfa778d11ba/bin/packages/core/primitives/signals/src/signal.ts:[2m71:48[22m[39m
+[90m [2m❯[22m _Messages.addMetadataRow src/app/messages/messages.ts:[2m555:23[22m[39m
+[36m [2m❯[22m src/app/messages/messages.spec.ts:[2m163:17[22m[39m
+    [90m161|[39m       [35mconst[39m component [33m=[39m fixture[33m.[39mcomponentInstance[33m;[39m
+    [90m162|[39m
+    [90m163|[39m       component[33m.[39m[34maddMetadataRow[39m()[33m;[39m
+    [90m   |[39m                 [31m^[39m
+    [90m164|[39m       component[33m.[39m[34maddMetadataRow[39m()[33m;[39m
+    [90m165|[39m       [34mexpect[39m(component[33m.[39m[34mmetadataRows[39m()[33m.[39mlength)[33m.[39m[34mtoBe[39m([34m2[39m)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m6 passed[39m[22m[90m (7)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m54 passed[39m[22m[90m (56)[39m
+[2m   Start at [22m 00:04:45
+[2m   Duration [22m 1.61s[2m (transform 624ms, setup 1.74s, import 932ms, tests 309ms, environment 5.96s)[22m
+

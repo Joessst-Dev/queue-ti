@@ -1,0 +1,85 @@
+{
+  "configVersion": 1,
+  "timestamp": 1777447994963,
+  "index": "/index.html",
+  "assetGroups": [
+    {
+      "name": "shell",
+      "installMode": "prefetch",
+      "updateMode": "prefetch",
+      "cacheQueryOptions": {
+        "ignoreVary": true
+      },
+      "urls": [
+        "/chunk-23JLWHII.js",
+        "/chunk-45BKKYLY.js",
+        "/chunk-6BSSAU4L.js",
+        "/chunk-7DREVEMH.js",
+        "/chunk-A46NJ2ZL.js",
+        "/chunk-EAXDFTVW.js",
+        "/chunk-IOXLJUM4.js",
+        "/chunk-QJTOYCNW.js",
+        "/chunk-YGVBHN32.js",
+        "/favicon.ico",
+        "/index.html",
+        "/main-PI67OHSA.js",
+        "/styles-R7F6X4DU.css"
+      ],
+      "patterns": []
+    },
+    {
+      "name": "assets",
+      "installMode": "lazy",
+      "updateMode": "prefetch",
+      "cacheQueryOptions": {
+        "ignoreVary": true
+      },
+      "urls": [
+        "/icons/icon-192.svg",
+        "/icons/icon-512.svg",
+        "/icons/icon-maskable-192.svg",
+        "/manifest.webmanifest"
+      ],
+      "patterns": []
+    }
+  ],
+  "dataGroups": [],
+  "hashTable": {
+    "/chunk-23JLWHII.js": "9fdb9a7101330655b5e0e2594dd7a6a5c5758133",
+    "/chunk-45BKKYLY.js": "b97fe8a6b11242ae23d4d235677923538f00bdd2",
+    "/chunk-6BSSAU4L.js": "77d5ef9d2b334dc94cda2a7665eaa1d869a6df8f",
+    "/chunk-7DREVEMH.js": "98186b6caeed0415db388077c3e95eab08c11b0f",
+    "/chunk-A46NJ2ZL.js": "130b6fdb63733ba9a1289d0099e674ad524f2f30",
+    "/chunk-EAXDFTVW.js": "719c0573b9aa13f57cca7a0af723988ed7fd07ed",
+    "/chunk-IOXLJUM4.js": "1474c73d360289df4899fa1dba741d3c6c3a8ec0",
+    "/chunk-QJTOYCNW.js": "9fccca30e41ab4d652ca7d0f045e198f1ba3090c",
+    "/chunk-YGVBHN32.js": "45ad3c0bd68a06fd2f6abb9b963be6e4c1114e98",
+    "/favicon.ico": "6450f7edf9322a15e6e7c6bddcf988a809abd40b",
+    "/icons/icon-192.svg": "e231e7627835383fa54dfdefb6966aff0c692ede",
+    "/icons/icon-512.svg": "6a6746bc0a582e860ab1fa3a0b6900bcbb1581c5",
+    "/icons/icon-maskable-192.svg": "5710f4b0c7b5164831ae6ea71f594524577b62b2",
+    "/index.html": "8f0b138ac61b339fe85efa17750439f2bca05b51",
+    "/main-PI67OHSA.js": "f26e4bcda5076153d9853784ac8f795eb7f7dc07",
+    "/manifest.webmanifest": "466cd1d1a68e279d8785c59844f211e1de3f386e",
+    "/styles-R7F6X4DU.css": "8250b592cca2aa8570893ae170b55418b903dfa5"
+  },
+  "navigationUrls": [
+    {
+      "positive": true,
+      "regex": "^\\/.*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?[^/]*\\.[^/]*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?[^/]*__[^/]*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?[^/]*__[^/]*\\/.*$"
+    }
+  ],
+  "navigationRequestStrategy": "performance"
+}
