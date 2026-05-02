@@ -6,6 +6,7 @@
 queue-ti
 bin/
 loadtest
+server
 
 # Test
 *.test
