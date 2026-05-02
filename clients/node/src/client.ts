@@ -7,8 +7,8 @@ import { sleepUntilOrAbort } from './internal/sleep'
 import { Producer, ProducerStub } from './producer'
 import { Consumer, ConsumerStub } from './consumer'
 
-// Resolved relative to dist/ at runtime: dist/ → node/ → clients/ → repo root → proto/
-const PROTO_PATH = path.join(__dirname, '..', '..', '..', 'proto', 'queue.proto')
+// Proto is copied into dist/ by the build script so the package is self-contained.
+const PROTO_PATH = path.join(__dirname, 'queue.proto')
 
 const packageDef = protoLoader.loadSync(PROTO_PATH, {
   keepCase: false,
@@ -16,7 +16,7 @@ const packageDef = protoLoader.loadSync(PROTO_PATH, {
   enums: String,
   defaults: true,
   oneofs: true,
-  includeDirs: [path.join(__dirname, '..', '..', '..', 'proto')],
+  includeDirs: [__dirname],
 })
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -197,6 +197,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Run ESLint
+        run: npm run lint
+
   # ─────────────────────────────────────────────────────────────────────────────
   # Job 4: Docker image build (dry run)
   # Validates the multi-stage Dockerfile on every push and PR so regressions

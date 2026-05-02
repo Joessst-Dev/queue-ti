@@ -10,4 +10,3 @@ export type {
   ConsumerOptions,
   BatchOptions,
 } from './options'
-export { TokenStore, parseTokenExpiry } from './token-store'
