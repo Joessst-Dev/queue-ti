@@ -1,4 +1,4 @@
-.PHONY: proto proto-python deps test test-python run build bench bench-mem bench-queue bench-loadtest install-hooks up up-redis down build-nocache build-nocache-redis
+.PHONY: proto proto-python deps test test-python setup-python run build bench bench-mem bench-queue bench-loadtest install-hooks up up-redis down build-nocache build-nocache-redis
 
 proto:
 	protoc --go_out=backend/pb --go_opt=paths=source_relative \
@@ -26,8 +26,12 @@ install-hooks:
 test:
 	cd backend && ginkgo ./...
 
+setup-python:
+	python3 -m venv clients/python/.venv
+	clients/python/.venv/bin/pip install -e "clients/python[dev]"
+
 test-python:
-	cd clients/python && python3 -m pytest tests/ --tb=short -q
+	clients/python/.venv/bin/pytest clients/python/tests/ --tb=short -q
 
 build:
 	cd backend && go build -ldflags="-X main.version=$$(git describe --tags --always --dirty)" -o ../bin/queue-ti ./cmd/server

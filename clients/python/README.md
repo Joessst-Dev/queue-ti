@@ -524,9 +524,31 @@ thread.start()
 thread.join()
 ```
 
+## Development setup
+
+macOS and some Linux distributions ship an externally-managed Python that blocks
+`pip install` at the system level. Use a virtual environment:
+
+```bash
+# From the repo root — creates .venv and installs all dev dependencies
+make setup-python
+
+# Run the test suite
+make test-python
+```
+
+Or manually:
+
+```bash
+cd clients/python
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
 ## Testing
 
-The package includes test suites for both async and sync APIs:
+With the virtual environment active:
 
 ```bash
 # Run all tests
@@ -538,8 +560,8 @@ pytest tests/test_consumer.py
 # Run with verbose output
 pytest -v
 
-# Run with coverage
-pytest --cov=queueti
+# Run mypy
+mypy queueti/
 ```
 
 ## Logging
