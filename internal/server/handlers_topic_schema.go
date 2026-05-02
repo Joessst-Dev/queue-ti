@@ -54,7 +54,7 @@ func (s *HTTPServer) upsertTopicSchema(c *fiber.Ctx) error {
 		return jsonError(c, fiber.StatusBadRequest, "invalid request body")
 	}
 
-	ts, err := queue.UpsertTopicSchema(c.Context(), s.queueService.Pool(), topic, req.SchemaJSON)
+	ts, err := s.queueService.UpsertTopicSchemaAndNotify(c.Context(), topic, req.SchemaJSON)
 	if err != nil {
 		if errors.Is(err, queue.ErrInvalidSchema) {
 			return jsonError(c, fiber.StatusBadRequest, err.Error())
@@ -67,7 +67,7 @@ func (s *HTTPServer) upsertTopicSchema(c *fiber.Ctx) error {
 
 func (s *HTTPServer) deleteTopicSchema(c *fiber.Ctx) error {
 	topic := c.Params("topic")
-	if err := queue.DeleteTopicSchema(c.Context(), s.queueService.Pool(), topic); err != nil {
+	if err := s.queueService.DeleteTopicSchemaAndNotify(c.Context(), topic); err != nil {
 		slog.Error("delete topic schema failed", "topic", topic, "error", err)
 		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}

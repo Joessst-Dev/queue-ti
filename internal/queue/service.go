@@ -1,11 +1,15 @@
 package queue
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Joessst-Dev/queue-ti/internal/broadcast"
 )
 
 var (
@@ -60,6 +64,7 @@ type Service struct {
 	dlqThreshold             int
 	requireTopicRegistration bool
 	recorder                 MetricsRecorder
+	broadcaster              broadcast.Broadcaster
 
 	deleteReaperMu   sync.Mutex
 	deleteReaperStop func()
@@ -84,5 +89,35 @@ func NewService(pool *pgxpool.Pool, visibilityTimeout time.Duration, maxRetries 
 		dlqThreshold:             dlqThreshold,
 		requireTopicRegistration: requireTopicRegistration,
 		recorder:                 recorder,
+		broadcaster:              broadcast.Noop{},
+	}
+}
+
+// UseBroadcaster sets the broadcaster and immediately starts the channel
+// listeners in background goroutines. Call once at startup after NewService.
+func (s *Service) UseBroadcaster(ctx context.Context, b broadcast.Broadcaster) {
+	s.broadcaster = b
+	go s.listenChannel(ctx, broadcast.ChannelSchemaChanged, func(topic string) {
+		globalSchemaCache.m.Delete(topic)
+		slog.Info("schema cache invalidated via broadcast", "topic", topic)
+	})
+	go s.listenChannel(ctx, broadcast.ChannelConfigChanged, func(topic string) {
+		slog.Info("config change received via broadcast", "topic", topic)
+	})
+}
+
+func (s *Service) listenChannel(ctx context.Context, channel string, handle func(string)) {
+	ch, cancel := s.broadcaster.Subscribe(ctx, channel)
+	defer cancel()
+	for {
+		select {
+		case payload, ok := <-ch:
+			if !ok {
+				return
+			}
+			handle(payload)
+		case <-ctx.Done():
+			return
+		}
 	}
 }

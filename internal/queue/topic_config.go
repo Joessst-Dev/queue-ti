@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/Joessst-Dev/queue-ti/internal/broadcast"
 )
 
 // TopicConfig holds per-topic overrides. A nil pointer field means "use global default".
@@ -58,6 +61,9 @@ func (s *Service) UpsertTopicConfig(ctx context.Context, cfg TopicConfig) error 
 	if err != nil {
 		return fmt.Errorf("upsert topic config: %w", err)
 	}
+	if err := s.broadcaster.Publish(ctx, broadcast.ChannelConfigChanged, cfg.Topic); err != nil {
+		slog.Warn("broadcast config change failed", "topic", cfg.Topic, "error", err)
+	}
 	return nil
 }
 
@@ -71,6 +77,9 @@ func (s *Service) DeleteTopicConfig(ctx context.Context, topic string) error {
 	}
 	if _, err := s.pool.Exec(ctx, `DELETE FROM topic_throughput WHERE topic = $1`, topic); err != nil {
 		return fmt.Errorf("delete topic throughput: %w", err)
+	}
+	if err := s.broadcaster.Publish(ctx, broadcast.ChannelConfigChanged, topic); err != nil {
+		slog.Warn("broadcast config delete failed", "topic", topic, "error", err)
 	}
 	return nil
 }
