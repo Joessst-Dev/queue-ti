@@ -36,3 +36,9 @@ asyncio_mode = "auto"
 strict = true
 python_version = "3.11"
 ignore_missing_imports = true
+exclude = ["queueti/pb/"]
+
+[[tool.mypy.overrides]]
+# Generated protobuf code has no type annotations; treat all imports as Any.
+module = ["queueti.pb", "queueti.pb.*"]
+follow_imports = "skip"

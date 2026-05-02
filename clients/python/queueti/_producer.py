@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import grpc
+from typing import cast
 
 from queueti._exceptions import PublishError
 from queueti._options import PublishOptions
@@ -24,4 +25,4 @@ class AsyncProducer:
             resp: queue_pb2.EnqueueResponse = await self._stub.Enqueue(req)
         except grpc.RpcError as exc:
             raise PublishError(f"publish to '{topic}' failed: {exc}") from exc
-        return resp.id
+        return cast(str, resp.id)

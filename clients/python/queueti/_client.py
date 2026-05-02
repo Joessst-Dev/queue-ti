@@ -54,7 +54,7 @@ class AsyncClient:
                 await self._refresh_task
             except asyncio.CancelledError:
                 pass
-        await self._channel.close()
+        await self._channel.close(grace=None)
 
     async def _run_refresher(self, refresher: TokenRefresher, store: TokenStore) -> None:
         retry_backoff = _RETRY_BACKOFF_START

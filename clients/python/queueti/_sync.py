@@ -34,7 +34,7 @@ class _LoopThread(threading.Thread):
         self._ready.set()
         self._loop.run_forever()
 
-    def submit(self, coro: object) -> concurrent.futures.Future[T]:  # type: ignore[type-arg]
+    def submit(self, coro: object) -> concurrent.futures.Future[T]:
         return asyncio.run_coroutine_threadsafe(coro, self._loop)  # type: ignore[arg-type]
 
     def run_sync(self, coro: object) -> T:  # type: ignore[type-var]
@@ -151,5 +151,5 @@ def connect_sync(address: str, options: ConnectOptions | None = None) -> Client:
     loop = _LoopThread()
     loop.start()
     loop.wait_ready()
-    async_client = loop.run_sync(connect(address, options))
+    async_client: AsyncClient = loop.run_sync(connect(address, options))
     return Client(async_client, loop)
