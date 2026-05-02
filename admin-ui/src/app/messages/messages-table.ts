@@ -16,6 +16,9 @@ import {
   CdkFixedSizeVirtualScroll,
 } from '@angular/cdk/scrolling';
 import { QueueMessage } from '../services/queue.service';
+import { NackOverlay } from './nack-overlay';
+import { PurgeConfirmPanel } from './purge-confirm-panel';
+import { STATUS_CLASS_MAP, DEFAULT_STATUS_CLASS } from './status-classes';
 
 // py-4 top (16) + text-sm line-height (20) + py-4 bottom (16) + divide-y border (1) = 53
 const ITEM_SIZE = 53;
@@ -23,7 +26,7 @@ const ITEM_SIZE = 53;
 @Component({
   selector: 'app-messages-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormField, SlicePipe, DatePipe, CdkVirtualScrollViewport, CdkVirtualForOf, CdkFixedSizeVirtualScroll],
+  imports: [FormField, SlicePipe, DatePipe, CdkVirtualScrollViewport, CdkVirtualForOf, CdkFixedSizeVirtualScroll, NackOverlay, PurgeConfirmPanel],
   template: `
     <section class="bg-white shadow rounded-lg">
       <div
@@ -87,38 +90,13 @@ const ITEM_SIZE = 53;
       </div>
 
       @if (showPurgeConfirm()) {
-        <div class="px-6 py-3 border-b border-red-200 bg-red-50 space-y-2">
-          <p class="text-sm font-medium text-red-800">Purge messages from "{{ filterForm().value() }}"</p>
-          <div class="flex gap-3 text-sm">
-            @for (status of ['pending', 'processing', 'expired']; track status) {
-              <label class="flex items-center gap-1 cursor-pointer">
-                <input
-                  type="checkbox"
-                  [checked]="purgeStatuses().includes(status)"
-                  (change)="togglePurgeStatus(status)"
-                />
-                {{ status }}
-              </label>
-            }
-          </div>
-          <div class="flex gap-2">
-            <button
-              type="button"
-              [disabled]="purgeStatuses().length === 0"
-              (click)="confirmPurge()"
-              class="px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Confirm purge
-            </button>
-            <button
-              type="button"
-              (click)="showPurgeConfirm.set(false)"
-              class="px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 cursor-pointer"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        <app-purge-confirm-panel
+          [topic]="filterForm().value()"
+          [statuses]="purgeStatuses()"
+          (purgeConfirmed)="confirmPurge($event)"
+          (purgeCancelled)="showPurgeConfirm.set(false)"
+          (statusToggle)="togglePurgeStatus($event)"
+        />
       }
 
       @if (error()) {
@@ -292,32 +270,14 @@ const ITEM_SIZE = 53;
                       </button>
                     } @else if (msg.status === 'processing') {
                       @if (nackOpenId() === msg.id) {
-                        <div data-nack-overlay class="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white border border-gray-200 rounded shadow-md px-2 py-1 z-20">
-                          <input
-                            type="text"
-                            [value]="nackError()"
-                            (input)="nackError.set(inputValue($event))"
-                            placeholder="Reason…"
-                            class="px-1 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-red-400 w-28"
-                          />
-                          <button
-                            (click)="onNackConfirm(msg.id)"
-                            title="Confirm nack"
-                            class="px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer whitespace-nowrap"
-                          >
-                            ✓
-                          </button>
-                          <button
-                            (click)="nackOpenId.set(null); nackError.set('')"
-                            title="Cancel"
-                            class="px-1.5 py-0.5 text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
-                          >
-                            ✗
-                          </button>
-                        </div>
+                        <app-nack-overlay
+                          [messageId]="msg.id"
+                          (nackConfirmed)="onNackConfirm($event)"
+                          (nackCancelled)="nackOpenId.set(null)"
+                        />
                       } @else {
                         <button
-                          (click)="$event.stopPropagation(); nackOpenId.set(msg.id); nackError.set('')"
+                          (click)="$event.stopPropagation(); nackOpenId.set(msg.id)"
                           [attr.aria-label]="'Nack message ' + msg.id"
                           class="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 rounded hover:bg-red-200 cursor-pointer whitespace-nowrap"
                         >
@@ -381,7 +341,6 @@ export class MessagesTable {
   readonly scrollbarWidth = signal(0);
 
   readonly nackOpenId = signal<string | null>(null);
-  readonly nackError = signal('');
   readonly copiedId = signal<string | null>(null);
   readonly purgeStatuses = signal<string[]>(['pending', 'processing', 'expired']);
   readonly showPurgeConfirm = signal(false);
@@ -417,16 +376,10 @@ export class MessagesTable {
     return Object.entries(metadata).map(([k, v]) => `${k}=${v}`).join(', ');
   }
 
-  private readonly STATUS_CLASS_MAP: Record<string, string> = {
-    pending:    'bg-yellow-100 text-yellow-800',
-    processing: 'bg-blue-100 text-blue-800',
-    failed:     'bg-red-100 text-red-800',
-    expired:    'bg-orange-100 text-orange-800',
-  };
   private readonly STATUS_BASE = 'inline-flex px-2 py-0.5 text-xs font-medium rounded-full';
 
   statusClasses(status: string): string {
-    return `${this.STATUS_BASE} ${this.STATUS_CLASS_MAP[status] ?? 'bg-gray-100 text-gray-800'}`;
+    return `${this.STATUS_BASE} ${STATUS_CLASS_MAP[status] ?? DEFAULT_STATUS_CLASS}`;
   }
 
   isDlq(msg: QueueMessage): boolean {
@@ -452,14 +405,12 @@ export class MessagesTable {
     if (this.nackOpenId() === null) return;
     if (!(event.target as Element).closest('[data-nack-overlay]')) {
       this.nackOpenId.set(null);
-      this.nackError.set('');
     }
   }
 
-  onNackConfirm(id: string): void {
-    this.nackConfirm.emit({ id, error: this.nackError() });
+  onNackConfirm({ id, error }: { id: string; error: string }): void {
+    this.nackConfirm.emit({ id, error });
     this.nackOpenId.set(null);
-    this.nackError.set('');
   }
 
   copyId(id: string): void {
@@ -482,9 +433,8 @@ export class MessagesTable {
     );
   }
 
-  confirmPurge(): void {
-    const topic = this.filterForm().value() ?? '';
-    this.purge.emit({ topic, statuses: this.purgeStatuses() });
+  confirmPurge(event: { topic: string; statuses: string[] }): void {
+    this.purge.emit(event);
     this.showPurgeConfirm.set(false);
   }
 
