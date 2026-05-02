@@ -51,6 +51,7 @@ queue-ti is designed for teams who want reliable, observable message processing 
 - [Development Workflow](#development-workflow)
 - [Project Structure](#project-structure)
 - [Deployment](#deployment)
+- [Internal Event Broadcasting](#internal-event-broadcasting)
 - [Release Management](#release-management)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
@@ -455,6 +456,60 @@ In production with multiple backend replicas behind a load balancer:
 2. **Set Redis credentials** via `QUEUETI_REDIS_PASSWORD` and optionally `QUEUETI_REDIS_TLS_ENABLED`
 3. **Deploy replicas** — each instance connects to the same Redis and shares rate-limit state
 4. **Security note**: Bind your Redis instance to a private network or use authentication and TLS (`QUEUETI_REDIS_TLS_ENABLED=true`) in production
+
+## Internal Event Broadcasting
+
+queue-ti uses an internal event broadcast system to maintain cache coherence across multiple backend instances. When a topic schema or configuration is mutated via the HTTP API, a notification is published so all running instances can invalidate their in-memory caches, preventing stale data from being served.
+
+### Broadcast Channels
+
+| Channel | Trigger | Effect |
+|---------|---------|--------|
+| `queue_ti_schema_changed` | Topic Avro schema is created, updated, or deleted via `PUT /api/topic-schemas/:topic` or `DELETE /api/topic-schemas/:topic` | All instances delete the topic from `globalSchemaCache`, forcing the next enqueue to re-fetch from the database |
+| `queue_ti_config_changed` | Topic configuration is created, updated, or deleted via `PUT /api/topic-configs/:topic` or `DELETE /api/topic-configs/:topic` | Currently logged for observability; reserved for future in-memory config cache invalidation |
+
+### Implementation
+
+The broadcaster system is pluggable via the `Broadcaster` interface in `internal/broadcast/`:
+
+- **PostgreSQL implementation** (`broadcast.NewPG(pool)`) — Uses `LISTEN`/`NOTIFY` on a dedicated database connection. Messages are published with `pg_notify(channel, payload)` and subscribers receive them via a channel-based listener.
+- **Noop implementation** (`broadcast.Noop`) — Default, used for single-instance deployments. Satisfies the interface but publishes nothing.
+- **Future Redis implementation** — When Redis support is added, a Redis pub/sub implementation will replace the PostgreSQL broadcaster, maintaining the same `Broadcaster` interface.
+
+### Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant A as Instance A
+    participant DB as PostgreSQL
+    participant B as Instance B
+    participant C as Instance C
+    
+    A->>DB: PATCH /api/topic-schemas/orders
+    activate DB
+    DB->>DB: Upsert Avro schema to topic_schemas table
+    DB-->>A: 200 OK
+    deactivate DB
+    
+    A->>A: Publish notification
+    A->>DB: SELECT pg_notify('queue_ti_schema_changed', 'orders')
+    DB->>B: Deliver notification
+    DB->>C: Deliver notification
+    
+    B->>B: Receive 'orders' on channel<br/>Delete orders from globalSchemaCache
+    C->>C: Receive 'orders' on channel<br/>Delete orders from globalSchemaCache
+```
+
+### Startup
+
+At server startup, the queue service registers the broadcaster and starts background listeners:
+
+```go
+broadcaster := broadcast.NewPG(pool)
+queueService.UseBroadcaster(ctx, broadcaster)
+```
+
+This call sets the broadcaster instance and immediately starts two background goroutines listening on `queue_ti_schema_changed` and `queue_ti_config_changed`. Listeners exit cleanly when `ctx` is cancelled (during graceful shutdown).
 
 ## Authentication & User Management
 
