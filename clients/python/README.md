@@ -19,11 +19,11 @@ pip install queue-ti-client
 
 ```python
 import asyncio
-from queueti import connect
+from queueti import connect, ConnectOptions
 
 async def main():
     # Connect to the server
-    client = await connect("localhost:50051")
+    client = await connect("localhost:50051", options=ConnectOptions(insecure=True))
     producer = client.producer()
     
     # Publish a message
@@ -42,10 +42,10 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from queueti import connect, ConsumerOptions
+from queueti import connect, ConnectOptions, ConsumerOptions
 
 async def main():
-    client = await connect("localhost:50051")
+    client = await connect("localhost:50051", options=ConnectOptions(insecure=True))
     
     # Consume messages (blocks until cancelled)
     consumer = client.consumer(
@@ -65,9 +65,9 @@ asyncio.run(main())
 ### Sync Producer
 
 ```python
-from queueti import connect_sync
+from queueti import connect_sync, ConnectOptions
 
-client = connect_sync("localhost:50051")
+client = connect_sync("localhost:50051", options=ConnectOptions(insecure=True))
 producer = client.producer()
 
 msg_id = producer.publish(
@@ -82,9 +82,9 @@ client.close()
 ### Sync Consumer
 
 ```python
-from queueti import connect_sync, ConsumerOptions
+from queueti import connect_sync, ConnectOptions, ConsumerOptions
 
-client = connect_sync("localhost:50051")
+client = connect_sync("localhost:50051", options=ConnectOptions(insecure=True))
 
 consumer = client.consumer(
     topic="orders",
@@ -425,7 +425,7 @@ except NackError as e:
 
 ```python
 import asyncio
-from queueti import connect, ConsumerOptions, Message
+from queueti import connect, ConnectOptions, ConsumerOptions, Message
 
 async def consume_with_backoff():
     client = await connect(
@@ -463,7 +463,7 @@ asyncio.run(consume_with_backoff())
 ```python
 import asyncio
 import json
-from queueti import connect, BatchOptions, Message
+from queueti import connect, ConnectOptions, BatchOptions, Message
 
 async def batch_processor():
     client = await connect("localhost:50051", options=ConnectOptions(insecure=True))
@@ -503,7 +503,7 @@ asyncio.run(batch_processor())
 ```python
 import threading
 import json
-from queueti import connect_sync, SyncMessage
+from queueti import connect_sync, ConnectOptions, SyncMessage
 
 def worker():
     client = connect_sync("localhost:50051", options=ConnectOptions(insecure=True))

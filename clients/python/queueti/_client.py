@@ -63,8 +63,6 @@ class AsyncClient:
             try:
                 secs = seconds_until_expiry(store.get())
                 sleep_secs = max(secs, 0.0)
-                if sleep_secs > 0:
-                    retry_backoff = _RETRY_BACKOFF_START
             except ValueError:
                 logger.error("queue-ti: token refresher: cannot parse token expiry")
                 sleep_secs = retry_backoff
@@ -107,27 +105,18 @@ async def connect(address: str, options: ConnectOptions | None = None) -> AsyncC
     if options and options.token:
         store = TokenStore(options.token)
 
-    if options and options.insecure:
-        channel_creds = None
-    else:
-        channel_creds = grpc.ssl_channel_credentials()
+    insecure = options is not None and options.insecure
 
     if store is not None:
-        token_creds = grpc.metadata_call_credentials(
-            _BearerPlugin(store)
+        base_creds = grpc.local_channel_credentials() if insecure else grpc.ssl_channel_credentials()
+        token_creds = grpc.metadata_call_credentials(_BearerPlugin(store))
+        channel = grpc.aio.secure_channel(
+            address, grpc.composite_channel_credentials(base_creds, token_creds)
         )
-        if channel_creds is None:
-            # insecure + token: combine with local channel credentials
-            composite = grpc.composite_channel_credentials(
-                grpc.local_channel_credentials(), token_creds
-            )
-        else:
-            composite = grpc.composite_channel_credentials(channel_creds, token_creds)
-        channel = grpc.aio.secure_channel(address, composite)
-    elif options and options.insecure:
+    elif insecure:
         channel = grpc.aio.insecure_channel(address)
     else:
-        channel = grpc.aio.secure_channel(address, channel_creds)
+        channel = grpc.aio.secure_channel(address, grpc.ssl_channel_credentials())
 
     stub = queue_pb2_grpc.QueueServiceStub(channel)
     return AsyncClient(channel, stub, store, options)

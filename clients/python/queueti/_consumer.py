@@ -84,7 +84,7 @@ class AsyncConsumer:
         handler: MessageHandler,
     ) -> bool:
         sem = asyncio.Semaphore(self._concurrency)
-        tasks: list[asyncio.Task[None]] = []
+        tasks: set[asyncio.Task[None]] = set()
 
         async def dispatch(raw: queue_pb2.SubscribeResponse) -> None:
             msg = self._build_message(raw)
@@ -92,14 +92,13 @@ class AsyncConsumer:
 
         def _on_done(t: asyncio.Task[None], _sem: asyncio.Semaphore = sem) -> None:
             _sem.release()
-            if t in tasks:
-                tasks.remove(t)
+            tasks.discard(t)
 
         try:
             async for raw in stream:
                 await sem.acquire()
                 task = asyncio.create_task(dispatch(raw))
-                tasks.append(task)
+                tasks.add(task)
                 task.add_done_callback(_on_done)
         except asyncio.CancelledError:
             current = asyncio.current_task()

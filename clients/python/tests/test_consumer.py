@@ -63,6 +63,20 @@ def _make_consumer(stub: MagicMock, options: ConsumerOptions | None = None) -> A
 # lets us verify per-message behaviour with finite streams.
 
 
+class TestConsumerOptions:
+    def test_concurrency_zero_raises(self) -> None:
+        with pytest.raises(ValueError, match="concurrency"):
+            ConsumerOptions(concurrency=0)
+
+    def test_concurrency_negative_raises(self) -> None:
+        with pytest.raises(ValueError, match="concurrency"):
+            ConsumerOptions(concurrency=-1)
+
+    def test_concurrency_one_is_valid(self) -> None:
+        opts = ConsumerOptions(concurrency=1)
+        assert opts.concurrency == 1
+
+
 class TestDrainStream:
     @pytest.mark.asyncio
     async def test_handler_called_for_each_message(self) -> None:
