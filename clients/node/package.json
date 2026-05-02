@@ -4,6 +4,10 @@
   "description": "Node.js client for the queue-ti message queue service",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && cp ../../proto/queue.proto dist/queue.proto",
     "test": "vitest run",
