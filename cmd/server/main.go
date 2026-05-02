@@ -101,6 +101,7 @@ func main() {
 	rec := metrics.New(pool, reg)
 
 	broadcaster := broadcast.NewPG(pool)
+	defer broadcaster.Close()
 
 	queueService := queue.NewService(pool, cfg.Queue.VisibilityTimeout, cfg.Queue.MaxRetries, cfg.Queue.MessageTTL, cfg.Queue.DLQThreshold, cfg.Queue.RequireTopicRegistration, rec)
 	queueService.UseBroadcaster(ctx, broadcaster)

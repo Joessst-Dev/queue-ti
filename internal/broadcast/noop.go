@@ -8,11 +8,11 @@ func (Noop) Publish(_ context.Context, _, _ string) error {
 	return nil
 }
 
-func (Noop) Subscribe(_ context.Context, _ string) (<-chan string, context.CancelFunc) {
+func (Noop) Subscribe(ctx context.Context, _ string) (<-chan string, context.CancelFunc) {
 	ch := make(chan string)
-	ctx, cancel := context.WithCancel(context.Background())
+	subCtx, cancel := context.WithCancel(ctx)
 	go func() {
-		<-ctx.Done()
+		<-subCtx.Done()
 		close(ch)
 	}()
 	return ch, cancel

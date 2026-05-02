@@ -485,7 +485,7 @@ sequenceDiagram
     participant B as Instance B
     participant C as Instance C
     
-    A->>DB: PATCH /api/topic-schemas/orders
+    A->>DB: PUT /api/topic-schemas/orders
     activate DB
     DB->>DB: Upsert Avro schema to topic_schemas table
     DB-->>A: 200 OK
