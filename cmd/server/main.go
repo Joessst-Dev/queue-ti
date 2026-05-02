@@ -103,8 +103,7 @@ func main() {
 	broadcaster := broadcast.NewPG(pool)
 
 	queueService := queue.NewService(pool, cfg.Queue.VisibilityTimeout, cfg.Queue.MaxRetries, cfg.Queue.MessageTTL, cfg.Queue.DLQThreshold, cfg.Queue.RequireTopicRegistration, rec)
-	queueService.SetBroadcaster(broadcaster)
-	queueService.StartBroadcastListener(ctx)
+	queueService.UseBroadcaster(ctx, broadcaster)
 	queueService.StartExpiryReaper(ctx, time.Minute)
 
 	reaperSchedule := cfg.Queue.DeleteReaperSchedule

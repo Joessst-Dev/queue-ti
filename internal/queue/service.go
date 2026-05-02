@@ -93,42 +93,29 @@ func NewService(pool *pgxpool.Pool, visibilityTimeout time.Duration, maxRetries 
 	}
 }
 
-func (s *Service) SetBroadcaster(b broadcast.Broadcaster) {
+// UseBroadcaster sets the broadcaster and immediately starts the channel
+// listeners in background goroutines. Call once at startup after NewService.
+func (s *Service) UseBroadcaster(ctx context.Context, b broadcast.Broadcaster) {
 	s.broadcaster = b
+	go s.listenChannel(ctx, broadcast.ChannelSchemaChanged, func(topic string) {
+		globalSchemaCache.m.Delete(topic)
+		slog.Info("schema cache invalidated via broadcast", "topic", topic)
+	})
+	go s.listenChannel(ctx, broadcast.ChannelConfigChanged, func(topic string) {
+		slog.Info("config change received via broadcast", "topic", topic)
+	})
 }
 
-func (s *Service) StartBroadcastListener(ctx context.Context) {
-	go s.listenSchemaChanges(ctx)
-	go s.listenConfigChanges(ctx)
-}
-
-func (s *Service) listenSchemaChanges(ctx context.Context) {
-	ch, cancel := s.broadcaster.Subscribe(ctx, broadcast.ChannelSchemaChanged)
+func (s *Service) listenChannel(ctx context.Context, channel string, handle func(string)) {
+	ch, cancel := s.broadcaster.Subscribe(ctx, channel)
 	defer cancel()
 	for {
 		select {
-		case topic, ok := <-ch:
+		case payload, ok := <-ch:
 			if !ok {
 				return
 			}
-			globalSchemaCache.m.Delete(topic)
-			slog.Info("schema cache invalidated via broadcast", "topic", topic)
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func (s *Service) listenConfigChanges(ctx context.Context) {
-	ch, cancel := s.broadcaster.Subscribe(ctx, broadcast.ChannelConfigChanged)
-	defer cancel()
-	for {
-		select {
-		case topic, ok := <-ch:
-			if !ok {
-				return
-			}
-			slog.Info("config change received via broadcast", "topic", topic)
+			handle(payload)
 		case <-ctx.Done():
 			return
 		}
