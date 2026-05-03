@@ -31,6 +31,7 @@ const makeUserService = (opts: {
   listGrantsResult?: Grant[] | 'error';
   addGrantResult?: Grant | 'error';
   deleteGrantResult?: 'ok' | 'error';
+  addConsumerGroupGrantResult?: Grant | 'error';
 } = {}) => {
   const {
     listResult = [],
@@ -40,6 +41,7 @@ const makeUserService = (opts: {
     listGrantsResult = [],
     addGrantResult = makeGrant(),
     deleteGrantResult = 'ok',
+    addConsumerGroupGrantResult = makeGrant({ action: 'consume', consumer_group: 'default' }),
   } = opts;
 
   return {
@@ -78,6 +80,11 @@ const makeUserService = (opts: {
         ? throwError(() => ({ error: { error: 'Failed to delete grant' } }))
         : of(undefined),
     ),
+    addConsumerGroupGrant: vi.fn().mockReturnValue(
+      addConsumerGroupGrantResult === 'error'
+        ? throwError(() => ({ error: { error: 'Failed to add consumer group grant' } }))
+        : of(addConsumerGroupGrantResult as Grant),
+    ),
   } as unknown as UserService;
 };
 
@@ -90,6 +97,7 @@ const setup = async (opts: {
   listGrantsResult?: Grant[] | 'error';
   addGrantResult?: Grant | 'error';
   deleteGrantResult?: 'ok' | 'error';
+  addConsumerGroupGrantResult?: Grant | 'error';
 } = {}) => {
   const {
     users = [],
@@ -100,6 +108,7 @@ const setup = async (opts: {
     listGrantsResult,
     addGrantResult,
     deleteGrantResult,
+    addConsumerGroupGrantResult,
   } = opts;
 
   const userService = makeUserService({
@@ -110,6 +119,7 @@ const setup = async (opts: {
     listGrantsResult: listGrantsResult ?? [],
     addGrantResult: addGrantResult ?? makeGrant(),
     deleteGrantResult: deleteGrantResult ?? 'ok',
+    addConsumerGroupGrantResult: addConsumerGroupGrantResult ?? makeGrant({ action: 'consume', consumer_group: 'default' }),
   });
 
   await TestBed.configureTestingModule({
@@ -443,6 +453,164 @@ describe('UsersSection', () => {
       expect(userService.deleteGrant).toHaveBeenCalledWith('u1', 'g1');
       expect(component.grants()['u1']).toHaveLength(1);
       expect(component.grants()['u1'][0].id).toBe('g2');
+    });
+  });
+
+  describe('grants table Consumer Group column', () => {
+    it('should render the Consumer Group column header', async () => {
+      const user = makeUser({ id: 'u1', username: 'alice' });
+      const { fixture, el } = await setup({ users: [user] });
+
+      const grantsBtn = el.querySelector(`button[aria-label="Toggle grants for alice"]`) as HTMLButtonElement;
+      grantsBtn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const headers = Array.from(el.querySelectorAll('th')).map((th) => th.textContent?.trim());
+      expect(headers).toContain('Consumer Group');
+    });
+
+    it('should render — for grants without a consumer_group', async () => {
+      const user = makeUser({ id: 'u1', username: 'alice' });
+      const grants = [makeGrant({ id: 'g1', user_id: 'u1', action: 'read', topic_pattern: '*' })];
+      const { fixture, el } = await setup({ users: [user], listGrantsResult: grants });
+
+      const grantsBtn = el.querySelector(`button[aria-label="Toggle grants for alice"]`) as HTMLButtonElement;
+      grantsBtn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const rows = el.querySelectorAll('tbody tr');
+      // first data row (not the add-grant form row)
+      const firstRow = rows[0];
+      const cells = firstRow.querySelectorAll('td');
+      expect(cells[2].textContent?.trim()).toBe('—');
+    });
+
+    it('should render the consumer_group value for consume grants', async () => {
+      const user = makeUser({ id: 'u1', username: 'alice' });
+      const grants = [
+        makeGrant({
+          id: 'g1',
+          user_id: 'u1',
+          action: 'consume',
+          topic_pattern: 'orders.*',
+          consumer_group: 'my-group',
+        }),
+      ];
+      const { fixture, el } = await setup({ users: [user], listGrantsResult: grants });
+
+      const grantsBtn = el.querySelector(`button[aria-label="Toggle grants for alice"]`) as HTMLButtonElement;
+      grantsBtn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const firstRow = el.querySelectorAll('tbody tr')[0];
+      const cells = firstRow.querySelectorAll('td');
+      expect(cells[2].textContent?.trim()).toBe('my-group');
+    });
+  });
+
+  describe('when adding a consumer group grant', () => {
+    it('should call addConsumerGroupGrant() with the entered values', async () => {
+      const user = makeUser({ id: 'u1', username: 'alice' });
+      const newGrant = makeGrant({
+        id: 'g-cg',
+        user_id: 'u1',
+        action: 'consume',
+        topic_pattern: 'orders.*',
+        consumer_group: 'workers',
+      });
+      const { fixture, el, component, userService } = await setup({
+        users: [user],
+        listGrantsResult: [],
+        addConsumerGroupGrantResult: newGrant,
+      });
+
+      const grantsBtn = el.querySelector(`button[aria-label="Toggle grants for alice"]`) as HTMLButtonElement;
+      grantsBtn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      component.newCgPattern.set('orders.*');
+      component.newCgGroup.set('workers');
+      fixture.detectChanges();
+
+      const addBtn = el.querySelector(`button[aria-label="Add consumer group grant for alice"]`) as HTMLButtonElement;
+      addBtn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(userService.addConsumerGroupGrant).toHaveBeenCalledWith('u1', 'orders.*', 'workers');
+      expect(component.grants()['u1']).toHaveLength(1);
+      expect(component.grants()['u1'][0].consumer_group).toBe('workers');
+    });
+
+    it('should reset the form fields after a successful submission', async () => {
+      const user = makeUser({ id: 'u1', username: 'alice' });
+      const { fixture, el, component } = await setup({ users: [user], listGrantsResult: [] });
+
+      const grantsBtn = el.querySelector(`button[aria-label="Toggle grants for alice"]`) as HTMLButtonElement;
+      grantsBtn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      component.newCgPattern.set('events.*');
+      component.newCgGroup.set('my-group');
+
+      const addBtn = el.querySelector(`button[aria-label="Add consumer group grant for alice"]`) as HTMLButtonElement;
+      addBtn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(component.newCgPattern()).toBe('*');
+      expect(component.newCgGroup()).toBe('');
+    });
+
+    it('should show an error banner when consumer group is empty', async () => {
+      const user = makeUser({ id: 'u1', username: 'alice' });
+      const { fixture, el, component } = await setup({ users: [user], listGrantsResult: [] });
+
+      const grantsBtn = el.querySelector(`button[aria-label="Toggle grants for alice"]`) as HTMLButtonElement;
+      grantsBtn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      component.newCgGroup.set('');
+      fixture.detectChanges();
+
+      const addBtn = el.querySelector(`button[aria-label="Add consumer group grant for alice"]`) as HTMLButtonElement;
+      addBtn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(component.grantsError('u1')).toBe('Consumer group is required');
+      expect(el.textContent).toContain('Consumer group is required');
+    });
+
+    it('should show an error banner when the request fails', async () => {
+      const user = makeUser({ id: 'u1', username: 'alice' });
+      const { fixture, el, component } = await setup({
+        users: [user],
+        listGrantsResult: [],
+        addConsumerGroupGrantResult: 'error',
+      });
+
+      const grantsBtn = el.querySelector(`button[aria-label="Toggle grants for alice"]`) as HTMLButtonElement;
+      grantsBtn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      component.newCgGroup.set('workers');
+      fixture.detectChanges();
+
+      const addBtn = el.querySelector(`button[aria-label="Add consumer group grant for alice"]`) as HTMLButtonElement;
+      addBtn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(component.grantsError('u1')).toBe('Failed to add consumer group grant');
+      expect(el.textContent).toContain('Failed to add consumer group grant');
     });
   });
 });

@@ -156,4 +156,45 @@ describe('UserService', () => {
 
     expect(completed).toBe(true);
   });
+
+  describe('addConsumerGroupGrant()', () => {
+    it('should POST to /api/users/:id/consumer-group-grants with topic_pattern and consumer_group', () => {
+      const created = makeGrant({
+        id: 'g-cg',
+        action: 'consume',
+        topic_pattern: 'orders.*',
+        consumer_group: 'my-group',
+      });
+      let result: Grant | undefined;
+
+      service.addConsumerGroupGrant('u1', 'orders.*', 'my-group').subscribe((v) => (result = v));
+
+      const httpReq = httpController.expectOne('/api/users/u1/consumer-group-grants');
+      expect(httpReq.request.method).toBe('POST');
+      expect(httpReq.request.body).toEqual({
+        topic_pattern: 'orders.*',
+        consumer_group: 'my-group',
+      });
+      httpReq.flush(created);
+
+      expect(result).toEqual(created);
+    });
+
+    it('should return the created grant including consumer_group field', () => {
+      const created = makeGrant({
+        id: 'g-cg2',
+        action: 'consume',
+        topic_pattern: '*',
+        consumer_group: 'workers',
+      });
+      let result: Grant | undefined;
+
+      service.addConsumerGroupGrant('u2', '*', 'workers').subscribe((v) => (result = v));
+
+      httpController.expectOne('/api/users/u2/consumer-group-grants').flush(created);
+
+      expect(result?.consumer_group).toBe('workers');
+      expect(result?.action).toBe('consume');
+    });
+  });
 });
