@@ -49,7 +49,7 @@ func (s *HTTPServer) registerConsumerGroup(c *fiber.Ctx) error {
 		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 
-	return c.SendStatus(fiber.StatusCreated)
+	return c.Status(fiber.StatusCreated).Send(nil)
 }
 
 func (s *HTTPServer) unregisterConsumerGroup(c *fiber.Ctx) error {
