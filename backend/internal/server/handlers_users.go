@@ -19,11 +19,12 @@ type userResponse struct {
 }
 
 type grantResponse struct {
-	ID           string `json:"id"`
-	UserID       string `json:"user_id"`
-	Action       string `json:"action"`
-	TopicPattern string `json:"topic_pattern"`
-	CreatedAt    string `json:"created_at"`
+	ID            string `json:"id"`
+	UserID        string `json:"user_id"`
+	Action        string `json:"action"`
+	TopicPattern  string `json:"topic_pattern"`
+	ConsumerGroup string `json:"consumer_group,omitempty"`
+	CreatedAt     string `json:"created_at"`
 }
 
 type createUserRequest struct {
@@ -43,6 +44,11 @@ type addGrantRequest struct {
 	TopicPattern string `json:"topic_pattern"`
 }
 
+type addConsumerGroupGrantRequest struct {
+	TopicPattern  string `json:"topic_pattern"`
+	ConsumerGroup string `json:"consumer_group"`
+}
+
 func toUserResponse(u *users.User) userResponse {
 	return userResponse{
 		ID:        u.ID,
@@ -55,11 +61,12 @@ func toUserResponse(u *users.User) userResponse {
 
 func toGrantResponse(g *users.Grant) grantResponse {
 	return grantResponse{
-		ID:           g.ID,
-		UserID:       g.UserID,
-		Action:       g.Action,
-		TopicPattern: g.TopicPattern,
-		CreatedAt:    g.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ID:            g.ID,
+		UserID:        g.UserID,
+		Action:        g.Action,
+		TopicPattern:  g.TopicPattern,
+		ConsumerGroup: g.ConsumerGroup,
+		CreatedAt:     g.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 }
 
@@ -171,6 +178,30 @@ func (s *HTTPServer) addUserGrant(c *fiber.Ctx) error {
 	g, err := s.userStore.AddGrant(c.Context(), userID, req.Action, topicPattern)
 	if err != nil {
 		slog.Error("add user grant failed", "user_id", userID, "error", err)
+		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
+	}
+	return c.Status(fiber.StatusCreated).JSON(toGrantResponse(g))
+}
+
+func (s *HTTPServer) addConsumerGroupGrant(c *fiber.Ctx) error {
+	userID := c.Params("id")
+	var req addConsumerGroupGrantRequest
+	if err := c.BodyParser(&req); err != nil {
+		return jsonError(c, fiber.StatusBadRequest, "invalid request body")
+	}
+	if req.ConsumerGroup == "" {
+		return jsonError(c, fiber.StatusBadRequest, "consumer_group is required")
+	}
+	topicPattern := req.TopicPattern
+	if topicPattern == "" {
+		topicPattern = "*"
+	}
+	g, err := s.userStore.AddConsumerGroupGrant(c.Context(), userID, topicPattern, req.ConsumerGroup)
+	if errors.Is(err, users.ErrDuplicate) {
+		return jsonError(c, fiber.StatusConflict, err.Error())
+	}
+	if err != nil {
+		slog.Error("add consumer group grant failed", "user_id", userID, "error", err)
 		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 	return c.Status(fiber.StatusCreated).JSON(toGrantResponse(g))

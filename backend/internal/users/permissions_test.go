@@ -54,6 +54,115 @@ var _ = Describe("MatchesPattern", func() {
 	})
 })
 
+var _ = Describe("HasDequeueAccess", func() {
+	Context("when the grants list is empty", func() {
+		It("should return false", func() {
+			Expect(users.HasDequeueAccess(nil, "orders")).To(BeFalse())
+			Expect(users.HasDequeueAccess([]users.Grant{}, "orders")).To(BeFalse())
+		})
+	})
+
+	Context("when the user has a write grant on the topic", func() {
+		It("should return true", func() {
+			grants := []users.Grant{
+				{Action: "write", TopicPattern: "orders"},
+			}
+			Expect(users.HasDequeueAccess(grants, "orders")).To(BeTrue())
+		})
+	})
+
+	Context("when the user has a consume grant on the topic", func() {
+		It("should return true", func() {
+			grants := []users.Grant{
+				{Action: "consume", TopicPattern: "orders", ConsumerGroup: "group-a"},
+			}
+			Expect(users.HasDequeueAccess(grants, "orders")).To(BeTrue())
+		})
+	})
+
+	Context("when the user only has a read grant on the topic", func() {
+		It("should return false", func() {
+			grants := []users.Grant{
+				{Action: "read", TopicPattern: "orders"},
+			}
+			Expect(users.HasDequeueAccess(grants, "orders")).To(BeFalse())
+		})
+	})
+
+	Context("when the user has a write grant on a wildcard pattern", func() {
+		It("should return true for any matching topic", func() {
+			grants := []users.Grant{
+				{Action: "write", TopicPattern: "*"},
+			}
+			Expect(users.HasDequeueAccess(grants, "orders")).To(BeTrue())
+			Expect(users.HasDequeueAccess(grants, "payments")).To(BeTrue())
+		})
+	})
+
+	Context("when the user has write access to a different topic", func() {
+		It("should return false for the unmatched topic", func() {
+			grants := []users.Grant{
+				{Action: "write", TopicPattern: "payments"},
+			}
+			Expect(users.HasDequeueAccess(grants, "orders")).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("HasConsumerGroupAccess", func() {
+	Context("when the user has no consume grants for the topic", func() {
+		It("should return true unconditionally (opt-in restriction)", func() {
+			Expect(users.HasConsumerGroupAccess(nil, "orders", "group-a")).To(BeTrue())
+			Expect(users.HasConsumerGroupAccess([]users.Grant{}, "orders", "group-a")).To(BeTrue())
+		})
+
+		It("should return true even when the user has non-consume grants on the topic", func() {
+			grants := []users.Grant{
+				{Action: "write", TopicPattern: "orders"},
+				{Action: "read", TopicPattern: "orders"},
+			}
+			Expect(users.HasConsumerGroupAccess(grants, "orders", "group-a")).To(BeTrue())
+		})
+
+		It("should return true when consume grants exist for a different topic only", func() {
+			grants := []users.Grant{
+				{Action: "consume", TopicPattern: "payments", ConsumerGroup: "group-a"},
+			}
+			Expect(users.HasConsumerGroupAccess(grants, "orders", "group-a")).To(BeTrue())
+		})
+	})
+
+	Context("when the user has at least one consume grant for the topic", func() {
+		It("should return true only for the explicitly granted group", func() {
+			grants := []users.Grant{
+				{Action: "consume", TopicPattern: "orders", ConsumerGroup: "group-a"},
+			}
+			Expect(users.HasConsumerGroupAccess(grants, "orders", "group-a")).To(BeTrue())
+			Expect(users.HasConsumerGroupAccess(grants, "orders", "group-b")).To(BeFalse())
+		})
+
+		It("should return true for any of multiple granted groups", func() {
+			grants := []users.Grant{
+				{Action: "consume", TopicPattern: "orders", ConsumerGroup: "group-a"},
+				{Action: "consume", TopicPattern: "orders", ConsumerGroup: "group-b"},
+			}
+			Expect(users.HasConsumerGroupAccess(grants, "orders", "group-a")).To(BeTrue())
+			Expect(users.HasConsumerGroupAccess(grants, "orders", "group-b")).To(BeTrue())
+			Expect(users.HasConsumerGroupAccess(grants, "orders", "group-c")).To(BeFalse())
+		})
+
+		It("should match consume grants using wildcard topic patterns", func() {
+			grants := []users.Grant{
+				{Action: "consume", TopicPattern: "orders.*", ConsumerGroup: "group-a"},
+			}
+			Expect(users.HasConsumerGroupAccess(grants, "orders.new", "group-a")).To(BeTrue())
+			Expect(users.HasConsumerGroupAccess(grants, "orders.new", "group-b")).To(BeFalse())
+			// A consume grant on orders.* does not activate restriction for payments
+			Expect(users.HasConsumerGroupAccess(grants, "payments", "group-a")).To(BeTrue())
+		})
+	})
+})
+
 var _ = Describe("HasGrant", func() {
 	Context("when the grants list is empty", func() {
 		It("should return false for any action and topic", func() {
