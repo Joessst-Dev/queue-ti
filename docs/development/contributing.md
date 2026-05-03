@@ -51,7 +51,7 @@ The server listens on:
 ### 4. Start the admin UI (in another terminal)
 
 ```bash
-cd admin-ui
+cd ui
 npm install
 npx nx serve
 ```
@@ -108,7 +108,7 @@ go mod graph
 **Running tests:**
 
 ```bash
-cd admin-ui
+cd ui
 npx nx test
 ```
 
@@ -127,7 +127,7 @@ npx nx build
 **Dependency updates:**
 
 ```bash
-cd admin-ui
+cd ui
 npm update
 ```
 
@@ -148,7 +148,7 @@ npm update
 3. **Run tests before pushing:**
    ```bash
    make test              # Backend
-   cd admin-ui && npx nx test  # Frontend
+   cd ui && npx nx test        # Frontend
    ```
 
 4. **Push to your fork and open a pull request:**

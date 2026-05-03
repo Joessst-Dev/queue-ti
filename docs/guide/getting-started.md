@@ -46,7 +46,7 @@ The server listens on:
 ### 4. Start the admin UI (in another terminal)
 
 ```bash
-cd admin-ui
+cd ui
 npm install
 npx nx serve
 ```
