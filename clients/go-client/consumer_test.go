@@ -8,7 +8,7 @@ import (
 	"time"
 
 	pb "github.com/Joessst-Dev/queue-ti/pb"
-	queueti "github.com/Joessst-Dev/queue-ti/clients/go"
+	queueti "github.com/Joessst-Dev/queue-ti/clients/go-client"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

@@ -1,4 +1,4 @@
-module github.com/Joessst-Dev/queue-ti/clients/go
+module github.com/Joessst-Dev/queue-ti/clients/go-client
 
 go 1.25.5
 

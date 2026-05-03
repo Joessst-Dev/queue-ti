@@ -5,13 +5,13 @@ A Go client library for producing and consuming messages from a [queue-ti](https
 ## Installation
 
 ```bash
-go get github.com/Joessst-Dev/queue-ti/clients/go
+go get github.com/Joessst-Dev/queue-ti/clients/go-client
 ```
 
 Import as:
 
 ```go
-import queueti "github.com/Joessst-Dev/queue-ti/clients/go"
+import queueti "github.com/Joessst-Dev/queue-ti/clients/go-client"
 ```
 
 ## Quick Start
@@ -416,7 +416,7 @@ import (
     "os"
     "os/signal"
 
-    queueti "github.com/Joessst-Dev/queue-ti/clients/go"
+    queueti "github.com/Joessst-Dev/queue-ti/clients/go-client"
 )
 
 func main() {

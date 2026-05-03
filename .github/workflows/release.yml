@@ -227,17 +227,17 @@ jobs:
         with:
           go-version: "1.25.5"
           cache-dependency-path: |
-            clients/go/go.sum
+            clients/go-client/go.sum
 
       - name: Install Ginkgo CLI
         run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.28.1
 
       - name: Build Go client
-        working-directory: clients/go
+        working-directory: clients/go-client
         run: go build ./...
 
       - name: Run Go client tests
-        working-directory: clients/go
+        working-directory: clients/go-client
         run: ginkgo ./...
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -316,7 +316,7 @@ jobs:
     name: "npm: Publish @queue-ti/client"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [backend, frontend, node-client]
+    needs: [backend, frontend, node-client, go-client]
 
     permissions:
       contents: read
@@ -478,16 +478,16 @@ jobs:
           fetch-depth: 0
 
       - name: Tag client Go sub-module
-        # Creates clients/go/vYYYY.MM.PATCH on the same commit so the client library
+        # Creates clients/go-client/vYYYY.MM.PATCH on the same commit so the client library
         # is consumable as a Go module:
-        #   go get github.com/Joessst-Dev/queue-ti/clients/go@vYYYY.MM.PATCH
-        # Note: replace directives in clients/go/go.mod are ignored by downstream
+        #   go get github.com/Joessst-Dev/queue-ti/clients/go-client@vYYYY.MM.PATCH
+        # Note: replace directives in clients/go-client/go.mod are ignored by downstream
         # consumers, so the local ../../ replace does not affect published releases.
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "clients/go/${{ github.ref_name }}" "${{ github.sha }}"
-          git push origin "clients/go/${{ github.ref_name }}"
+          git tag "clients/go-client/${{ github.ref_name }}" "${{ github.sha }}"
+          git push origin "clients/go-client/${{ github.ref_name }}"
 
       - name: Create GitHub Release
         # --generate-notes  auto-generates release notes from merged PRs since
