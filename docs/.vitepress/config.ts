@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 
-export default defineConfig({
+export default withMermaid(defineConfig({
   title: 'queue-ti',
   description: 'Self-hosted distributed message queue backed by PostgreSQL',
   base: '/queue-ti/',
@@ -64,9 +65,4 @@ export default defineConfig({
       provider: 'local',
     },
   },
-  markdown: {
-    config: (md) => {
-      md.use(require('markdown-it-mermaid').default)
-    },
-  },
-})
+}))

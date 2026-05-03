@@ -59,15 +59,15 @@ stateDiagram-v2
     pending --> processing: Dequeue
     
     processing --> deleted: Ack
-    processing --> pending: Nack (retries remaining,<br/>below DLQ threshold)
-    processing --> failed: Nack (no retries remaining,<br/>below DLQ threshold)
-    processing --> dlq: Nack (DLQ threshold<br/>reached)
+    processing --> pending: Nack (retries remaining)
+    processing --> failed: Nack (no retries remaining)
+    processing --> dlq: Nack (DLQ threshold reached)
     processing --> expired: TTL expires
     
     pending --> expired: TTL expires
-    pending --> pending: Visibility timeout<br/>expires (reappears)
+    pending --> pending: Visibility timeout expires
     
-    dlq --> pending: Requeue to<br/>original topic
+    dlq --> pending: Requeue to original topic
     
     deleted --> [*]
     failed --> [*]
@@ -89,8 +89,8 @@ stateDiagram-v2
 
 - **pending** → (dequeued) → **processing** → (acknowledged) → **deleted**
 - **pending** → (dequeued) → **processing** → (nacked, retries remaining and below DLQ threshold) → **pending** (automatically retried)
-- **pending** → (dequeued) → **processing** → (nacked, DLQ threshold reached) → moved to **<topic>.dlq** as **pending** (with max_retries = 0)
-- **<topic>.dlq pending** → (manually requeued) → **pending** in original topic (resets retry_count and restores max_retries)
+- **pending** → (dequeued) → **processing** → (nacked, DLQ threshold reached) → moved to **`<topic>.dlq`** as **pending** (with max_retries = 0)
+- **`<topic>.dlq` pending** → (manually requeued) → **pending** in original topic (resets retry_count and restores max_retries)
 - **pending** or **processing** → (TTL expires) → **expired** (marked by automatic reaper)
 - **pending** → (dequeued) → **processing** → (visibility timeout expires) → **pending** (automatically reappears)
 

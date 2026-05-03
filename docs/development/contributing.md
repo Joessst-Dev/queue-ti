@@ -228,7 +228,7 @@ TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
 go run ./cmd/loadtest --token=$TOKEN --producers=8 --consumers=8
 ```
 
-See [Performance Testing](../guide/performance-testing) for detailed load test options and interpretation.
+Run `go run ./cmd/loadtest --help` for all available flags.
 
 ## Code Quality
 
