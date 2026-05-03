@@ -238,16 +238,16 @@ Use `ConsumeBatch` when you want to process multiple messages together (e.g. bat
 
 Consumer groups enable independent consumption of the same messages by multiple systems. Each group tracks its own delivery state, allowing parallel processing of the same message by different applications without interference.
 
-When a consumer group is specified, the client joins that group (if not already registered) and receives all messages enqueued to the topic. Each message is delivered independently to each group. A message is only deleted from the queue when **all** registered groups have acknowledged it.
+When a consumer group is specified, the client sends all RPCs scoped to that group and receives all messages enqueued to the topic. Each message is delivered independently to each group. A message is only deleted from the queue when **all** registered groups have acknowledged it.
 
 ### Registering a Consumer Group
 
 Consumer groups must be registered on the server before use:
 
 ```bash
-curl -X POST http://localhost:8080/api/consumer-groups \
+curl -X POST http://localhost:8080/api/topics/orders/consumer-groups \
   -H "Content-Type: application/json" \
-  -d '{"topic": "orders", "consumer_group": "warehouse"}'
+  -d '{"consumer_group": "warehouse"}'
 ```
 
 Once registered, the group automatically receives all pending messages enqueued before registration (backfill), plus all future messages.
@@ -268,9 +268,12 @@ err := consumer.Consume(ctx, func(ctx context.Context, msg *queueti.Message) err
 
 ### Batch Consumer (ConsumeBatch)
 
+`WithConsumerGroup` is set on `NewConsumer`; the consumer carries the group for all subsequent calls:
+
 ```go
-err := consumer.ConsumeBatch(ctx, "orders", 50, 
-    queueti.WithConsumerGroup("warehouse"),
+consumer := client.NewConsumer("orders", queueti.WithConsumerGroup("warehouse"))
+
+err := consumer.ConsumeBatch(ctx, "orders", 50,
     func(ctx context.Context, messages []*queueti.Message) error {
         for _, msg := range messages {
             if err := process(msg); err != nil {

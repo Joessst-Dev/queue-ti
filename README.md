@@ -1080,15 +1080,15 @@ Register a group via the HTTP admin API:
 
 ```bash
 # Register a new group for a topic
-curl -X POST http://localhost:8080/api/consumer-groups \
+curl -X POST http://localhost:8080/api/topics/orders/consumer-groups \
   -H "Content-Type: application/json" \
-  -d '{"topic": "orders", "consumer_group": "warehouse"}'
+  -d '{"consumer_group": "warehouse"}'
 
 # List all groups for a topic
-curl http://localhost:8080/api/consumer-groups?topic=orders
+curl http://localhost:8080/api/topics/orders/consumer-groups
 
 # Unregister a group
-curl -X DELETE http://localhost:8080/api/consumer-groups/orders/warehouse
+curl -X DELETE http://localhost:8080/api/topics/orders/consumer-groups/warehouse
 ```
 
 Once registered, a group automatically receives all pending messages that were enqueued before registration (backfill). Future messages are delivered to all registered groups.
@@ -1109,11 +1109,14 @@ err := consumer.Consume(ctx, func(ctx context.Context, msg *queueti.Message) err
 })
 ```
 
-For batch consumption:
+For batch consumption, `WithConsumerGroup` is set on `NewConsumer` — the consumer carries the group for all calls:
 
 ```go
-err := consumer.ConsumeBatch(ctx, "orders", 50, 
+consumer := client.NewConsumer("orders",
     queueti.WithConsumerGroup("warehouse"),
+)
+
+err := consumer.ConsumeBatch(ctx, "orders", 50,
     func(ctx context.Context, messages []*queueti.Message) error {
         for _, msg := range messages {
             // Process...
@@ -1156,7 +1159,7 @@ await consumer.consumeBatch(
 
 ```python
 import asyncio
-from queueti import connect, ConsumerOptions
+from queueti import connect, ConnectOptions, ConsumerOptions
 
 async def main():
     client = await connect("localhost:50051", options=ConnectOptions(insecure=True))
@@ -1193,7 +1196,7 @@ await consumer.consume_batch(
 Sync variant:
 
 ```python
-from queueti import connect_sync, ConsumerOptions
+from queueti import connect_sync, ConnectOptions, ConsumerOptions
 
 client = connect_sync("localhost:50051", options=ConnectOptions(insecure=True))
 consumer = client.consumer(
@@ -1296,6 +1299,7 @@ stateDiagram-v2
     
     processing --> deleted: Ack
     processing --> pending: Nack (retries remaining,<br/>below DLQ threshold)
+    processing --> failed: Nack (no retries remaining,<br/>below DLQ threshold)
     processing --> dlq: Nack (DLQ threshold<br/>reached)
     processing --> expired: TTL expires
     
@@ -1305,6 +1309,7 @@ stateDiagram-v2
     dlq --> pending: Requeue to<br/>original topic
     
     deleted --> [*]
+    failed --> [*]
     expired --> [*]
     
     note right of dlq
