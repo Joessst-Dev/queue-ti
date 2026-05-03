@@ -1,4 +1,4 @@
-module github.com/Joessst-Dev/queue-ti/client
+module github.com/Joessst-Dev/queue-ti/clients/go
 
 go 1.25.5
 
@@ -29,4 +29,4 @@ require (
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
 
-replace github.com/Joessst-Dev/queue-ti => ../backend
+replace github.com/Joessst-Dev/queue-ti => ../../backend

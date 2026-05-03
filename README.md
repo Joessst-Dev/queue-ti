@@ -128,7 +128,7 @@ queue-ti provides official client libraries for Go, Node.js, and Python.
 
 ### Go
 
-The `client/` package provides a high-level Producer/Consumer API for building applications that enqueue and dequeue messages from queue-ti's gRPC service.
+The `clients/go/` package provides a high-level Producer/Consumer API for building applications that enqueue and dequeue messages from queue-ti's gRPC service.
 
 #### Single-Message Consumer
 
@@ -200,7 +200,7 @@ consumer.ConsumeBatch(ctx, 10, func(ctx context.Context, messages []*queueti.Bat
 - Each message in the batch is individually locked and can be acked or nacked independently
 - Auto-reconnect and token refresh work the same as single-message `Consume`
 
-See [client/README.md](client/README.md) for the full API reference, authentication setup, error handling, and examples.
+See [clients/go/README.md](clients/go/README.md) for the full API reference, authentication setup, error handling, and examples.
 
 ### Node.js
 
@@ -2469,9 +2469,9 @@ queue-ti/
 ├── docker-compose.yaml      Multi-container setup (PostgreSQL + backend + frontend)
 ├── config.yaml              Default configuration (overridable via env vars)
 ├── go.mod, go.sum           Go module definition (root module)
-├── go.work                  Go workspace — includes root and client/ modules
-├── client/                  Go client library (separate module)
-│   ├── go.mod               Module: github.com/Joessst-Dev/queue-ti/client
+├── go.work                  Go workspace — includes root and clients/go modules
+├── clients/go/              Go client library (separate module)
+│   ├── go.mod               Module: github.com/Joessst-Dev/queue-ti/clients/go
 │   ├── client.go            Dial, NewProducer, NewConsumer
 │   ├── producer.go          Producer.Publish
 │   ├── consumer.go          Consumer.Consume with auto-reconnect
@@ -2604,7 +2604,7 @@ queue-ti uses [Calendar Versioning](https://calver.org) (CalVer) in the format `
 | Artifact | Published as |
 |---|---|
 | Docker image | Exact tag (e.g. `ghcr.io/joessst-dev/queue-ti:v2026.05.0`); rolling `preview` tag for preview releases; `latest` tag for stable releases |
-| Go client library | `github.com/Joessst-Dev/queue-ti/client@vYYYY.MM.PATCH` (separate sub-module tag `client/vYYYY.MM.PATCH`) |
+| Go client library | `github.com/Joessst-Dev/queue-ti/clients/go@vYYYY.MM.PATCH` (separate sub-module tag `clients/go/vYYYY.MM.PATCH`) |
 | GitHub Release | Auto-generated changelog from merged PR titles |
 
 **Release types:**
@@ -2628,7 +2628,7 @@ queue-ti uses [Calendar Versioning](https://calver.org) (CalVer) in the format `
      - Always pushes the exact tag (e.g. `:v2026.05.0-preview.1`)
      - For preview releases (tag contains `-preview`), also pushes `:preview` rolling pointer
      - For stable releases (no `-preview` or `-rc`), also pushes `:latest` rolling pointer
-   - Creates a Go sub-module tag `client/vYYYY.MM.PATCH` so the client library is consumable as `go get github.com/Joessst-Dev/queue-ti/client@vYYYY.MM.PATCH`
+   - Creates a Go sub-module tag `clients/go/vYYYY.MM.PATCH` so the client library is consumable as `go get github.com/Joessst-Dev/queue-ti/clients/go@vYYYY.MM.PATCH`
    - Publishes a GitHub Release with auto-generated notes from merged PRs
 
 Monitor the run at **Actions → Release** in the GitHub repository.
@@ -2658,15 +2658,15 @@ services:
 **Go client library:**
 ```bash
 # Pin to a specific version
-go get github.com/Joessst-Dev/queue-ti/client@v2026.05.0
+go get github.com/Joessst-Dev/queue-ti/clients/go@v2026.05.0
 
 # Or latest
-go get github.com/Joessst-Dev/queue-ti/client@latest
+go get github.com/Joessst-Dev/queue-ti/clients/go@latest
 ```
 
 The client library is published as a Go sub-module, so it can be imported and used independently:
 ```go
-import "github.com/Joessst-Dev/queue-ti/client"
+import "github.com/Joessst-Dev/queue-ti/clients/go"
 
 c, _ := client.Dial("localhost:50051", client.WithInsecure())
 defer c.Close()
@@ -2689,7 +2689,7 @@ defer c.Close()
 | `backend` | Same as CI: build and test (gates the release) |
 | `frontend` | Same as CI: build, test, and lint (gates the release) |
 | `publish-image` | Builds multi-arch Docker image (linux/amd64 + linux/arm64) and pushes to GHCR with appropriate tags (exact, `:preview`, and/or `:latest`) |
-| `create-release` | Creates GitHub Release with auto-generated notes and tags the client Go sub-module (`client/vYYYY.MM.PATCH`) |
+| `create-release` | Creates GitHub Release with auto-generated notes and tags the client Go sub-module (`clients/go/vYYYY.MM.PATCH`) |
 
 **Release tag format:** `vYYYY.MM.PATCH` or `vYYYY.MM.PATCH-preview.N` or `vYYYY.MM.PATCH-rc.N`
 

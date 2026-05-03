@@ -12,7 +12,7 @@ import (
 	"time"
 
 	pb "github.com/Joessst-Dev/queue-ti/pb"
-	queueti "github.com/Joessst-Dev/queue-ti/client"
+	queueti "github.com/Joessst-Dev/queue-ti/clients/go"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
