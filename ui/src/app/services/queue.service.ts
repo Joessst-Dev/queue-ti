@@ -97,6 +97,10 @@ export interface DeleteReaperSchedule {
   active: boolean;
 }
 
+export interface ConsumerGroupsResponse {
+  items: string[];
+}
+
 export const PAGE_SIZE = 50;
 
 @Injectable({ providedIn: 'root' })
@@ -200,5 +204,17 @@ export class QueueService {
 
   updateDeleteReaperSchedule(schedule: string): Observable<DeleteReaperSchedule> {
     return this.http.put<DeleteReaperSchedule>('/api/admin/delete-reaper/schedule', { schedule });
+  }
+
+  listConsumerGroups(topic: string): Observable<ConsumerGroupsResponse> {
+    return this.http.get<ConsumerGroupsResponse>(`/api/topics/${topic}/consumer-groups`);
+  }
+
+  registerConsumerGroup(topic: string, group: string): Observable<void> {
+    return this.http.post<void>(`/api/topics/${topic}/consumer-groups`, { consumer_group: group });
+  }
+
+  unregisterConsumerGroup(topic: string, group: string): Observable<void> {
+    return this.http.delete<void>(`/api/topics/${topic}/consumer-groups/${encodeURIComponent(group)}`);
   }
 }
