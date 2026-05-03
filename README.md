@@ -682,16 +682,53 @@ Regular users require explicit grants for each action and topic. A grant specifi
 
 **Grant semantics:**
 - `read` — Allows `GET /api/messages` and `GET /api/stats` for this topic
-- `write` — Allows `POST /api/messages`, `POST /api/messages/:id/ack`, `POST /api/messages/:id/nack`, `POST /api/messages/:id/requeue` for this topic; also required for gRPC `Dequeue` calls
+- `write` — Allows `POST /api/messages`, `POST /api/messages/:id/ack`, `POST /api/messages/:id/nack`, `POST /api/messages/:id/requeue` for this topic; also required for gRPC `Dequeue` calls. Note: `write` alone does not restrict which consumer groups are accessible.
 - `admin` — Allows topic configuration and schema management (`GET/PUT/DELETE /api/topic-configs/:topic`, `GET/PUT/DELETE /api/topic-schemas/:topic`) for this topic
+- `consume` — Restricts the user to a specific named consumer group on the topic. See **Consumer Group Grants** below.
 
 **Example grants:**
 
-| Username | Grant | Topic Pattern | Interpretation |
-|----------|-------|---------------|-----------------|
-| `alice` | `write` | `orders` | Can enqueue, dequeue, ack, and nack messages only in the `orders` topic |
-| `bob` | `read` | `*` | Can list and inspect all messages across all topics, but cannot modify any |
-| `charlie` | `admin` | `payments.*` | Can manage configuration and schema for all topics matching `payments.*` (e.g., `payments`, `payments.dlq`, `payments.v1`) |
+| Username | Grant | Topic Pattern | Consumer Group | Interpretation |
+|----------|-------|---------------|----------------|-----------------|
+| `alice` | `write` | `orders` | — | Can enqueue, dequeue, ack, and nack messages in `orders` (no group restriction) |
+| `bob` | `read` | `*` | — | Can list and inspect all messages across all topics |
+| `charlie` | `admin` | `payments.*` | — | Can manage configuration for topics matching `payments.*` |
+| `diana` | `consume` | `orders.*` | `warehouse` | Can only dequeue/ack/nack in `orders.*` topics when using consumer group `warehouse` |
+
+### Consumer Group Grants
+
+Consumer group grants let you restrict a user to a specific named consumer group on a topic. This is useful when multiple teams consume from the same topic and you want to enforce that each team only processes its own group.
+
+**Semantics:**
+- A user with no `consume` grants for a topic can consume from any group (unrestricted).
+- Once any `consume` grant exists for a user+topic, that user is restricted to only the explicitly granted groups.
+- A user can hold multiple `consume` grants for the same topic with different groups to allow access to more than one.
+- A `write` grant alone does not restrict groups. If a user has both `write` and `consume` grants for a topic, the `consume` grant restrictions apply.
+
+**Creating a consumer group grant via REST:**
+
+```bash
+curl -X POST -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"topic_pattern": "orders.*", "consumer_group": "warehouse"}' \
+  http://localhost:8080/api/users/550e8400-e29b-41d4-a716-446655440000/consumer-group-grants
+```
+
+Omitting `topic_pattern` defaults to `"*"` (all topics).
+
+**Response:** HTTP 201 Created
+```json
+{
+  "id": "...",
+  "user_id": "...",
+  "action": "consume",
+  "topic_pattern": "orders.*",
+  "consumer_group": "warehouse",
+  "created_at": "2025-01-15T12:00:00Z"
+}
+```
+
+Consumer group grants can be deleted via the existing `DELETE /api/users/:id/grants/:grant_id` endpoint.
 
 ### JWT Token Details
 
@@ -841,6 +878,14 @@ curl -H "Authorization: Bearer <token>" \
       "action": "write",
       "topic_pattern": "orders",
       "created_at": "2025-04-25T12:00:00Z"
+    },
+    {
+      "id": "991e8400...",
+      "user_id": "550e8400...",
+      "action": "consume",
+      "topic_pattern": "orders.*",
+      "consumer_group": "warehouse",
+      "created_at": "2025-04-25T12:01:00Z"
     }
   ]
 }
@@ -869,6 +914,26 @@ curl -X DELETE -H "Authorization: Bearer <token>" \
 ```
 
 **Response:** HTTP 204 No Content
+
+#### POST /api/users/:id/consumer-group-grants
+
+Creates a `consume` grant that restricts the user to a specific consumer group on a topic. Requires admin.
+
+```bash
+curl -X POST -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"topic_pattern": "orders.*", "consumer_group": "warehouse"}' \
+  http://localhost:8080/api/users/550e8400-e29b-41d4-a716-446655440000/consumer-group-grants
+```
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `consumer_group` | Yes | — | The consumer group the user is restricted to |
+| `topic_pattern` | No | `*` | Topic pattern (`*`, `prefix.*`, or exact name) |
+
+**Response:** HTTP 201 Created — returns the created grant object with `action: "consume"`.
+
+Returns 400 if `consumer_group` is missing, 409 if the same user+topic+group combination already exists.
 
 ### Using JWT Tokens in HTTP Requests
 
