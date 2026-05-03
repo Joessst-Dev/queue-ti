@@ -96,3 +96,8 @@ ui/.nx/workspace-data
 
 # Vitest
 ui/__screenshots__/
+
+# Docs
+docs/node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
