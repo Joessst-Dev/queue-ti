@@ -57,6 +57,7 @@ jobs:
           # the build cache (~/.cache/go-build) automatically when cache: true
           # (the default). Cache key is derived from go.sum.
           cache: true
+          cache-dependency-path: backend/go.sum
 
       - name: Install dependencies (go mod tidy)
         run: make deps
