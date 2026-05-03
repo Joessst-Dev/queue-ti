@@ -26,12 +26,7 @@ func (s *HTTPServer) listConsumerGroups(c *fiber.Ctx) error {
 		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 
-	items := groups
-	if items == nil {
-		items = []string{}
-	}
-
-	return c.JSON(listConsumerGroupsResponse{Items: items})
+	return c.JSON(listConsumerGroupsResponse{Items: groups})
 }
 
 func (s *HTTPServer) registerConsumerGroup(c *fiber.Ctx) error {

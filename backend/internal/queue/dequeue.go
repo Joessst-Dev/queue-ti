@@ -119,6 +119,26 @@ func (s *Service) DequeueForGroup(ctx context.Context, topic, group string, visi
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	var limit *int
+	err = tx.QueryRow(ctx,
+		`SELECT throughput_limit FROM topic_config WHERE topic = $1`, topic,
+	).Scan(&limit)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("dequeue group fetch limit: %w", err)
+	}
+	if limit != nil && *limit > 0 {
+		allowed, err := s.consumeTokens(ctx, tx, topic, *limit, 1)
+		if err != nil {
+			return nil, err
+		}
+		if allowed == 0 {
+			if commitErr := tx.Commit(ctx); commitErr != nil {
+				return nil, fmt.Errorf("dequeue group commit (throttled): %w", commitErr)
+			}
+			return nil, ErrNoMessage
+		}
+	}
+
 	var messageID string
 	err = tx.QueryRow(ctx, `
 		UPDATE message_deliveries
@@ -205,6 +225,28 @@ func (s *Service) DequeueNForGroup(ctx context.Context, topic, group string, n i
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	allowed := n
+	var limit *int
+	err = tx.QueryRow(ctx,
+		`SELECT throughput_limit FROM topic_config WHERE topic = $1`, topic,
+	).Scan(&limit)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("dequeue group batch fetch limit: %w", err)
+	}
+	if limit != nil && *limit > 0 {
+		allowed, err = s.consumeTokens(ctx, tx, topic, *limit, n)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if allowed == 0 {
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			return nil, fmt.Errorf("dequeue group batch commit (throttled): %w", commitErr)
+		}
+		return []*Message{}, nil
+	}
+
 	rows, err := tx.Query(ctx, `
 		UPDATE message_deliveries
 		SET    status             = 'processing',
@@ -228,7 +270,7 @@ func (s *Service) DequeueNForGroup(ctx context.Context, topic, group string, n i
 	`,
 		group,
 		topic,
-		n,
+		allowed,
 		fmt.Sprintf("%d seconds", int(vt.Seconds())),
 	)
 	if err != nil {

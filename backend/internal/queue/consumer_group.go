@@ -8,8 +8,19 @@ import (
 
 // RegisterConsumerGroup registers a new consumer group for the given topic and
 // backfills delivery rows for all currently pending messages. Registering the
-// same group twice returns ErrConsumerGroupExists.
+// same group twice returns ErrConsumerGroupExists. When requireTopicRegistration
+// is enabled, the topic must have an existing topic_config row.
 func (s *Service) RegisterConsumerGroup(ctx context.Context, topic, group string) error {
+	if s.requireTopicRegistration {
+		cfg, err := s.GetTopicConfig(ctx, topic)
+		if err != nil {
+			return fmt.Errorf("register consumer group check topic: %w", err)
+		}
+		if cfg == nil {
+			return ErrTopicNotRegistered
+		}
+	}
+
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("register consumer group begin tx: %w", err)
@@ -50,12 +61,17 @@ func (s *Service) RegisterConsumerGroup(ctx context.Context, topic, group string
 	return nil
 }
 
-// UnregisterConsumerGroup removes a consumer group from the registry.
-// The ON DELETE CASCADE on message_deliveries cleans up delivery rows
-// automatically. Returns ErrConsumerGroupNotFound when the group does not
-// exist.
+// UnregisterConsumerGroup removes a consumer group from the registry and
+// deletes all its delivery rows for messages on that topic.
+// Returns ErrConsumerGroupNotFound when the group does not exist.
 func (s *Service) UnregisterConsumerGroup(ctx context.Context, topic, group string) error {
-	tag, err := s.pool.Exec(ctx, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("unregister consumer group begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	tag, err := tx.Exec(ctx, `
 		DELETE FROM consumer_groups
 		WHERE topic = $1 AND consumer_group = $2
 	`, topic, group)
@@ -64,6 +80,24 @@ func (s *Service) UnregisterConsumerGroup(ctx context.Context, topic, group stri
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrConsumerGroupNotFound
+	}
+
+	// Remove delivery rows for this group scoped to the topic's messages.
+	// ON DELETE CASCADE would only fire if the consumer_groups FK existed on
+	// message_deliveries; since it does not, we clean up explicitly.
+	_, err = tx.Exec(ctx, `
+		DELETE FROM message_deliveries md
+		USING messages m
+		WHERE md.message_id = m.id
+		  AND m.topic = $1
+		  AND md.consumer_group = $2
+	`, topic, group)
+	if err != nil {
+		return fmt.Errorf("unregister consumer group delete deliveries: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("unregister consumer group commit: %w", err)
 	}
 
 	slog.Info("consumer group unregistered", "topic", topic, "group", group)

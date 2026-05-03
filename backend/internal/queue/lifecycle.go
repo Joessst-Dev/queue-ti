@@ -308,10 +308,11 @@ func (s *Service) NackForGroup(ctx context.Context, id, group, processingError s
 		_, err = tx.Exec(ctx, `
 			UPDATE message_deliveries
 			SET    status      = 'failed',
-			       last_error  = $3,
+			       retry_count = $3,
+			       last_error  = $4,
 			       updated_at  = now()
 			WHERE  message_id = $1 AND consumer_group = $2
-		`, id, group, processingError)
+		`, id, group, nextRetryCount, processingError)
 		if err != nil {
 			return fmt.Errorf("nack group dlq mark failed: %w", err)
 		}

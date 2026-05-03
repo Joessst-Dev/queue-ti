@@ -64,6 +64,16 @@ var _ = Describe("Consumer Groups", func() {
 			})
 		})
 
+		Context("when requireTopicRegistration is enabled and the topic has no config row", func() {
+			It("should return ErrTopicNotRegistered", func() {
+				strictSvc := queue.NewService(pool, 30*time.Second, 3, 0, 0, true, queue.NoopRecorder{})
+
+				err := strictSvc.RegisterConsumerGroup(ctx, "unknown-topic", "groupA")
+
+				Expect(err).To(MatchError(queue.ErrTopicNotRegistered))
+			})
+		})
+
 		Context("when the same group is registered a second time", func() {
 			BeforeEach(func() {
 				Expect(svc.RegisterConsumerGroup(ctx, "orders", "groupA")).To(Succeed())
@@ -390,6 +400,44 @@ var _ = Describe("Consumer Groups", func() {
 				err := svc.AckForGroup(ctx, "00000000-0000-0000-0000-000000000000", "groupA")
 
 				Expect(err).To(MatchError(ContainSubstring(queue.ErrNotFound.Error())))
+			})
+		})
+
+		Context("when the topic is configured as replayable and both groups ack", func() {
+			var msgID string
+
+			BeforeEach(func() {
+				_, err := pool.Exec(ctx,
+					`INSERT INTO topic_config (topic, replayable) VALUES ($1, true)
+					 ON CONFLICT (topic) DO UPDATE SET replayable = true`, topic)
+				Expect(err).NotTo(HaveOccurred())
+
+				msgID, err = svc.Enqueue(ctx, topic, []byte("replayable-msg"), nil, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = svc.DequeueForGroup(ctx, topic, "groupA", timeout)
+				Expect(err).NotTo(HaveOccurred())
+				_, err = svc.DequeueForGroup(ctx, topic, "groupB", timeout)
+				Expect(err).NotTo(HaveOccurred())
+
+				// groupA acks first — message_log must NOT yet have the row.
+				Expect(svc.AckForGroup(ctx, msgID, "groupA")).To(Succeed())
+			})
+
+			It("should archive the message to message_log only after the last group acks", func() {
+				var countBefore int
+				Expect(pool.QueryRow(ctx,
+					`SELECT COUNT(*) FROM message_log WHERE id = $1`, msgID,
+				).Scan(&countBefore)).To(Succeed())
+				Expect(countBefore).To(Equal(0))
+
+				Expect(svc.AckForGroup(ctx, msgID, "groupB")).To(Succeed())
+
+				var countAfter int
+				Expect(pool.QueryRow(ctx,
+					`SELECT COUNT(*) FROM message_log WHERE id = $1`, msgID,
+				).Scan(&countAfter)).To(Succeed())
+				Expect(countAfter).To(Equal(1))
 			})
 		})
 	})

@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS consumer_groups (
 CREATE TABLE IF NOT EXISTS message_deliveries (
     message_id         UUID        NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
     consumer_group     TEXT        NOT NULL,
-    status             TEXT        NOT NULL DEFAULT 'pending',
+    status             TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'failed')),
     visibility_timeout TIMESTAMPTZ,
     retry_count        INT         NOT NULL DEFAULT 0,
     max_retries        INT         NOT NULL DEFAULT 0,
@@ -27,8 +27,8 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    INSERT INTO message_deliveries (message_id, consumer_group)
-    SELECT NEW.id, cg.consumer_group
+    INSERT INTO message_deliveries (message_id, consumer_group, max_retries)
+    SELECT NEW.id, cg.consumer_group, NEW.max_retries
     FROM consumer_groups cg
     WHERE cg.topic = NEW.topic
     ON CONFLICT DO NOTHING;

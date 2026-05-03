@@ -207,6 +207,9 @@ func (s *GRPCServer) Ack(ctx context.Context, req *pb.AckRequest) (*pb.AckRespon
 		ackErr = s.queueService.Ack(ctx, req.Id)
 	}
 	if ackErr != nil {
+		if errors.Is(ackErr, queue.ErrNotFound) || errors.Is(ackErr, queue.ErrNotProcessing) {
+			return nil, status.Error(codes.NotFound, ackErr.Error())
+		}
 		slog.Error("grpc ack failed", "id", req.Id, "error", ackErr)
 		return nil, status.Errorf(codes.Internal, "failed to ack: %v", ackErr)
 	}
