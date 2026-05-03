@@ -480,10 +480,10 @@ describe('UsersSection', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      const rows = el.querySelectorAll('tbody tr');
-      // first data row (not the add-grant form row)
-      const firstRow = rows[0];
-      const cells = firstRow.querySelectorAll('td');
+      // Find the grant row via its delete button (proven to be reachable in other tests)
+      const deleteBtn = el.querySelector('[aria-label^="Delete grant"]') as HTMLElement;
+      const firstGrantRow = deleteBtn.closest('tr') as HTMLElement;
+      const cells = firstGrantRow.querySelectorAll('td');
       expect(cells[2].textContent?.trim()).toBe('—');
     });
 
@@ -505,8 +505,10 @@ describe('UsersSection', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      const firstRow = el.querySelectorAll('tbody tr')[0];
-      const cells = firstRow.querySelectorAll('td');
+      // Find the grant row via its delete button (proven to be reachable in other tests)
+      const deleteBtn = el.querySelector('[aria-label^="Delete grant"]') as HTMLElement;
+      const firstGrantRow = deleteBtn.closest('tr') as HTMLElement;
+      const cells = firstGrantRow.querySelectorAll('td');
       expect(cells[2].textContent?.trim()).toBe('my-group');
     });
   });
