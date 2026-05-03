@@ -13,6 +13,12 @@ import { ConsumerGroupsSection } from './consumer-groups-section/consumer-groups
       <div><app-topic-config-section /></div>
       <div><app-topic-schema-section /></div>
 
+      @if (loadError()) {
+        <div class="rounded-md bg-red-50 p-4 text-sm text-red-700">
+          Failed to load topics: {{ loadError() }}
+        </div>
+      }
+
       <div class="bg-white shadow rounded-lg px-6 py-4 flex items-center gap-3">
         <label for="cg-topic-select" class="text-sm font-medium text-gray-700 whitespace-nowrap">
           Topic
@@ -44,11 +50,12 @@ export class TopicsSection implements OnInit {
 
   readonly topics = signal<string[]>([]);
   readonly selectedTopic = signal('');
+  readonly loadError = signal<string | null>(null);
 
   ngOnInit(): void {
     this.queue.getTopicConfigs().subscribe({
       next: (res) => this.topics.set(res.items.map((c) => c.topic)),
-      error: () => {},
+      error: (err) => this.loadError.set(err?.message ?? 'unknown error'),
     });
   }
 

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection, Component, input } from '@angular/core';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { TopicsSection } from './topics-section';
 import { TopicConfigSection } from './topic-config-section';
@@ -19,7 +19,7 @@ class StubConsumerGroupsSection {
   readonly topic = input.required<string>();
 }
 
-const makeQueueService = (topics: string[] = []): QueueService => {
+const makeQueueService = (topics: string[] = [], fail = false): QueueService => {
   const response: TopicConfigsResponse = {
     items: topics.map((t) => ({
       topic: t,
@@ -32,12 +32,14 @@ const makeQueueService = (topics: string[] = []): QueueService => {
     })),
   };
   return {
-    getTopicConfigs: vi.fn().mockReturnValue(of(response)),
+    getTopicConfigs: vi.fn().mockReturnValue(
+      fail ? throwError(() => new Error('network error')) : of(response),
+    ),
   } as unknown as QueueService;
 };
 
-const setup = async (topics: string[] = []) => {
-  const queueService = makeQueueService(topics);
+const setup = async (topics: string[] = [], fail = false) => {
+  const queueService = makeQueueService(topics, fail);
 
   await TestBed.configureTestingModule({
     imports: [TopicsSection],
@@ -102,6 +104,13 @@ describe('TopicsSection', () => {
       fixture.detectChanges();
       await fixture.whenStable();
       expect(el.querySelector('app-consumer-groups-section')).not.toBeNull();
+    });
+  });
+
+  describe('when topic load fails', () => {
+    it('should display an error banner', async () => {
+      const { el } = await setup([], true);
+      expect(el.textContent).toContain('Failed to load topics');
     });
   });
 });
