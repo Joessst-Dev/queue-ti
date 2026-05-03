@@ -239,7 +239,37 @@ jobs:
         run: python -m mypy queueti/
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 5: Docker image build (dry run)
+  # Job 5: Go client — build and test
+  # ─────────────────────────────────────────────────────────────────────────────
+  go-client:
+    name: "Go client: Build & Test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Go 1.25.5
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: "1.25.5"
+          cache-dependency-path: |
+            clients/go-client/go.sum
+
+      - name: Install Ginkgo CLI
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.28.1
+
+      - name: Build Go client
+        working-directory: clients/go-client
+        run: go build ./...
+
+      - name: Run Go client tests
+        working-directory: clients/go-client
+        run: ginkgo ./...
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 6: Docker image build (dry run)
   # Validates the multi-stage Dockerfile on every push and PR so regressions
   # are caught before they block a release. No image is pushed — amd64 only is
   # sufficient for regression detection; arm64 cross-compilation would double
