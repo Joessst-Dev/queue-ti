@@ -106,7 +106,12 @@ func (s *GRPCServer) Dequeue(ctx context.Context, req *pb.DequeueRequest) (*pb.D
 		return nil, err
 	}
 
-	msg, err := s.queueService.Dequeue(ctx, req.Topic, vt)
+	var msg *queue.Message
+	if req.ConsumerGroup != "" {
+		msg, err = s.queueService.DequeueForGroup(ctx, req.Topic, req.ConsumerGroup, vt)
+	} else {
+		msg, err = s.queueService.Dequeue(ctx, req.Topic, vt)
+	}
 	if err != nil {
 		if errors.Is(err, queue.ErrNoMessage) {
 			slog.Debug("grpc dequeue: no messages", "topic", req.Topic)
@@ -146,7 +151,12 @@ func (s *GRPCServer) BatchDequeue(ctx context.Context, req *pb.BatchDequeueReque
 		return nil, err
 	}
 
-	batch, err := s.queueService.DequeueN(ctx, req.Topic, int(req.Count), vt)
+	var batch []*queue.Message
+	if req.ConsumerGroup != "" {
+		batch, err = s.queueService.DequeueNForGroup(ctx, req.Topic, req.ConsumerGroup, int(req.Count), vt)
+	} else {
+		batch, err = s.queueService.DequeueN(ctx, req.Topic, int(req.Count), vt)
+	}
 	if err != nil {
 		if errors.Is(err, queue.ErrInvalidBatchSize) {
 			return nil, status.Errorf(codes.InvalidArgument, "%s", err)
@@ -190,9 +200,18 @@ func (s *GRPCServer) Ack(ctx context.Context, req *pb.AckRequest) (*pb.AckRespon
 		return nil, err
 	}
 
-	if err := s.queueService.Ack(ctx, req.Id); err != nil {
-		slog.Error("grpc ack failed", "id", req.Id, "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to ack: %v", err)
+	var ackErr error
+	if req.ConsumerGroup != "" {
+		ackErr = s.queueService.AckForGroup(ctx, req.Id, req.ConsumerGroup)
+	} else {
+		ackErr = s.queueService.Ack(ctx, req.Id)
+	}
+	if ackErr != nil {
+		if errors.Is(ackErr, queue.ErrNotFound) || errors.Is(ackErr, queue.ErrNotProcessing) {
+			return nil, status.Error(codes.NotFound, ackErr.Error())
+		}
+		slog.Error("grpc ack failed", "id", req.Id, "error", ackErr)
+		return nil, status.Errorf(codes.Internal, "failed to ack: %v", ackErr)
 	}
 
 	slog.Debug("grpc ack", "id", req.Id)
@@ -219,12 +238,20 @@ func (s *GRPCServer) Subscribe(req *pb.SubscribeRequest, stream pb.QueueService_
 	)
 	backoff := minBackoff
 
+	consumerGroup := req.ConsumerGroup
+
 	for {
 		if stream.Context().Err() != nil {
 			return nil
 		}
 
-		msg, err := s.queueService.Dequeue(stream.Context(), req.Topic, vt)
+		var msg *queue.Message
+		var err error
+		if consumerGroup != "" {
+			msg, err = s.queueService.DequeueForGroup(stream.Context(), req.Topic, consumerGroup, vt)
+		} else {
+			msg, err = s.queueService.Dequeue(stream.Context(), req.Topic, vt)
+		}
 		if err != nil {
 			if stream.Context().Err() != nil {
 				return nil
@@ -278,12 +305,18 @@ func (s *GRPCServer) Nack(ctx context.Context, req *pb.NackRequest) (*pb.NackRes
 		return nil, err
 	}
 
-	if err := s.queueService.Nack(ctx, req.Id, req.Error); err != nil {
-		if errors.Is(err, queue.ErrNotFound) || errors.Is(err, queue.ErrNotProcessing) {
-			return nil, status.Errorf(codes.NotFound, "message not found or not in processing state: %v", err)
+	var nackErr error
+	if req.ConsumerGroup != "" {
+		nackErr = s.queueService.NackForGroup(ctx, req.Id, req.ConsumerGroup, req.Error)
+	} else {
+		nackErr = s.queueService.Nack(ctx, req.Id, req.Error)
+	}
+	if nackErr != nil {
+		if errors.Is(nackErr, queue.ErrNotFound) || errors.Is(nackErr, queue.ErrNotProcessing) {
+			return nil, status.Errorf(codes.NotFound, "message not found or not in processing state: %v", nackErr)
 		}
-		slog.Error("grpc nack failed", "id", req.Id, "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to nack: %v", err)
+		slog.Error("grpc nack failed", "id", req.Id, "error", nackErr)
+		return nil, status.Errorf(codes.Internal, "failed to nack: %v", nackErr)
 	}
 
 	slog.Debug("grpc nack", "id", req.Id)

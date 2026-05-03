@@ -2,6 +2,7 @@ import { Component, inject, signal, ChangeDetectionStrategy, OnInit } from '@ang
 import { SlicePipe } from '@angular/common';
 import { UserService, User, Grant } from '../services/user.service';
 import { getErrorMessage } from '../utils/error';
+import { inputValue } from '../utils/dom';
 
 @Component({
   selector: 'app-users-section',
@@ -305,12 +306,10 @@ export class UsersSection implements OnInit {
   readonly newGrantAction = signal<'read' | 'write' | 'admin'>('read');
   readonly newGrantPattern = signal('*');
 
+  protected readonly inputValue = inputValue;
+
   grantsFor(userId: string): Grant[] {
     return this.grants()[userId] ?? [];
-  }
-
-  inputValue(e: Event): string {
-    return (e.target as HTMLInputElement).value;
   }
 
   inputChecked(e: Event): boolean {

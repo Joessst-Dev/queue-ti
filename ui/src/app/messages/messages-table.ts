@@ -19,6 +19,7 @@ import { QueueMessage } from '../services/queue.service';
 import { NackOverlay } from './nack-overlay';
 import { PurgeConfirmPanel } from './purge-confirm-panel';
 import { STATUS_CLASS_MAP, DEFAULT_STATUS_CLASS } from './status-classes';
+import { inputValue } from '../utils/dom';
 
 // py-4 top (16) + text-sm line-height (20) + py-4 bottom (16) + divide-y border (1) = 53
 const ITEM_SIZE = 53;
@@ -421,9 +422,7 @@ export class MessagesTable {
     }).catch(() => {});
   }
 
-  inputValue(e: Event): string {
-    return (e.target as HTMLInputElement).value;
-  }
+  protected readonly inputValue = inputValue;
 
   togglePurgeStatus(status: string): void {
     this.purgeStatuses.update((current) =>

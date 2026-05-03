@@ -18,7 +18,8 @@ type enqueueRequest struct {
 }
 
 type nackRequest struct {
-	Error string `json:"error"`
+	Error         string `json:"error"`
+	ConsumerGroup string `json:"consumer_group"`
 }
 
 type messageResponse struct {
@@ -48,6 +49,7 @@ type batchDequeueRequest struct {
 	Topic                 string `json:"topic"`
 	Count                 int    `json:"count"`
 	VisibilityTimeoutSecs *int   `json:"visibility_timeout_seconds,omitempty"`
+	ConsumerGroup         string `json:"consumer_group"`
 }
 
 type batchDequeueResponse struct {
@@ -163,7 +165,13 @@ func (s *HTTPServer) batchDequeueMessages(c *fiber.Ctx) error {
 		vt = time.Duration(*req.VisibilityTimeoutSecs) * time.Second
 	}
 
-	batch, err := s.queueService.DequeueN(c.Context(), req.Topic, req.Count, vt)
+	var batch []*queue.Message
+	var err error
+	if req.ConsumerGroup != "" {
+		batch, err = s.queueService.DequeueNForGroup(c.Context(), req.Topic, req.ConsumerGroup, req.Count, vt)
+	} else {
+		batch, err = s.queueService.DequeueN(c.Context(), req.Topic, req.Count, vt)
+	}
 	if err != nil {
 		if errors.Is(err, queue.ErrInvalidBatchSize) {
 			return jsonError(c, fiber.StatusBadRequest, err.Error())
@@ -187,11 +195,17 @@ func (s *HTTPServer) nackMessage(c *fiber.Ctx) error {
 	// Body is optional — an empty body is valid (no error message provided).
 	_ = c.BodyParser(&req)
 
-	if err := s.queueService.Nack(c.Context(), id, req.Error); err != nil {
-		if errors.Is(err, queue.ErrNotFound) || errors.Is(err, queue.ErrNotProcessing) {
-			return jsonError(c, fiber.StatusNotFound, err.Error())
+	var nackErr error
+	if req.ConsumerGroup != "" {
+		nackErr = s.queueService.NackForGroup(c.Context(), id, req.ConsumerGroup, req.Error)
+	} else {
+		nackErr = s.queueService.Nack(c.Context(), id, req.Error)
+	}
+	if nackErr != nil {
+		if errors.Is(nackErr, queue.ErrNotFound) || errors.Is(nackErr, queue.ErrNotProcessing) {
+			return jsonError(c, fiber.StatusNotFound, nackErr.Error())
 		}
-		slog.Error("nack failed", "id", id, "error", err)
+		slog.Error("nack failed", "id", id, "error", nackErr)
 		return jsonError(c, fiber.StatusInternalServerError, "internal server error")
 	}
 

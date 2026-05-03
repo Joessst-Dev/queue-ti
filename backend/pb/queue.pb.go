@@ -138,6 +138,7 @@ type DequeueRequest struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
 	Topic                    string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
 	VisibilityTimeoutSeconds *uint32                `protobuf:"varint,2,opt,name=visibility_timeout_seconds,json=visibilityTimeoutSeconds,proto3,oneof" json:"visibility_timeout_seconds,omitempty"`
+	ConsumerGroup            string                 `protobuf:"bytes,3,opt,name=consumer_group,json=consumerGroup,proto3" json:"consumer_group,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
@@ -184,6 +185,13 @@ func (x *DequeueRequest) GetVisibilityTimeoutSeconds() uint32 {
 		return *x.VisibilityTimeoutSeconds
 	}
 	return 0
+}
+
+func (x *DequeueRequest) GetConsumerGroup() string {
+	if x != nil {
+		return x.ConsumerGroup
+	}
+	return ""
 }
 
 type DequeueResponse struct {
@@ -291,6 +299,7 @@ type BatchDequeueRequest struct {
 	Topic                    string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
 	Count                    uint32                 `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
 	VisibilityTimeoutSeconds *uint32                `protobuf:"varint,3,opt,name=visibility_timeout_seconds,json=visibilityTimeoutSeconds,proto3,oneof" json:"visibility_timeout_seconds,omitempty"`
+	ConsumerGroup            string                 `protobuf:"bytes,4,opt,name=consumer_group,json=consumerGroup,proto3" json:"consumer_group,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
@@ -346,6 +355,13 @@ func (x *BatchDequeueRequest) GetVisibilityTimeoutSeconds() uint32 {
 	return 0
 }
 
+func (x *BatchDequeueRequest) GetConsumerGroup() string {
+	if x != nil {
+		return x.ConsumerGroup
+	}
+	return ""
+}
+
 type BatchDequeueResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Messages      []*DequeueResponse     `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
@@ -393,6 +409,7 @@ func (x *BatchDequeueResponse) GetMessages() []*DequeueResponse {
 type AckRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ConsumerGroup string                 `protobuf:"bytes,2,opt,name=consumer_group,json=consumerGroup,proto3" json:"consumer_group,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -430,6 +447,13 @@ func (*AckRequest) Descriptor() ([]byte, []int) {
 func (x *AckRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *AckRequest) GetConsumerGroup() string {
+	if x != nil {
+		return x.ConsumerGroup
 	}
 	return ""
 }
@@ -474,6 +498,7 @@ type NackRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	ConsumerGroup string                 `protobuf:"bytes,3,opt,name=consumer_group,json=consumerGroup,proto3" json:"consumer_group,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -522,6 +547,13 @@ func (x *NackRequest) GetError() string {
 	return ""
 }
 
+func (x *NackRequest) GetConsumerGroup() string {
+	if x != nil {
+		return x.ConsumerGroup
+	}
+	return ""
+}
+
 type NackResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -562,6 +594,7 @@ type SubscribeRequest struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
 	Topic                    string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
 	VisibilityTimeoutSeconds *uint32                `protobuf:"varint,2,opt,name=visibility_timeout_seconds,json=visibilityTimeoutSeconds,proto3,oneof" json:"visibility_timeout_seconds,omitempty"`
+	ConsumerGroup            string                 `protobuf:"bytes,3,opt,name=consumer_group,json=consumerGroup,proto3" json:"consumer_group,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
@@ -608,6 +641,13 @@ func (x *SubscribeRequest) GetVisibilityTimeoutSeconds() uint32 {
 		return *x.VisibilityTimeoutSeconds
 	}
 	return 0
+}
+
+func (x *SubscribeRequest) GetConsumerGroup() string {
+	if x != nil {
+		return x.ConsumerGroup
+	}
+	return ""
 }
 
 type SubscribeResponse struct {
@@ -709,10 +749,11 @@ const file_queue_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x06\n" +
 	"\x04_key\"!\n" +
 	"\x0fEnqueueResponse\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\x88\x01\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\xaf\x01\n" +
 	"\x0eDequeueRequest\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12A\n" +
-	"\x1avisibility_timeout_seconds\x18\x02 \x01(\rH\x00R\x18visibilityTimeoutSeconds\x88\x01\x01B\x1d\n" +
+	"\x1avisibility_timeout_seconds\x18\x02 \x01(\rH\x00R\x18visibilityTimeoutSeconds\x88\x01\x01\x12%\n" +
+	"\x0econsumer_group\x18\x03 \x01(\tR\rconsumerGroupB\x1d\n" +
 	"\x1b_visibility_timeout_seconds\"\xec\x02\n" +
 	"\x0fDequeueResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
@@ -729,25 +770,29 @@ const file_queue_proto_rawDesc = "" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x06\n" +
-	"\x04_key\"\xa3\x01\n" +
+	"\x04_key\"\xca\x01\n" +
 	"\x13BatchDequeueRequest\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\rR\x05count\x12A\n" +
-	"\x1avisibility_timeout_seconds\x18\x03 \x01(\rH\x00R\x18visibilityTimeoutSeconds\x88\x01\x01B\x1d\n" +
+	"\x1avisibility_timeout_seconds\x18\x03 \x01(\rH\x00R\x18visibilityTimeoutSeconds\x88\x01\x01\x12%\n" +
+	"\x0econsumer_group\x18\x04 \x01(\tR\rconsumerGroupB\x1d\n" +
 	"\x1b_visibility_timeout_seconds\"J\n" +
 	"\x14BatchDequeueResponse\x122\n" +
-	"\bmessages\x18\x01 \x03(\v2\x16.queue.DequeueResponseR\bmessages\"\x1c\n" +
+	"\bmessages\x18\x01 \x03(\v2\x16.queue.DequeueResponseR\bmessages\"C\n" +
 	"\n" +
 	"AckRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\r\n" +
-	"\vAckResponse\"3\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
+	"\x0econsumer_group\x18\x02 \x01(\tR\rconsumerGroup\"\r\n" +
+	"\vAckResponse\"Z\n" +
 	"\vNackRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"\x0e\n" +
-	"\fNackResponse\"\x8a\x01\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12%\n" +
+	"\x0econsumer_group\x18\x03 \x01(\tR\rconsumerGroup\"\x0e\n" +
+	"\fNackResponse\"\xb1\x01\n" +
 	"\x10SubscribeRequest\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12A\n" +
-	"\x1avisibility_timeout_seconds\x18\x02 \x01(\rH\x00R\x18visibilityTimeoutSeconds\x88\x01\x01B\x1d\n" +
+	"\x1avisibility_timeout_seconds\x18\x02 \x01(\rH\x00R\x18visibilityTimeoutSeconds\x88\x01\x01\x12%\n" +
+	"\x0econsumer_group\x18\x03 \x01(\tR\rconsumerGroupB\x1d\n" +
 	"\x1b_visibility_timeout_seconds\"\xb0\x02\n" +
 	"\x11SubscribeResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
