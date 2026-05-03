@@ -219,6 +219,7 @@ import { inputValue } from '../utils/dom';
                               <tr>
                                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Topic Pattern</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Consumer Group</th>
                                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                               </tr>
                             </thead>
@@ -227,6 +228,7 @@ import { inputValue } from '../utils/dom';
                                 <tr class="hover:bg-gray-50">
                                   <td class="px-3 py-2">{{ grant.action }}</td>
                                   <td class="px-3 py-2 font-mono text-xs">{{ grant.topic_pattern }}</td>
+                                  <td class="px-3 py-2 font-mono text-xs">{{ grant.consumer_group ?? '—' }}</td>
                                   <td class="px-3 py-2">
                                     <button
                                       type="button"
@@ -262,6 +264,7 @@ import { inputValue } from '../utils/dom';
                                     class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                   />
                                 </td>
+                                <td class="px-3 py-2"></td>
                                 <td class="px-3 py-2">
                                   <button
                                     type="button"
@@ -275,6 +278,59 @@ import { inputValue } from '../utils/dom';
                               </tr>
                             </tbody>
                           </table>
+
+                          @if (grantsError(user.id)) {
+                            <div class="mt-2 p-2 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                              {{ grantsError(user.id) }}
+                            </div>
+                          }
+
+                          <div class="mt-4 border border-gray-200 rounded-md overflow-hidden">
+                            <div class="px-3 py-2 bg-gray-100 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Add consumer group grant
+                            </div>
+                            <div class="p-3 bg-white flex flex-wrap gap-2 items-end">
+                              <div class="flex flex-col gap-1">
+                                <label
+                                  [attr.for]="'cg-pattern-' + user.id"
+                                  class="text-xs text-gray-500"
+                                >Topic Pattern</label>
+                                <input
+                                  [id]="'cg-pattern-' + user.id"
+                                  type="text"
+                                  [value]="cgPattern(user.id)"
+                                  (input)="setCgPattern(user.id, $event)"
+                                  placeholder="*"
+                                  [attr.aria-label]="'Consumer group topic pattern for ' + user.username"
+                                  class="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+                              <div class="flex flex-col gap-1">
+                                <label
+                                  [attr.for]="'cg-group-' + user.id"
+                                  class="text-xs text-gray-500"
+                                >Consumer Group</label>
+                                <input
+                                  [id]="'cg-group-' + user.id"
+                                  type="text"
+                                  [value]="cgGroup(user.id)"
+                                  (input)="setCgGroup(user.id, $event)"
+                                  placeholder="group name"
+                                  required
+                                  [attr.aria-label]="'Consumer group name for ' + user.username"
+                                  class="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                (click)="onAddConsumerGroupGrant(user.id)"
+                                [attr.aria-label]="'Add consumer group grant for ' + user.username"
+                                class="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                              >
+                                Add
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -305,11 +361,34 @@ export class UsersSection implements OnInit {
   readonly newIsAdmin = signal(false);
   readonly newGrantAction = signal<'read' | 'write' | 'admin'>('read');
   readonly newGrantPattern = signal('*');
+  readonly newCgPattern = signal<Record<string, string>>({});
+  readonly newCgGroup = signal<Record<string, string>>({});
+  private readonly grantsErrorMap = signal<Record<string, string>>({});
 
   protected readonly inputValue = inputValue;
 
   grantsFor(userId: string): Grant[] {
     return this.grants()[userId] ?? [];
+  }
+
+  grantsError(userId: string): string {
+    return this.grantsErrorMap()[userId] ?? '';
+  }
+
+  cgPattern(userId: string): string {
+    return this.newCgPattern()[userId] ?? '*';
+  }
+
+  cgGroup(userId: string): string {
+    return this.newCgGroup()[userId] ?? '';
+  }
+
+  setCgPattern(userId: string, event: Event): void {
+    this.newCgPattern.update((m) => ({ ...m, [userId]: inputValue(event) }));
+  }
+
+  setCgGroup(userId: string, event: Event): void {
+    this.newCgGroup.update((m) => ({ ...m, [userId]: inputValue(event) }));
   }
 
   inputChecked(e: Event): boolean {
@@ -429,6 +508,7 @@ export class UsersSection implements OnInit {
   toggleGrants(userId: string): void {
     if (this.expandedGrantUserId() === userId) {
       this.expandedGrantUserId.set(null);
+      this.grantsErrorMap.update((m) => ({ ...m, [userId]: '' }));
       return;
     }
     this.userSvc.listGrants(userId).subscribe({
@@ -473,6 +553,33 @@ export class UsersSection implements OnInit {
         },
         error: (err: unknown) => {
           this.error.set(getErrorMessage(err, 'Failed to add grant'));
+        },
+      });
+  }
+
+  onAddConsumerGroupGrant(userId: string): void {
+    const group = this.cgGroup(userId).trim();
+    if (!group) {
+      this.grantsErrorMap.update((m) => ({ ...m, [userId]: 'Consumer group is required' }));
+      return;
+    }
+    this.grantsErrorMap.update((m) => ({ ...m, [userId]: '' }));
+    this.userSvc
+      .addConsumerGroupGrant(userId, this.cgPattern(userId) || '*', group)
+      .subscribe({
+        next: (grant) => {
+          this.grants.update((all) => ({
+            ...all,
+            [userId]: [...(all[userId] ?? []), grant],
+          }));
+          this.newCgPattern.update((m) => ({ ...m, [userId]: '*' }));
+          this.newCgGroup.update((m) => ({ ...m, [userId]: '' }));
+        },
+        error: (err: unknown) => {
+          this.grantsErrorMap.update((m) => ({
+            ...m,
+            [userId]: getErrorMessage(err, 'Failed to add consumer group grant'),
+          }));
         },
       });
   }

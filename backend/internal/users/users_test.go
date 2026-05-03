@@ -353,6 +353,56 @@ var _ = Describe("Store", func() {
 			})
 		})
 
+		Describe("AddConsumerGroupGrant", func() {
+			Context("when adding a valid consume grant", func() {
+				It("should return a populated Grant with action 'consume' and the consumer group set", func() {
+					g, err := store.AddConsumerGroupGrant(usersTestCtx, owner.ID, "orders.*", "team-a")
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(g.ID).NotTo(BeEmpty())
+					Expect(g.UserID).To(Equal(owner.ID))
+					Expect(g.Action).To(Equal("consume"))
+					Expect(g.TopicPattern).To(Equal("orders.*"))
+					Expect(g.ConsumerGroup).To(Equal("team-a"))
+					Expect(g.CreatedAt).NotTo(BeZero())
+				})
+
+				It("should appear in ListGrants for that user", func() {
+					_, err := store.AddConsumerGroupGrant(usersTestCtx, owner.ID, "*", "team-b")
+					Expect(err).NotTo(HaveOccurred())
+
+					grants, err := store.ListGrants(usersTestCtx, owner.ID)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(grants).To(HaveLen(1))
+					Expect(grants[0].ConsumerGroup).To(Equal("team-b"))
+				})
+			})
+
+			Context("when the same user+topic_pattern+consumer_group combination is added twice", func() {
+				It("should return ErrDuplicate on the second call", func() {
+					_, err := store.AddConsumerGroupGrant(usersTestCtx, owner.ID, "orders", "team-a")
+					Expect(err).NotTo(HaveOccurred())
+
+					_, err = store.AddConsumerGroupGrant(usersTestCtx, owner.ID, "orders", "team-a")
+					Expect(err).To(MatchError(users.ErrDuplicate))
+				})
+			})
+
+			Context("when the same user+topic_pattern is used with a different consumer group", func() {
+				It("should succeed because the unique constraint is per group", func() {
+					_, err := store.AddConsumerGroupGrant(usersTestCtx, owner.ID, "orders", "team-a")
+					Expect(err).NotTo(HaveOccurred())
+
+					_, err = store.AddConsumerGroupGrant(usersTestCtx, owner.ID, "orders", "team-b")
+					Expect(err).NotTo(HaveOccurred())
+
+					grants, err := store.ListGrants(usersTestCtx, owner.ID)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(grants).To(HaveLen(2))
+				})
+			})
+		})
+
 		Describe("DeleteGrant", func() {
 			Context("when the grant exists for that user", func() {
 				It("should remove it so it no longer appears in ListGrants", func() {

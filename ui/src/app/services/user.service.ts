@@ -14,8 +14,9 @@ export interface User {
 export interface Grant {
   id: string;
   user_id: string;
-  action: 'read' | 'write' | 'admin';
+  action: 'read' | 'write' | 'admin' | 'consume';
   topic_pattern: string;
+  consumer_group?: string;
   created_at: string;
 }
 
@@ -70,5 +71,16 @@ export class UserService {
 
   deleteGrant(userId: string, grantId: string): Observable<void> {
     return this.http.delete<void>(`/api/users/${userId}/grants/${grantId}`);
+  }
+
+  addConsumerGroupGrant(
+    userId: string,
+    topicPattern: string,
+    consumerGroup: string,
+  ): Observable<Grant> {
+    return this.http.post<Grant>(`/api/users/${userId}/consumer-group-grants`, {
+      topic_pattern: topicPattern,
+      consumer_group: consumerGroup,
+    });
   }
 }
