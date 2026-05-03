@@ -298,8 +298,8 @@ import { inputValue } from '../utils/dom';
                                 <input
                                   [id]="'cg-pattern-' + user.id"
                                   type="text"
-                                  [value]="newCgPattern()"
-                                  (input)="newCgPattern.set(inputValue($event))"
+                                  [value]="cgPattern(user.id)"
+                                  (input)="setCgPattern(user.id, $event)"
                                   placeholder="*"
                                   [attr.aria-label]="'Consumer group topic pattern for ' + user.username"
                                   class="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -313,8 +313,8 @@ import { inputValue } from '../utils/dom';
                                 <input
                                   [id]="'cg-group-' + user.id"
                                   type="text"
-                                  [value]="newCgGroup()"
-                                  (input)="newCgGroup.set(inputValue($event))"
+                                  [value]="cgGroup(user.id)"
+                                  (input)="setCgGroup(user.id, $event)"
                                   placeholder="group name"
                                   required
                                   [attr.aria-label]="'Consumer group name for ' + user.username"
@@ -361,8 +361,8 @@ export class UsersSection implements OnInit {
   readonly newIsAdmin = signal(false);
   readonly newGrantAction = signal<'read' | 'write' | 'admin'>('read');
   readonly newGrantPattern = signal('*');
-  readonly newCgPattern = signal('*');
-  readonly newCgGroup = signal('');
+  readonly newCgPattern = signal<Record<string, string>>({});
+  readonly newCgGroup = signal<Record<string, string>>({});
   private readonly grantsErrorMap = signal<Record<string, string>>({});
 
   protected readonly inputValue = inputValue;
@@ -373,6 +373,22 @@ export class UsersSection implements OnInit {
 
   grantsError(userId: string): string {
     return this.grantsErrorMap()[userId] ?? '';
+  }
+
+  cgPattern(userId: string): string {
+    return this.newCgPattern()[userId] ?? '*';
+  }
+
+  cgGroup(userId: string): string {
+    return this.newCgGroup()[userId] ?? '';
+  }
+
+  setCgPattern(userId: string, event: Event): void {
+    this.newCgPattern.update((m) => ({ ...m, [userId]: inputValue(event) }));
+  }
+
+  setCgGroup(userId: string, event: Event): void {
+    this.newCgGroup.update((m) => ({ ...m, [userId]: inputValue(event) }));
   }
 
   inputChecked(e: Event): boolean {
@@ -492,6 +508,7 @@ export class UsersSection implements OnInit {
   toggleGrants(userId: string): void {
     if (this.expandedGrantUserId() === userId) {
       this.expandedGrantUserId.set(null);
+      this.grantsErrorMap.update((m) => ({ ...m, [userId]: '' }));
       return;
     }
     this.userSvc.listGrants(userId).subscribe({
@@ -541,22 +558,22 @@ export class UsersSection implements OnInit {
   }
 
   onAddConsumerGroupGrant(userId: string): void {
-    const group = this.newCgGroup().trim();
+    const group = this.cgGroup(userId).trim();
     if (!group) {
       this.grantsErrorMap.update((m) => ({ ...m, [userId]: 'Consumer group is required' }));
       return;
     }
     this.grantsErrorMap.update((m) => ({ ...m, [userId]: '' }));
     this.userSvc
-      .addConsumerGroupGrant(userId, this.newCgPattern() || '*', group)
+      .addConsumerGroupGrant(userId, this.cgPattern(userId) || '*', group)
       .subscribe({
         next: (grant) => {
           this.grants.update((all) => ({
             ...all,
             [userId]: [...(all[userId] ?? []), grant],
           }));
-          this.newCgPattern.set('*');
-          this.newCgGroup.set('');
+          this.newCgPattern.update((m) => ({ ...m, [userId]: '*' }));
+          this.newCgGroup.update((m) => ({ ...m, [userId]: '' }));
         },
         error: (err: unknown) => {
           this.grantsErrorMap.update((m) => ({

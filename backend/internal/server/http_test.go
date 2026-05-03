@@ -2001,6 +2001,85 @@ var _ = Describe("HTTP Server", func() {
 	})
 
 	// ---------------------------------------------------------------------------
+	// POST /api/messages/dequeue — consume grant enforcement
+	// ---------------------------------------------------------------------------
+
+	Describe("POST /api/messages/dequeue consumer-group grant enforcement", func() {
+		var (
+			httpServer *server.HTTPServer
+			consumer   *users.User
+		)
+
+		BeforeEach(func() {
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
+				Enabled:   true,
+				JWTSecret: testJWTSecret,
+			}, prometheus.NewRegistry(), userStore, "dev")
+
+			var err error
+			consumer, err = userStore.Create(httpTestCtx, "cg-dequeue-consumer", "strongpassword123", false)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = queueService.Enqueue(httpTestCtx, "cg-dequeue-t", []byte(`{"x":1}`), nil, nil)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when user has a consume grant for the topic and uses the correct group", func() {
+			It("should return 200", func() {
+				_, err := userStore.AddConsumerGroupGrant(httpTestCtx, consumer.ID, "cg-dequeue-t", "grp-a")
+				Expect(err).NotTo(HaveOccurred())
+				token, err := users.IssueToken([]byte(testJWTSecret), consumer.ID, consumer.Username, consumer.IsAdmin)
+				Expect(err).NotTo(HaveOccurred())
+
+				body := `{"topic":"cg-dequeue-t","count":1,"consumer_group":"grp-a","visibility_timeout":30}`
+				req := httptest.NewRequest("POST", "/api/messages/dequeue", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+token)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+			})
+		})
+
+		Context("when user has a consume grant but uses a different group", func() {
+			It("should return 403", func() {
+				_, err := userStore.AddConsumerGroupGrant(httpTestCtx, consumer.ID, "cg-dequeue-t", "grp-a")
+				Expect(err).NotTo(HaveOccurred())
+				token, err := users.IssueToken([]byte(testJWTSecret), consumer.ID, consumer.Username, consumer.IsAdmin)
+				Expect(err).NotTo(HaveOccurred())
+
+				body := `{"topic":"cg-dequeue-t","count":1,"consumer_group":"grp-wrong","visibility_timeout":30}`
+				req := httptest.NewRequest("POST", "/api/messages/dequeue", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+token)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(403))
+			})
+		})
+
+		Context("when user has only a write grant and sends no consumer_group", func() {
+			It("should return 200 (backward compat)", func() {
+				_, err := userStore.AddGrant(httpTestCtx, consumer.ID, "write", "cg-dequeue-t")
+				Expect(err).NotTo(HaveOccurred())
+				token, err := users.IssueToken([]byte(testJWTSecret), consumer.ID, consumer.Username, consumer.IsAdmin)
+				Expect(err).NotTo(HaveOccurred())
+
+				body := `{"topic":"cg-dequeue-t","count":1,"visibility_timeout":30}`
+				req := httptest.NewRequest("POST", "/api/messages/dequeue", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+token)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
 	// Redis-backed rate limiter integration test
 	// ---------------------------------------------------------------------------
 

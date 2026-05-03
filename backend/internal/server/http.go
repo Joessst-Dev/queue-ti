@@ -136,22 +136,17 @@ func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, rateLimitSt
 		return peek.Topic
 	}), s.enqueueMessage)
 	api.Post("/messages/dequeue", jwtAuth, s.requireDequeueGrant(
-		func(c *fiber.Ctx) string {
+		func(c *fiber.Ctx) (string, string) {
 			var peek struct {
-				Topic string `json:"topic"`
-			}
-			_ = json.Unmarshal(c.Body(), &peek)
-			return peek.Topic
-		},
-		func(c *fiber.Ctx) string {
-			var peek struct {
+				Topic         string `json:"topic"`
 				ConsumerGroup string `json:"consumer_group"`
 			}
 			_ = json.Unmarshal(c.Body(), &peek)
-			return peek.ConsumerGroup
+			return peek.Topic, peek.ConsumerGroup
 		},
 	), s.batchDequeueMessages)
 	api.Post("/messages/:id/nack", jwtAuth, s.requireDequeueOnMsgTopic(), s.nackMessage)
+	// requeue intentionally requires "write"; a consume-only user may not requeue.
 	api.Post("/messages/:id/requeue", jwtAuth, s.requireWriteOnMsgTopic(), s.requeueMessage)
 	api.Get("/stats", jwtAuth, s.requireAdmin(), s.statsHandler)
 	api.Get("/topic-configs", jwtAuth, s.requireAdmin(), s.listTopicConfigs)

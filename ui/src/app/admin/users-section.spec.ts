@@ -534,8 +534,8 @@ describe('UsersSection', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      component.newCgPattern.set('orders.*');
-      component.newCgGroup.set('workers');
+      component.newCgPattern.update((m) => ({ ...m, ['u1']: 'orders.*' }));
+      component.newCgGroup.update((m) => ({ ...m, ['u1']: 'workers' }));
       fixture.detectChanges();
 
       const addBtn = el.querySelector(`button[aria-label="Add consumer group grant for alice"]`) as HTMLButtonElement;
@@ -557,16 +557,16 @@ describe('UsersSection', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      component.newCgPattern.set('events.*');
-      component.newCgGroup.set('my-group');
+      component.newCgPattern.update((m) => ({ ...m, ['u1']: 'events.*' }));
+      component.newCgGroup.update((m) => ({ ...m, ['u1']: 'my-group' }));
 
       const addBtn = el.querySelector(`button[aria-label="Add consumer group grant for alice"]`) as HTMLButtonElement;
       addBtn.click();
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(component.newCgPattern()).toBe('*');
-      expect(component.newCgGroup()).toBe('');
+      expect(component.cgPattern('u1')).toBe('*');
+      expect(component.cgGroup('u1')).toBe('');
     });
 
     it('should show an error banner when consumer group is empty', async () => {
@@ -578,7 +578,7 @@ describe('UsersSection', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      component.newCgGroup.set('');
+      component.newCgGroup.update((m) => ({ ...m, u1: '' }));
       fixture.detectChanges();
 
       const addBtn = el.querySelector(`button[aria-label="Add consumer group grant for alice"]`) as HTMLButtonElement;
@@ -603,7 +603,7 @@ describe('UsersSection', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      component.newCgGroup.set('workers');
+      component.newCgGroup.update((m) => ({ ...m, ['u1']: 'workers' }));
       fixture.detectChanges();
 
       const addBtn = el.querySelector(`button[aria-label="Add consumer group grant for alice"]`) as HTMLButtonElement;
@@ -613,6 +613,29 @@ describe('UsersSection', () => {
 
       expect(component.grantsError('u1')).toBe('Failed to add consumer group grant');
       expect(el.textContent).toContain('Failed to add consumer group grant');
+    });
+
+    it('should clear the grants error when the panel is closed', async () => {
+      const user = makeUser({ id: 'u1', username: 'alice' });
+      const { fixture, el, component } = await setup({ users: [user], listGrantsResult: [] });
+
+      const grantsBtn = el.querySelector(`button[aria-label="Toggle grants for alice"]`) as HTMLButtonElement;
+      grantsBtn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      component.newCgGroup.update((m) => ({ ...m, u1: '' }));
+      fixture.detectChanges();
+      const addBtn = el.querySelector(`button[aria-label="Add consumer group grant for alice"]`) as HTMLButtonElement;
+      addBtn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(component.grantsError('u1')).toBeTruthy();
+
+      grantsBtn.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(component.grantsError('u1')).toBe('');
     });
   });
 });

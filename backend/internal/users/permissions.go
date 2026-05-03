@@ -44,6 +44,8 @@ func HasConsumerGroupAccess(grants []Grant, topic, consumerGroup string) bool {
 			return true
 		}
 	}
-	// No consume grants for this topic — restriction is not active.
+	// Note: a "write" grant does not bypass this check. Once any consume grant
+	// exists for this topic, only explicitly granted groups are accessible even
+	// if the caller also holds a "write" grant.
 	return !hasAnyConsumeForTopic
 }

@@ -91,16 +91,15 @@ func (s *HTTPServer) requireWriteOnMsgTopic() fiber.Handler {
 }
 
 // requireDequeueGrant checks dequeue access (write or consume) on a topic,
-// and optionally consumer-group access when a group is present. topicFn and
-// groupFn are called with the current request context to extract these values.
-func (s *HTTPServer) requireDequeueGrant(topicFn, groupFn func(*fiber.Ctx) string) fiber.Handler {
+// and optionally consumer-group access when a group is present. extractFn is
+// called once to parse both values, avoiding redundant body unmarshalling.
+func (s *HTTPServer) requireDequeueGrant(extractFn func(*fiber.Ctx) (string, string)) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if done, err := s.checkAuthAndAdmin(c); done {
 			return err
 		}
 		claims := internalAuth.ClaimsFromCtx(c)
-		topic := topicFn(c)
-		group := groupFn(c)
+		topic, group := extractFn(c)
 		grants, err := s.userStore.GetUserGrants(c.Context(), claims.UserID)
 		if err != nil {
 			return jsonError(c, fiber.StatusInternalServerError, errMsgFailedCheckPerms)
