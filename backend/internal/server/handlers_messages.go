@@ -48,6 +48,7 @@ type batchDequeueRequest struct {
 	Topic                 string `json:"topic"`
 	Count                 int    `json:"count"`
 	VisibilityTimeoutSecs *int   `json:"visibility_timeout_seconds,omitempty"`
+	ConsumerGroup         string `json:"consumer_group"`
 }
 
 type batchDequeueResponse struct {
@@ -163,7 +164,13 @@ func (s *HTTPServer) batchDequeueMessages(c *fiber.Ctx) error {
 		vt = time.Duration(*req.VisibilityTimeoutSecs) * time.Second
 	}
 
-	batch, err := s.queueService.DequeueN(c.Context(), req.Topic, req.Count, vt)
+	var batch []*queue.Message
+	var err error
+	if req.ConsumerGroup != "" {
+		batch, err = s.queueService.DequeueNForGroup(c.Context(), req.Topic, req.ConsumerGroup, req.Count, vt)
+	} else {
+		batch, err = s.queueService.DequeueN(c.Context(), req.Topic, req.Count, vt)
+	}
 	if err != nil {
 		if errors.Is(err, queue.ErrInvalidBatchSize) {
 			return jsonError(c, fiber.StatusBadRequest, err.Error())

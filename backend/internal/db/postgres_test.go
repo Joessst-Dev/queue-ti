@@ -138,8 +138,9 @@ var _ = Describe("Migrate", func() {
 		pool, err = db.Connect(suiteCtx, containerDB)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Start from a clean schema so each spec is independent
-		_, err = pool.Exec(suiteCtx, `DROP TABLE IF EXISTS messages, schema_migrations`)
+		// Start from a clean schema so each spec is independent.
+		// CASCADE handles any dependent tables (e.g. message_deliveries → messages).
+		_, err = pool.Exec(suiteCtx, `DROP TABLE IF EXISTS messages, schema_migrations CASCADE`)
 		Expect(err).NotTo(HaveOccurred())
 	})
 

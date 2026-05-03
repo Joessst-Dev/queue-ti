@@ -178,6 +178,192 @@ func (s *Service) Nack(ctx context.Context, id string, processingError string) e
 	return nil
 }
 
+// AckForGroup acknowledges a message delivery for the given consumer group.
+// It removes the delivery row and, when this is the last outstanding delivery,
+// optionally archives the message to message_log (if the topic is replayable)
+// and then deletes the parent messages row.
+func (s *Service) AckForGroup(ctx context.Context, id, group string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("ack group begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var topic string
+	var key *string
+	var payload, metaJSON []byte
+	var retryCount, maxRetries int
+	var lastError *string
+	var originalTopic *string
+	var createdAt time.Time
+
+	err = tx.QueryRow(ctx, `
+		SELECT m.topic, m.key, m.payload, m.metadata, md.retry_count, md.max_retries,
+		       md.last_error, m.original_topic, m.created_at
+		FROM   message_deliveries md
+		JOIN   messages m ON m.id = md.message_id
+		WHERE  md.message_id = $1 AND md.consumer_group = $2
+		  AND  md.status = 'processing'
+		FOR UPDATE OF md
+	`, id, group).Scan(
+		&topic, &key, &payload, &metaJSON,
+		&retryCount, &maxRetries, &lastError,
+		&originalTopic, &createdAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("ack group: %w", ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("ack group fetch: %w", err)
+	}
+
+	if _, err = tx.Exec(ctx, `
+		DELETE FROM message_deliveries
+		WHERE message_id = $1 AND consumer_group = $2
+	`, id, group); err != nil {
+		return fmt.Errorf("ack group delete delivery: %w", err)
+	}
+
+	var remaining int
+	if err = tx.QueryRow(ctx,
+		`SELECT COUNT(*) FROM message_deliveries WHERE message_id = $1`, id,
+	).Scan(&remaining); err != nil {
+		return fmt.Errorf("ack group count deliveries: %w", err)
+	}
+
+	if remaining == 0 {
+		// Check whether the topic is configured as replayable.
+		var replayable bool
+		err = tx.QueryRow(ctx,
+			`SELECT COALESCE(replayable, false) FROM topic_config WHERE topic = $1`, topic,
+		).Scan(&replayable)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("ack group check replayable: %w", err)
+		}
+
+		if replayable {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO message_log
+				    (id, topic, key, payload, metadata, retry_count, max_retries,
+				     last_error, original_topic, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			`, id, topic, key, payload, metaJSON, retryCount, maxRetries,
+				lastError, originalTopic, createdAt)
+			if err != nil {
+				return fmt.Errorf("ack group archive: %w", err)
+			}
+		}
+
+		if _, err = tx.Exec(ctx, `DELETE FROM messages WHERE id = $1`, id); err != nil {
+			return fmt.Errorf("ack group delete message: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("ack group commit: %w", err)
+	}
+
+	s.recorder.RecordAck(topic)
+	slog.Debug("message acked for group", "id", id, "group", group, "remaining_deliveries", remaining)
+	return nil
+}
+
+// NackForGroup negatively acknowledges a message delivery for the given
+// consumer group. It increments retry_count and either resets the delivery to
+// 'pending' (so it will be redelivered) or marks it 'failed' when retries are
+// exhausted. When dlqThreshold is reached the delivery is marked 'failed'
+// immediately (per-group DLQ promotion is deferred to a future phase).
+func (s *Service) NackForGroup(ctx context.Context, id, group, processingError string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("nack group begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var retryCount, maxRetries int
+	var topic, currentStatus string
+	err = tx.QueryRow(ctx, `
+		SELECT md.retry_count, md.max_retries, m.topic, md.status
+		FROM   message_deliveries md
+		JOIN   messages m ON m.id = md.message_id
+		WHERE  md.message_id = $1 AND md.consumer_group = $2
+		FOR UPDATE OF md
+	`, id, group).Scan(&retryCount, &maxRetries, &topic, &currentStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("nack group: %w", ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("nack group fetch: %w", err)
+	}
+	if currentStatus != "processing" {
+		return fmt.Errorf("nack group: %w", ErrNotProcessing)
+	}
+
+	nextRetryCount := retryCount + 1
+
+	// When the DLQ threshold is configured and reached, mark the delivery
+	// failed without touching the parent message — full per-group DLQ
+	// promotion is deferred to a future phase.
+	if s.dlqThreshold > 0 && nextRetryCount >= s.dlqThreshold {
+		_, err = tx.Exec(ctx, `
+			UPDATE message_deliveries
+			SET    status      = 'failed',
+			       last_error  = $3,
+			       updated_at  = now()
+			WHERE  message_id = $1 AND consumer_group = $2
+		`, id, group, processingError)
+		if err != nil {
+			return fmt.Errorf("nack group dlq mark failed: %w", err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("nack group commit: %w", err)
+		}
+		s.recorder.RecordNack(topic, "dlq")
+		slog.Warn("consumer group delivery marked failed at dlq threshold",
+			"id", id, "group", group, "topic", topic,
+			"retry_count", nextRetryCount, "error", processingError,
+		)
+		return nil
+	}
+
+	newStatus := "pending"
+	if maxRetries > 0 && nextRetryCount >= maxRetries {
+		newStatus = "failed"
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE message_deliveries
+		SET    retry_count        = $3,
+		       last_error         = $4,
+		       visibility_timeout = NULL,
+		       updated_at         = now(),
+		       status             = $5
+		WHERE  message_id = $1 AND consumer_group = $2
+	`, id, group, nextRetryCount, processingError, newStatus)
+	if err != nil {
+		return fmt.Errorf("nack group update: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("nack group commit: %w", err)
+	}
+
+	if newStatus == "failed" {
+		s.recorder.RecordNack(topic, "failed")
+		slog.Info("consumer group delivery failed: retries exhausted",
+			"id", id, "group", group, "topic", topic,
+			"retry_count", nextRetryCount, "max_retries", maxRetries,
+		)
+	} else {
+		s.recorder.RecordNack(topic, "retry")
+		slog.Debug("consumer group delivery nacked, will retry",
+			"id", id, "group", group, "topic", topic,
+			"retry_count", nextRetryCount, "max_retries", maxRetries,
+		)
+	}
+	return nil
+}
+
 // Requeue moves a dead-letter message back to its original topic so it can be
 // processed again. It returns ErrNotDLQ when the message has no original_topic
 // set (i.e. it was never promoted to a DLQ).
