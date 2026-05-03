@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // RegisterConsumerGroup registers a new consumer group for the given topic and
@@ -116,25 +118,13 @@ func (s *Service) ListConsumerGroups(ctx context.Context, topic string) ([]strin
 	if err != nil {
 		return nil, fmt.Errorf("list consumer groups: %w", err)
 	}
-	defer rows.Close()
-
-	var groups []string
-	for rows.Next() {
-		var g string
-		if err := rows.Scan(&g); err != nil {
-			return nil, fmt.Errorf("list consumer groups scan: %w", err)
-		}
-		groups = append(groups, g)
+	groups, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, fmt.Errorf("list consumer groups: %w", err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list consumer groups rows: %w", err)
-	}
-
-	// Prefer an explicit empty slice over nil for consistent API behaviour.
 	if groups == nil {
 		groups = []string{}
 	}
-
 	return groups, nil
 }
 

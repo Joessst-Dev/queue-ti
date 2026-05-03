@@ -1,4 +1,5 @@
 import { Component, input, output, signal, ChangeDetectionStrategy } from '@angular/core';
+import { inputValue } from '../utils/dom';
 
 @Component({
   selector: 'app-nack-overlay',
@@ -40,9 +41,7 @@ export class NackOverlay {
 
   readonly nackError = signal('');
 
-  inputValue(e: Event): string {
-    return (e.target as HTMLInputElement).value;
-  }
+  protected readonly inputValue = inputValue;
 
   onConfirm(): void {
     this.nackConfirmed.emit({ id: this.messageId(), error: this.nackError() });

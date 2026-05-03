@@ -1,7 +1,8 @@
-import { Component, inject, input, signal, ChangeDetectionStrategy, OnInit } from '@angular/core';
+import { Component, inject, input, signal, effect, ChangeDetectionStrategy } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { QueueService } from '../../services/queue.service';
 import { getErrorMessage } from '../../utils/error';
+import { inputValue } from '../../utils/dom';
 
 @Component({
   selector: 'app-consumer-groups-section',
@@ -100,7 +101,7 @@ import { getErrorMessage } from '../../utils/error';
     </section>
   `,
 })
-export class ConsumerGroupsSection implements OnInit {
+export class ConsumerGroupsSection {
   private readonly queue = inject(QueueService);
 
   readonly topic = input.required<string>();
@@ -110,12 +111,13 @@ export class ConsumerGroupsSection implements OnInit {
   readonly newGroupName = signal('');
   readonly error = signal<string | null>(null);
 
-  ngOnInit(): void {
-    this.loadGroups();
-  }
+  protected readonly inputValue = inputValue;
 
-  inputValue(e: Event): string {
-    return (e.target as HTMLInputElement).value;
+  constructor() {
+    effect(() => {
+      this.topic(); // track the input
+      this.loadGroups();
+    });
   }
 
   loadGroups(): void {

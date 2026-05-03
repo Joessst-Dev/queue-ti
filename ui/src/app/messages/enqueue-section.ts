@@ -16,6 +16,7 @@ import { FormField, form, schema, required } from '@angular/forms/signals';
 import { EnqueueRequest, QueueService, TopicSchema } from '../services/queue.service';
 import { generateAvroExample } from './avro-example';
 import { SpinnerComponent } from '../shared/spinner.component';
+import { inputValue } from '../utils/dom';
 
 interface EnqueueModel {
   topic: string;
@@ -278,6 +279,8 @@ export class EnqueueSection {
     this.metadataRows.update((rows) => rows.filter((_, i) => i !== index));
   }
 
+  protected readonly inputValue = inputValue;
+
   onTopicInput(value: string): void {
     this.topicChange$.next(value);
   }
@@ -291,10 +294,6 @@ export class EnqueueSection {
     } catch {
       this.fillExampleError.set('Schema JSON is malformed and could not generate an example.');
     }
-  }
-
-  inputValue(e: Event): string {
-    return (e.target as HTMLInputElement).value;
   }
 
   onSubmit(event: Event): void {

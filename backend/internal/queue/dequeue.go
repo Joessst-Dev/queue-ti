@@ -10,6 +10,72 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// applyThroughputLimit checks the per-topic throughput limit and consumes want
+// tokens from the bucket. Returns the number of tokens actually granted (≤ want).
+// Returns 0 (with nil error) when the bucket is exhausted — the caller must
+// commit the transaction and return early. Returns want when no limit is set.
+func (s *Service) applyThroughputLimit(ctx context.Context, tx pgx.Tx, topic string, want int) (int, error) {
+	var limit *int
+	err := tx.QueryRow(ctx, `SELECT throughput_limit FROM topic_config WHERE topic = $1`, topic).Scan(&limit)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return 0, fmt.Errorf("throughput limit fetch: %w", err)
+	}
+	if limit == nil || *limit == 0 {
+		return want, nil
+	}
+	return s.consumeTokens(ctx, tx, topic, *limit, want)
+}
+
+const deliveryJoinQuery = `
+	SELECT m.id, m.topic, m.payload, m.metadata, md.retry_count, md.max_retries,
+	       md.last_error, m.expires_at, m.created_at,
+	       COALESCE(m.original_topic, ''), m.dlq_moved_at, m.key
+	FROM   messages m
+	JOIN   message_deliveries md ON md.message_id = m.id
+	WHERE  m.id = $1 AND md.consumer_group = $2
+`
+
+// scanMessageWithDelivery scans a single row from the delivery JOIN query into
+// a Message, hydrating its metadata and last_error fields.
+func scanMessageWithDelivery(row pgx.Row) (*Message, error) {
+	var msg Message
+	var metaJSON []byte
+	var lastError *string
+	err := row.Scan(
+		&msg.ID, &msg.Topic, &msg.Payload, &metaJSON,
+		&msg.RetryCount, &msg.MaxRetries, &lastError,
+		&msg.ExpiresAt, &msg.CreatedAt,
+		&msg.OriginalTopic, &msg.DLQMovedAt, &msg.Key,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := hydrateMessage(&msg, metaJSON, lastError); err != nil {
+		return nil, err
+	}
+	return &msg, nil
+}
+
+// scanMessageWithDeliveryRows scans the next row from a multi-row delivery JOIN
+// result set. The caller is responsible for iterating rows and checking rows.Err().
+func scanMessageWithDeliveryRows(rows pgx.Rows) (*Message, error) {
+	var msg Message
+	var metaJSON []byte
+	var lastError *string
+	if err := rows.Scan(
+		&msg.ID, &msg.Topic, &msg.Payload, &metaJSON,
+		&msg.RetryCount, &msg.MaxRetries, &lastError,
+		&msg.ExpiresAt, &msg.CreatedAt,
+		&msg.OriginalTopic, &msg.DLQMovedAt, &msg.Key,
+	); err != nil {
+		return nil, err
+	}
+	if err := hydrateMessage(&msg, metaJSON, lastError); err != nil {
+		return nil, err
+	}
+	return &msg, nil
+}
+
 // resolveVisibilityTimeout returns the effective visibility timeout to use for
 // a dequeue operation. When requested is positive it takes precedence; otherwise
 // the service default is used.
@@ -30,24 +96,15 @@ func (s *Service) Dequeue(ctx context.Context, topic string, visibilityTimeout t
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	// Check for a per-topic throughput limit.
-	var limit *int
-	err = tx.QueryRow(ctx,
-		`SELECT throughput_limit FROM topic_config WHERE topic = $1`, topic,
-	).Scan(&limit)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("dequeue fetch limit: %w", err)
+	allowed, err := s.applyThroughputLimit(ctx, tx, topic, 1)
+	if err != nil {
+		return nil, err
 	}
-	if limit != nil && *limit > 0 {
-		allowed, err := s.consumeTokens(ctx, tx, topic, *limit, 1)
-		if err != nil {
-			return nil, err
+	if allowed == 0 {
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			return nil, fmt.Errorf("dequeue commit (throttled): %w", commitErr)
 		}
-		if allowed == 0 {
-			if commitErr := tx.Commit(ctx); commitErr != nil {
-				return nil, fmt.Errorf("dequeue commit (throttled): %w", commitErr)
-			}
-			return nil, ErrNoMessage
-		}
+		return nil, ErrNoMessage
 	}
 
 	query := `
@@ -119,24 +176,15 @@ func (s *Service) DequeueForGroup(ctx context.Context, topic, group string, visi
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	var limit *int
-	err = tx.QueryRow(ctx,
-		`SELECT throughput_limit FROM topic_config WHERE topic = $1`, topic,
-	).Scan(&limit)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("dequeue group fetch limit: %w", err)
+	allowed, err := s.applyThroughputLimit(ctx, tx, topic, 1)
+	if err != nil {
+		return nil, err
 	}
-	if limit != nil && *limit > 0 {
-		allowed, err := s.consumeTokens(ctx, tx, topic, *limit, 1)
-		if err != nil {
-			return nil, err
+	if allowed == 0 {
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			return nil, fmt.Errorf("dequeue group commit (throttled): %w", commitErr)
 		}
-		if allowed == 0 {
-			if commitErr := tx.Commit(ctx); commitErr != nil {
-				return nil, fmt.Errorf("dequeue group commit (throttled): %w", commitErr)
-			}
-			return nil, ErrNoMessage
-		}
+		return nil, ErrNoMessage
 	}
 
 	var messageID string
@@ -176,28 +224,9 @@ func (s *Service) DequeueForGroup(ctx context.Context, topic, group string, visi
 		return nil, fmt.Errorf("dequeue group: %w", err)
 	}
 
-	var msg Message
-	var metaJSON []byte
-	var lastError *string
-	err = tx.QueryRow(ctx, `
-		SELECT m.id, m.topic, m.payload, m.metadata, md.retry_count, md.max_retries,
-		       md.last_error, m.expires_at, m.created_at,
-		       COALESCE(m.original_topic, ''), m.dlq_moved_at, m.key
-		FROM   messages m
-		JOIN   message_deliveries md ON md.message_id = m.id
-		WHERE  m.id = $1 AND md.consumer_group = $2
-	`, messageID, group).Scan(
-		&msg.ID, &msg.Topic, &msg.Payload, &metaJSON,
-		&msg.RetryCount, &msg.MaxRetries, &lastError,
-		&msg.ExpiresAt, &msg.CreatedAt,
-		&msg.OriginalTopic, &msg.DLQMovedAt, &msg.Key,
-	)
+	msg, err := scanMessageWithDelivery(tx.QueryRow(ctx, deliveryJoinQuery, messageID, group))
 	if err != nil {
 		return nil, fmt.Errorf("dequeue group fetch message: %w", err)
-	}
-
-	if err := hydrateMessage(&msg, metaJSON, lastError); err != nil {
-		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -206,7 +235,7 @@ func (s *Service) DequeueForGroup(ctx context.Context, topic, group string, visi
 
 	s.recorder.RecordDequeue(msg.Topic)
 	slog.Debug("message dequeued for group", "id", msg.ID, "topic", msg.Topic, "group", group, "retry_count", msg.RetryCount)
-	return &msg, nil
+	return msg, nil
 }
 
 // DequeueNForGroup atomically claims up to n pending messages for the given
@@ -225,21 +254,10 @@ func (s *Service) DequeueNForGroup(ctx context.Context, topic, group string, n i
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	allowed := n
-	var limit *int
-	err = tx.QueryRow(ctx,
-		`SELECT throughput_limit FROM topic_config WHERE topic = $1`, topic,
-	).Scan(&limit)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("dequeue group batch fetch limit: %w", err)
+	allowed, err := s.applyThroughputLimit(ctx, tx, topic, n)
+	if err != nil {
+		return nil, err
 	}
-	if limit != nil && *limit > 0 {
-		allowed, err = s.consumeTokens(ctx, tx, topic, *limit, n)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	if allowed == 0 {
 		if commitErr := tx.Commit(ctx); commitErr != nil {
 			return nil, fmt.Errorf("dequeue group batch commit (throttled): %w", commitErr)
@@ -314,23 +332,13 @@ func (s *Service) DequeueNForGroup(ctx context.Context, topic, group string, n i
 
 	messages := make([]*Message, 0, len(ids))
 	for msgRows.Next() {
-		var msg Message
-		var metaJSON []byte
-		var lastError *string
-		if err := msgRows.Scan(
-			&msg.ID, &msg.Topic, &msg.Payload, &metaJSON,
-			&msg.RetryCount, &msg.MaxRetries, &lastError,
-			&msg.ExpiresAt, &msg.CreatedAt,
-			&msg.OriginalTopic, &msg.DLQMovedAt, &msg.Key,
-		); err != nil {
+		msg, err := scanMessageWithDeliveryRows(msgRows)
+		if err != nil {
 			return nil, fmt.Errorf("dequeue group batch scan message: %w", err)
-		}
-		if err := hydrateMessage(&msg, metaJSON, lastError); err != nil {
-			return nil, err
 		}
 		s.recorder.RecordDequeue(msg.Topic)
 		slog.Debug("message dequeued for group (batch)", "id", msg.ID, "topic", msg.Topic, "group", group, "retry_count", msg.RetryCount)
-		messages = append(messages, &msg)
+		messages = append(messages, msg)
 	}
 	if err := msgRows.Err(); err != nil {
 		return nil, fmt.Errorf("dequeue group batch message rows: %w", err)
@@ -360,21 +368,10 @@ func (s *Service) DequeueN(ctx context.Context, topic string, n int, visibilityT
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	allowed := n
-	var limit *int
-	err = tx.QueryRow(ctx,
-		`SELECT throughput_limit FROM topic_config WHERE topic = $1`, topic,
-	).Scan(&limit)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("dequeue batch fetch limit: %w", err)
+	allowed, err := s.applyThroughputLimit(ctx, tx, topic, n)
+	if err != nil {
+		return nil, err
 	}
-	if limit != nil && *limit > 0 {
-		allowed, err = s.consumeTokens(ctx, tx, topic, *limit, n)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	if allowed == 0 {
 		if commitErr := tx.Commit(ctx); commitErr != nil {
 			return nil, fmt.Errorf("dequeue batch commit (throttled): %w", commitErr)

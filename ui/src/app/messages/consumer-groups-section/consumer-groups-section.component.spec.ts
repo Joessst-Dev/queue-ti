@@ -89,6 +89,43 @@ describe('ConsumerGroupsSection', () => {
     });
   });
 
+  describe('when the topic input changes after initial render', () => {
+    it('should call listConsumerGroups again with the new topic', async () => {
+      const { fixture, queueService } = await setup({ topic: 'orders' });
+
+      fixture.componentRef.setInput('topic', 'payments');
+      await fixture.whenStable();
+
+      expect(queueService.listConsumerGroups).toHaveBeenCalledWith('payments');
+      expect(queueService.listConsumerGroups).toHaveBeenCalledTimes(2);
+    });
+
+    it('should load groups for the latest topic', async () => {
+      const queueService = makeQueueService({ listResult: ['new-group'] });
+
+      await TestBed.configureTestingModule({
+        imports: [ConsumerGroupsSection],
+        providers: [
+          provideZonelessChangeDetection(),
+          { provide: QueueService, useValue: queueService },
+        ],
+      }).compileComponents();
+
+      const fixture = TestBed.createComponent(ConsumerGroupsSection);
+      fixture.componentRef.setInput('topic', 'orders');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      fixture.componentRef.setInput('topic', 'payments');
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const el: HTMLElement = fixture.nativeElement;
+      expect(el.textContent).toContain('new-group');
+    });
+  });
+
   describe('when there are no consumer groups', () => {
     it('should show the empty-state message', async () => {
       const { el } = await setup({ groups: [] });

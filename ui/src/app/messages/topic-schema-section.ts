@@ -2,6 +2,7 @@ import { Component, inject, signal, ChangeDetectionStrategy, OnInit } from '@ang
 import { DatePipe } from '@angular/common';
 import { QueueService, TopicSchema } from '../services/queue.service';
 import { getErrorMessage } from '../utils/error';
+import { inputValue } from '../utils/dom';
 
 @Component({
   selector: 'app-topic-schema-section',
@@ -191,12 +192,10 @@ export class TopicSchemaSection implements OnInit {
   readonly newTopic = signal('');
   readonly newSchemaJson = signal('');
 
+  protected readonly inputValue = inputValue;
+
   ngOnInit(): void {
     this.loadSchemas();
-  }
-
-  inputValue(e: Event): string {
-    return (e.target as HTMLInputElement).value;
   }
 
   loadSchemas(): void {

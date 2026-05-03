@@ -3,6 +3,7 @@ import { QueueService } from '../services/queue.service';
 import { TopicConfigSection } from './topic-config-section';
 import { TopicSchemaSection } from './topic-schema-section';
 import { ConsumerGroupsSection } from './consumer-groups-section/consumer-groups-section.component';
+import { selectValue } from '../utils/dom';
 
 @Component({
   selector: 'app-topics-section',
@@ -52,14 +53,12 @@ export class TopicsSection implements OnInit {
   readonly selectedTopic = signal('');
   readonly loadError = signal<string | null>(null);
 
+  protected readonly selectValue = selectValue;
+
   ngOnInit(): void {
     this.queue.getTopicConfigs().subscribe({
       next: (res) => this.topics.set(res.items.map((c) => c.topic)),
       error: (err) => this.loadError.set(err?.message ?? 'unknown error'),
     });
-  }
-
-  selectValue(e: Event): string {
-    return (e.target as HTMLSelectElement).value;
   }
 }

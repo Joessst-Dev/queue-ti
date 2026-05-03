@@ -2,6 +2,7 @@ import { Component, inject, signal, ChangeDetectionStrategy, OnInit } from '@ang
 import { QueueService, TopicConfig, ReplayResponse } from '../services/queue.service';
 import { SpinnerComponent } from '../shared/spinner.component';
 import { getErrorMessage } from '../utils/error';
+import { inputValue } from '../utils/dom';
 
 @Component({
   selector: 'app-topic-config-section',
@@ -495,12 +496,10 @@ export class TopicConfigSection implements OnInit {
   readonly trimResult = signal<number | null>(null);
   readonly trimError = signal<string | null>(null);
 
+  protected readonly inputValue = inputValue;
+
   ngOnInit(): void {
     this.loadConfigs();
-  }
-
-  inputValue(e: Event): string {
-    return (e.target as HTMLInputElement).value;
   }
 
   inputChecked(e: Event): boolean {
