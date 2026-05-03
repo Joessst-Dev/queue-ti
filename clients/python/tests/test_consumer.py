@@ -76,6 +76,10 @@ class TestConsumerOptions:
         opts = ConsumerOptions(concurrency=1)
         assert opts.concurrency == 1
 
+    def test_consumer_group_defaults_to_empty_string(self) -> None:
+        opts = ConsumerOptions()
+        assert opts.consumer_group == ""
+
 
 class TestDrainStream:
     @pytest.mark.asyncio
@@ -125,6 +129,33 @@ class TestDrainStream:
         clean = await consumer._drain_stream(_error_stream(), AsyncMock())
 
         assert clean is False
+
+    @pytest.mark.asyncio
+    async def test_ack_carries_consumer_group(self) -> None:
+        stub = _make_stub()
+        consumer = AsyncConsumer(stub, "t", ConsumerOptions(consumer_group="workers"))
+
+        await consumer._drain_stream(_finite(_make_raw("m1")), AsyncMock())
+
+        stub.Ack.assert_called_once()
+        req = stub.Ack.call_args[0][0]
+        assert req.id == "m1"
+        assert req.consumer_group == "workers"
+
+    @pytest.mark.asyncio
+    async def test_nack_carries_consumer_group(self) -> None:
+        stub = _make_stub()
+        consumer = AsyncConsumer(stub, "t", ConsumerOptions(consumer_group="workers"))
+
+        async def failing_handler(msg: Message) -> None:
+            raise ValueError("bad message")
+
+        await consumer._drain_stream(_finite(_make_raw("m1")), failing_handler)
+
+        stub.Nack.assert_called_once()
+        req = stub.Nack.call_args[0][0]
+        assert req.id == "m1"
+        assert req.consumer_group == "workers"
 
     @pytest.mark.asyncio
     async def test_concurrency_limits_parallel_handlers(self) -> None:
@@ -223,6 +254,21 @@ class TestConsume:
         req = stub.Subscribe.call_args[0][0]
         assert req.visibility_timeout_seconds == 45
 
+    @pytest.mark.asyncio
+    async def test_consumer_group_sent_in_subscribe_request(self) -> None:
+        stub = _make_stub()
+        consumer = AsyncConsumer(stub, "t", ConsumerOptions(consumer_group="workers"))
+
+        async def stop_stream() -> AsyncIterator[queue_pb2.SubscribeResponse]:
+            raise asyncio.CancelledError
+            yield
+
+        stub.Subscribe = MagicMock(return_value=stop_stream())
+        await consumer.consume(AsyncMock())
+
+        req = stub.Subscribe.call_args[0][0]
+        assert req.consumer_group == "workers"
+
 
 # ── consume_batch() tests ─────────────────────────────────────────────────────
 
@@ -281,3 +327,17 @@ class TestConsumeBatch:
             await consumer.consume_batch(BatchOptions(batch_size=5), AsyncMock())
 
         assert call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_consumer_group_sent_in_batch_dequeue_request(self) -> None:
+        resp = queue_pb2.BatchDequeueResponse()
+        resp.messages.append(_make_dequeue_raw("m1"))
+
+        stub = MagicMock()
+        stub.BatchDequeue = AsyncMock(side_effect=[resp, asyncio.CancelledError()])
+        consumer = AsyncConsumer(stub, "t", ConsumerOptions(consumer_group="workers"))
+
+        await consumer.consume_batch(BatchOptions(batch_size=5, consumer_group="workers"), AsyncMock())
+
+        req = stub.BatchDequeue.call_args_list[0][0][0]
+        assert req.consumer_group == "workers"

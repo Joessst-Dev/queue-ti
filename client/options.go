@@ -79,6 +79,7 @@ type ConsumerOption func(*consumerConfig)
 type consumerConfig struct {
 	concurrency       int
 	visibilityTimeout uint32 // seconds, 0 = server default
+	consumerGroup     string
 }
 
 // WithConcurrency sets the number of concurrent handler goroutines (default 1).
@@ -92,6 +93,16 @@ func WithConcurrency(n int) ConsumerOption {
 func WithVisibilityTimeout(seconds uint32) ConsumerOption {
 	return func(cfg *consumerConfig) {
 		cfg.visibilityTimeout = seconds
+	}
+}
+
+// WithConsumerGroup configures the consumer to process messages as part of a
+// named group. Multiple consumers with the same group on the same topic each
+// receive every message independently. An empty string (the default) uses the
+// legacy single-consumer behaviour.
+func WithConsumerGroup(group string) ConsumerOption {
+	return func(cfg *consumerConfig) {
+		cfg.consumerGroup = group
 	}
 }
 

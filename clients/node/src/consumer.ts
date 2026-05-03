@@ -55,15 +55,16 @@ export interface ConsumerStub {
   subscribe(request: {
     topic: string
     visibilityTimeoutSeconds?: number
+    consumerGroup?: string
   }): SubscribeStream
 
   batchDequeue(
-    request: { topic: string; count: number; visibilityTimeoutSeconds?: number },
+    request: { topic: string; count: number; visibilityTimeoutSeconds?: number; consumerGroup?: string },
     callback: (err: Error | null, response: { messages: RawMessage[] }) => void,
   ): void
 
-  ack(request: { id: string }, callback: (err: Error | null) => void): void
-  nack(request: { id: string; error: string }, callback: (err: Error | null) => void): void
+  ack(request: { id: string; consumerGroup?: string }, callback: (err: Error | null) => void): void
+  nack(request: { id: string; error: string; consumerGroup?: string }, callback: (err: Error | null) => void): void
 }
 
 export class Consumer {
@@ -71,6 +72,7 @@ export class Consumer {
   private readonly concurrency: number
   private readonly visibilityTimeoutSeconds: number | undefined
   private readonly signal: AbortSignal | undefined
+  private readonly consumerGroup: string
 
   constructor(
     private readonly stub: ConsumerStub,
@@ -81,13 +83,17 @@ export class Consumer {
     this.concurrency = options?.concurrency ?? 1
     this.visibilityTimeoutSeconds = options?.visibilityTimeoutSeconds
     this.signal = options?.signal
+    this.consumerGroup = options?.consumerGroup ?? ''
   }
 
   async consume(handler: MessageHandler): Promise<void> {
     let backoff = BACKOFF_START_MS
 
     while (!this.signal?.aborted) {
-      const req: { topic: string; visibilityTimeoutSeconds?: number } = { topic: this.topic }
+      const req: { topic: string; visibilityTimeoutSeconds?: number; consumerGroup: string } = {
+        topic: this.topic,
+        consumerGroup: this.consumerGroup,
+      }
       if (this.visibilityTimeoutSeconds !== undefined) {
         req.visibilityTimeoutSeconds = this.visibilityTimeoutSeconds
       }
@@ -232,9 +238,10 @@ export class Consumer {
     let backoff = BACKOFF_START_MS
 
     while (!this.signal?.aborted) {
-      const req: { topic: string; count: number; visibilityTimeoutSeconds?: number } = {
+      const req: { topic: string; count: number; visibilityTimeoutSeconds?: number; consumerGroup: string } = {
         topic: this.topic,
         count: options.batchSize,
+        consumerGroup: this.consumerGroup,
       }
       if (options.visibilityTimeoutSeconds !== undefined) {
         req.visibilityTimeoutSeconds = options.visibilityTimeoutSeconds
@@ -290,11 +297,11 @@ export class Consumer {
 
   private rawToMessage(raw: RawMessage): Message {
     const ackFn = (id: string): Promise<void> =>
-      callbackToPromise<void>((cb) => this.stub.ack({ id }, cb))
+      callbackToPromise<void>((cb) => this.stub.ack({ id, consumerGroup: this.consumerGroup }, cb))
         .catch((err: Error) => { throw new Error(`ack message ${id}: ${err.message}`) })
 
     const nackFn = (id: string, reason: string): Promise<void> =>
-      callbackToPromise<void>((cb) => this.stub.nack({ id, error: reason }, cb))
+      callbackToPromise<void>((cb) => this.stub.nack({ id, error: reason, consumerGroup: this.consumerGroup }, cb))
         .catch((err: Error) => { throw new Error(`nack message ${id}: ${err.message}`) })
 
     return buildMessage(

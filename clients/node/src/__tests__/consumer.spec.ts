@@ -78,7 +78,7 @@ describe('Consumer', () => {
         await consumePromise
 
         expect(stub.ack).toHaveBeenCalledOnce()
-        expect(stub.ack).toHaveBeenCalledWith({ id: 'msg-1' }, expect.any(Function))
+        expect(stub.ack).toHaveBeenCalledWith({ id: 'msg-1', consumerGroup: '' }, expect.any(Function))
       })
 
       it('should not call nack', async () => {
@@ -136,7 +136,7 @@ describe('Consumer', () => {
 
         expect(stub.nack).toHaveBeenCalledOnce()
         expect(stub.nack).toHaveBeenCalledWith(
-          { id: 'msg-1', error: 'processing failed' },
+          { id: 'msg-1', error: 'processing failed', consumerGroup: '' },
           expect.any(Function),
         )
       })
@@ -267,6 +267,150 @@ describe('Consumer', () => {
 
         expect(calls).toBeGreaterThanOrEqual(1)
       })
+    })
+  })
+
+  describe('when consumerGroup is set', () => {
+    it('should send consumerGroup in subscribe request', async () => {
+      const stream = new FakeStream()
+      const stub = makeStub(stream)
+      const controller = new AbortController()
+
+      const consumer = new Consumer(stub, 'test-topic', {
+        signal: controller.signal,
+        consumerGroup: 'workers',
+      })
+      const consumePromise = consumer.consume(async () => {})
+
+      await tick()
+      controller.abort()
+      stream.end()
+      await consumePromise
+
+      expect(stub.subscribe).toHaveBeenCalledWith(
+        expect.objectContaining({ consumerGroup: 'workers' }),
+      )
+    })
+
+    it('should carry consumerGroup in ack request', async () => {
+      const stream = new FakeStream()
+      const stub = makeStub(stream)
+      const controller = new AbortController()
+
+      const ackReceived = new Promise<void>((resolve) => {
+        (stub.ack as ReturnType<typeof vi.fn>).mockImplementation(
+          (_req: { id: string; consumerGroup: string }, cb: (err: null) => void) => {
+            cb(null)
+            resolve()
+          },
+        )
+      })
+
+      const consumer = new Consumer(stub, 'test-topic', {
+        signal: controller.signal,
+        consumerGroup: 'workers',
+      })
+      const consumePromise = consumer.consume(async () => {})
+
+      await tick()
+      stream.push(makeRawMessage())
+      await ackReceived
+
+      controller.abort()
+      stream.end()
+      await consumePromise
+
+      expect(stub.ack).toHaveBeenCalledWith(
+        { id: 'msg-1', consumerGroup: 'workers' },
+        expect.any(Function),
+      )
+    })
+
+    it('should carry consumerGroup in nack request', async () => {
+      const stream = new FakeStream()
+      const stub = makeStub(stream)
+      const controller = new AbortController()
+
+      const nackReceived = new Promise<void>((resolve) => {
+        (stub.nack as ReturnType<typeof vi.fn>).mockImplementation(
+          (_req: unknown, cb: (err: null) => void) => {
+            cb(null)
+            resolve()
+          },
+        )
+      })
+
+      const consumer = new Consumer(stub, 'test-topic', {
+        signal: controller.signal,
+        consumerGroup: 'workers',
+      })
+      const consumePromise = consumer.consume(async () => {
+        throw new Error('fail')
+      })
+
+      await tick()
+      stream.push(makeRawMessage())
+      await nackReceived
+
+      controller.abort()
+      stream.end()
+      await consumePromise
+
+      expect(stub.nack).toHaveBeenCalledWith(
+        { id: 'msg-1', error: 'fail', consumerGroup: 'workers' },
+        expect.any(Function),
+      )
+    })
+
+    it('should send consumerGroup in batchDequeue request', async () => {
+      const stream = new FakeStream()
+      const controller = new AbortController()
+
+      const stub = makeStub(stream, {
+        batchDequeue: vi.fn((_req, cb) => {
+          controller.abort()
+          cb(null, { messages: [] })
+        }),
+      })
+
+      const consumer = new Consumer(stub, 'test-topic', {
+        signal: controller.signal,
+        consumerGroup: 'workers',
+      })
+
+      await consumer.consumeBatch({ batchSize: 5 }, async () => {})
+
+      expect(stub.batchDequeue).toHaveBeenCalledWith(
+        expect.objectContaining({ consumerGroup: 'workers' }),
+        expect.any(Function),
+      )
+    })
+
+    it('should carry consumerGroup in batch ack request', async () => {
+      const stream = new FakeStream()
+      const raw = makeRawMessage({ id: 'batch-msg-1' })
+      const controller = new AbortController()
+
+      const stub = makeStub(stream, {
+        batchDequeue: vi.fn((_req, cb) => {
+          cb(null, { messages: [raw] })
+        }),
+      })
+
+      const consumer = new Consumer(stub, 'test-topic', {
+        signal: controller.signal,
+        consumerGroup: 'workers',
+      })
+
+      await consumer.consumeBatch({ batchSize: 5 }, async (msgs: Message[]) => {
+        await msgs[0].ack()
+        controller.abort()
+      })
+
+      expect(stub.ack).toHaveBeenCalledWith(
+        { id: 'batch-msg-1', consumerGroup: 'workers' },
+        expect.any(Function),
+      )
     })
   })
 })

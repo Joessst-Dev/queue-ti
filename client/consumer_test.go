@@ -22,7 +22,7 @@ import (
 // Fake server
 // ---------------------------------------------------------------------------
 
-// consumerFakeServer handles Subscribe, Ack, and Nack.
+// consumerFakeServer handles Subscribe, BatchDequeue, Ack, and Nack.
 type consumerFakeServer struct {
 	pb.UnimplementedQueueServiceServer
 
@@ -31,8 +31,17 @@ type consumerFakeServer struct {
 	// messages to stream (set before starting Consume).
 	messages []*pb.SubscribeResponse
 
+	// batchMessages is returned by BatchDequeue (once, then empty).
+	batchMessages []*pb.DequeueResponse
+
 	ackIDs  []string
 	nackIDs []string
+
+	// consumer group captured from the most recent Subscribe / BatchDequeue call.
+	lastSubscribeGroup  string
+	lastBatchGroup      string
+	ackGroups           []string
+	nackGroups          []string
 
 	// streamReady is closed once at least one Subscribe call is active.
 	streamReady chan struct{}
@@ -47,6 +56,10 @@ func newConsumerFakeServer(msgs []*pb.SubscribeResponse) *consumerFakeServer {
 }
 
 func (s *consumerFakeServer) Subscribe(req *pb.SubscribeRequest, stream grpc.ServerStreamingServer[pb.SubscribeResponse]) error {
+	s.mu.Lock()
+	s.lastSubscribeGroup = req.ConsumerGroup
+	s.mu.Unlock()
+
 	s.streamOnce.Do(func() { close(s.streamReady) })
 
 	for _, msg := range s.messages {
@@ -59,10 +72,21 @@ func (s *consumerFakeServer) Subscribe(req *pb.SubscribeRequest, stream grpc.Ser
 	return nil
 }
 
+func (s *consumerFakeServer) BatchDequeue(_ context.Context, req *pb.BatchDequeueRequest) (*pb.BatchDequeueResponse, error) {
+	s.mu.Lock()
+	s.lastBatchGroup = req.ConsumerGroup
+	msgs := s.batchMessages
+	s.batchMessages = nil // drain after first call so the loop terminates via backoff
+	s.mu.Unlock()
+
+	return &pb.BatchDequeueResponse{Messages: msgs}, nil
+}
+
 func (s *consumerFakeServer) Ack(_ context.Context, req *pb.AckRequest) (*pb.AckResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ackIDs = append(s.ackIDs, req.Id)
+	s.ackGroups = append(s.ackGroups, req.ConsumerGroup)
 	return &pb.AckResponse{}, nil
 }
 
@@ -70,6 +94,7 @@ func (s *consumerFakeServer) Nack(_ context.Context, req *pb.NackRequest) (*pb.N
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nackIDs = append(s.nackIDs, req.Id)
+	s.nackGroups = append(s.nackGroups, req.ConsumerGroup)
 	return &pb.NackResponse{}, nil
 }
 
@@ -86,6 +111,26 @@ func (s *consumerFakeServer) nackedIDs() []string {
 	defer s.mu.Unlock()
 	out := make([]string, len(s.nackIDs))
 	copy(out, s.nackIDs)
+	return out
+}
+
+func (s *consumerFakeServer) capturedSubscribeGroup() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastSubscribeGroup
+}
+
+func (s *consumerFakeServer) capturedBatchGroup() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastBatchGroup
+}
+
+func (s *consumerFakeServer) capturedAckGroups() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]string, len(s.ackGroups))
+	copy(out, s.ackGroups)
 	return out
 }
 
@@ -128,12 +173,23 @@ func startConsumerServer(fake *consumerFakeServer, opts ...queueti.ConsumerOptio
 // cannedMsg builds a minimal SubscribeResponse for testing.
 func cannedMsg(id, topic string, payload []byte) *pb.SubscribeResponse {
 	return &pb.SubscribeResponse{
+		Id:         id,
+		Topic:      topic,
+		Payload:    payload,
+		Metadata:   map[string]string{"k": "v"},
+		CreatedAt:  timestamppb.New(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)),
+		RetryCount: 2,
+	}
+}
+
+// cannedDequeueMsg builds a minimal DequeueResponse for batch testing.
+func cannedDequeueMsg(id, topic string, payload []byte) *pb.DequeueResponse {
+	return &pb.DequeueResponse{
 		Id:        id,
 		Topic:     topic,
 		Payload:   payload,
 		Metadata:  map[string]string{"k": "v"},
 		CreatedAt: timestamppb.New(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)),
-		RetryCount: 2,
 	}
 }
 
@@ -341,6 +397,156 @@ var _ = Describe("Consumer", func() {
 				var consumeErr error
 				Eventually(consumeDone, 3*time.Second).Should(Receive(&consumeErr))
 				Expect(consumeErr).NotTo(HaveOccurred())
+			})
+		})
+
+		Context("when WithConsumerGroup is configured", func() {
+			var (
+				fake     *consumerFakeServer
+				consumer *queueti.Consumer
+				teardown func()
+			)
+
+			BeforeEach(func() {
+				fake = newConsumerFakeServer([]*pb.SubscribeResponse{
+					cannedMsg("cg-msg-1", "test-topic", []byte("data")),
+				})
+				consumer, teardown = startConsumerServer(fake, queueti.WithConsumerGroup("team-a"))
+			})
+
+			AfterEach(func() { teardown() })
+
+			It("sends the consumer group on SubscribeRequest and on AckRequest", func() {
+				ctx, cancel := context.WithCancel(context.Background())
+
+				go func() {
+					_ = consumer.Consume(ctx, func(_ context.Context, _ *queueti.Message) error {
+						return nil
+					})
+				}()
+
+				Eventually(fake.ackedIDs, 3*time.Second, 50*time.Millisecond).
+					Should(ConsistOf("cg-msg-1"))
+
+				cancel()
+
+				Expect(fake.capturedSubscribeGroup()).To(Equal("team-a"))
+				Expect(fake.capturedAckGroups()).To(ConsistOf("team-a"))
+			})
+		})
+
+		Context("when no WithConsumerGroup option is provided", func() {
+			var (
+				fake     *consumerFakeServer
+				consumer *queueti.Consumer
+				teardown func()
+			)
+
+			BeforeEach(func() {
+				fake = newConsumerFakeServer([]*pb.SubscribeResponse{
+					cannedMsg("no-cg-msg-1", "test-topic", []byte("data")),
+				})
+				consumer, teardown = startConsumerServer(fake) // no ConsumerGroup option
+			})
+
+			AfterEach(func() { teardown() })
+
+			It("sends an empty consumer group on all RPCs", func() {
+				ctx, cancel := context.WithCancel(context.Background())
+
+				go func() {
+					_ = consumer.Consume(ctx, func(_ context.Context, _ *queueti.Message) error {
+						return nil
+					})
+				}()
+
+				Eventually(fake.ackedIDs, 3*time.Second, 50*time.Millisecond).
+					Should(ConsistOf("no-cg-msg-1"))
+
+				cancel()
+
+				Expect(fake.capturedSubscribeGroup()).To(Equal(""))
+				Expect(fake.capturedAckGroups()).To(ConsistOf(""))
+			})
+		})
+	})
+
+	Describe("ConsumeBatch", func() {
+		Context("when WithConsumerGroup is configured", func() {
+			var (
+				fake     *consumerFakeServer
+				consumer *queueti.Consumer
+				teardown func()
+			)
+
+			BeforeEach(func() {
+				fake = newConsumerFakeServer(nil)
+				fake.batchMessages = []*pb.DequeueResponse{
+					cannedDequeueMsg("batch-cg-1", "test-topic", []byte("data")),
+				}
+				consumer, teardown = startConsumerServer(fake, queueti.WithConsumerGroup("team-b"))
+			})
+
+			AfterEach(func() { teardown() })
+
+			It("sends the consumer group on BatchDequeueRequest and on AckRequest", func() {
+				ctx, cancel := context.WithCancel(context.Background())
+
+				go func() {
+					_ = consumer.ConsumeBatch(ctx, "test-topic", 10, func(_ context.Context, msgs []*queueti.Message) error {
+						for _, m := range msgs {
+							_ = m.Ack(ctx)
+						}
+						return nil
+					})
+				}()
+
+				Eventually(fake.ackedIDs, 3*time.Second, 50*time.Millisecond).
+					Should(ConsistOf("batch-cg-1"))
+
+				cancel()
+
+				Expect(fake.capturedBatchGroup()).To(Equal("team-b"))
+				Expect(fake.capturedAckGroups()).To(ConsistOf("team-b"))
+			})
+		})
+
+		Context("when no WithConsumerGroup option is provided", func() {
+			var (
+				fake     *consumerFakeServer
+				consumer *queueti.Consumer
+				teardown func()
+			)
+
+			BeforeEach(func() {
+				fake = newConsumerFakeServer(nil)
+				fake.batchMessages = []*pb.DequeueResponse{
+					cannedDequeueMsg("batch-no-cg-1", "test-topic", []byte("data")),
+				}
+				consumer, teardown = startConsumerServer(fake) // no ConsumerGroup option
+			})
+
+			AfterEach(func() { teardown() })
+
+			It("sends an empty consumer group on all RPCs", func() {
+				ctx, cancel := context.WithCancel(context.Background())
+
+				go func() {
+					_ = consumer.ConsumeBatch(ctx, "test-topic", 10, func(_ context.Context, msgs []*queueti.Message) error {
+						for _, m := range msgs {
+							_ = m.Ack(ctx)
+						}
+						return nil
+					})
+				}()
+
+				Eventually(fake.ackedIDs, 3*time.Second, 50*time.Millisecond).
+					Should(ConsistOf("batch-no-cg-1"))
+
+				cancel()
+
+				Expect(fake.capturedBatchGroup()).To(Equal(""))
+				Expect(fake.capturedAckGroups()).To(ConsistOf(""))
 			})
 		})
 	})

@@ -262,7 +262,60 @@ Use `consumeBatch` when you want to process multiple messages together (e.g. bat
 |---|---|---|
 | `concurrency?` | number | Number of messages processed concurrently (default: `1`) |
 | `visibilityTimeoutSeconds?` | number | How long a message stays invisible while being processed (default: server setting, typically 30 s) |
+| `consumerGroup?` | string | Consumer group name for independent message consumption; see [Consumer Groups](#consumer-groups) |
 | `signal?` | `AbortSignal` | Signal to abort the consumer loop |
+
+---
+
+## Consumer Groups
+
+Consumer groups enable independent consumption of the same messages by multiple systems. Each group tracks its own delivery state, allowing parallel processing of the same message by different applications without interference.
+
+When a consumer group is specified, the client sends all RPCs scoped to that group and receives all messages enqueued to the topic. Each message is delivered independently to each group. A message is only deleted from the queue when **all** registered groups have acknowledged it.
+
+### Registering a Consumer Group
+
+Consumer groups must be registered on the server before use:
+
+```bash
+curl -X POST http://localhost:8080/api/topics/orders/consumer-groups \
+  -H "Content-Type: application/json" \
+  -d '{"consumer_group": "warehouse"}'
+```
+
+Once registered, the group automatically receives all pending messages enqueued before registration (backfill), plus all future messages.
+
+### Single-Consumer (Consume)
+
+```typescript
+const consumer = client.consumer('orders', {
+  consumerGroup: 'warehouse',
+  concurrency: 4,
+})
+
+await consumer.consume(async (msg) => {
+  console.log(`[warehouse] processing ${msg.id}`)
+  // return normally to Ack; throw to Nack
+})
+```
+
+### Batch Consumer (ConsumeBatch)
+
+```typescript
+await consumer.consumeBatch(
+  { batchSize: 50, consumerGroup: 'warehouse' },
+  async (messages) => {
+    for (const msg of messages) {
+      try {
+        await processPayload(msg.payload)
+        await msg.ack()
+      } catch (err) {
+        await msg.nack(err instanceof Error ? err.message : 'unknown')
+      }
+    }
+  },
+)
+```
 
 ---
 

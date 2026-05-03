@@ -162,6 +162,7 @@ consumer := client.NewConsumer("orders",
 |---|---|
 | `WithConcurrency(n int)` | Number of messages processed concurrently (default: 1) |
 | `WithVisibilityTimeout(seconds uint32)` | How long a message stays invisible while being processed (default: server setting, typically 30 s) |
+| `WithConsumerGroup(name string)` | Consumer group name for independent message consumption; see [Consumer Groups](#consumer-groups) |
 
 #### Handling Topic Throughput Limits
 
@@ -230,6 +231,61 @@ err := consumer.ConsumeBatch(ctx, "orders", 50, func(ctx context.Context, messag
 - **Throughput limiting:** if the topic has a throughput limit configured, `ConsumeBatch` receives fewer messages than requested (or none) when the limit is exhausted; the consumer automatically backs off and retries.
 
 Use `ConsumeBatch` when you want to process multiple messages together (e.g. batch writes to a data warehouse) or when you need more control over per-message error handling.
+
+---
+
+## Consumer Groups
+
+Consumer groups enable independent consumption of the same messages by multiple systems. Each group tracks its own delivery state, allowing parallel processing of the same message by different applications without interference.
+
+When a consumer group is specified, the client sends all RPCs scoped to that group and receives all messages enqueued to the topic. Each message is delivered independently to each group. A message is only deleted from the queue when **all** registered groups have acknowledged it.
+
+### Registering a Consumer Group
+
+Consumer groups must be registered on the server before use:
+
+```bash
+curl -X POST http://localhost:8080/api/topics/orders/consumer-groups \
+  -H "Content-Type: application/json" \
+  -d '{"consumer_group": "warehouse"}'
+```
+
+Once registered, the group automatically receives all pending messages enqueued before registration (backfill), plus all future messages.
+
+### Single-Consumer (Consume)
+
+```go
+consumer := client.NewConsumer("orders",
+    queueti.WithConsumerGroup("warehouse"),
+    queueti.WithConcurrency(4),
+)
+
+err := consumer.Consume(ctx, func(ctx context.Context, msg *queueti.Message) error {
+    fmt.Printf("[warehouse] processing %s\n", msg.ID)
+    return nil // nil = Ack; error = Nack
+})
+```
+
+### Batch Consumer (ConsumeBatch)
+
+`WithConsumerGroup` is set on `NewConsumer`; the consumer carries the group for all subsequent calls:
+
+```go
+consumer := client.NewConsumer("orders", queueti.WithConsumerGroup("warehouse"))
+
+err := consumer.ConsumeBatch(ctx, "orders", 50,
+    func(ctx context.Context, messages []*queueti.Message) error {
+        for _, msg := range messages {
+            if err := process(msg); err != nil {
+                msg.Nack(ctx, err.Error())
+                continue
+            }
+            msg.Ack(ctx)
+        }
+        return nil
+    },
+)
+```
 
 ---
 

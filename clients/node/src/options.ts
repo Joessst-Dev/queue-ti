@@ -15,9 +15,11 @@ export interface ConsumerOptions {
   concurrency?: number
   visibilityTimeoutSeconds?: number
   signal?: AbortSignal
+  consumerGroup?: string
 }
 
 export interface BatchOptions {
   batchSize: number
   visibilityTimeoutSeconds?: number
+  consumerGroup?: string
 }

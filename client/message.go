@@ -33,7 +33,10 @@ func (m *Message) Nack(ctx context.Context, reason string) error {
 }
 
 // buildMessage constructs a Message with ack/nack closures wired to the server.
-func buildMessage(id, topic string, payload []byte, metadata map[string]string, createdAt time.Time, retryCount int, c *Client) *Message {
+// consumerGroup is forwarded on both AckRequest and NackRequest so the server
+// can route acknowledgements within the correct consumer group. An empty string
+// uses the legacy single-consumer behaviour.
+func buildMessage(id, topic string, payload []byte, metadata map[string]string, createdAt time.Time, retryCount int, consumerGroup string, c *Client) *Message {
 	msg := &Message{
 		ID:         id,
 		Topic:      topic,
@@ -43,14 +46,14 @@ func buildMessage(id, topic string, payload []byte, metadata map[string]string, 
 		RetryCount: retryCount,
 	}
 	msg.ack = func(ctx context.Context) error {
-		_, err := c.pb.Ack(ctx, &pb.AckRequest{Id: id})
+		_, err := c.pb.Ack(ctx, &pb.AckRequest{Id: id, ConsumerGroup: consumerGroup})
 		if err != nil {
 			return fmt.Errorf("ack message %s: %w", id, err)
 		}
 		return nil
 	}
 	msg.nack = func(ctx context.Context, reason string) error {
-		_, err := c.pb.Nack(ctx, &pb.NackRequest{Id: id, Error: reason})
+		_, err := c.pb.Nack(ctx, &pb.NackRequest{Id: id, Error: reason, ConsumerGroup: consumerGroup})
 		if err != nil {
 			return fmt.Errorf("nack message %s: %w", id, err)
 		}

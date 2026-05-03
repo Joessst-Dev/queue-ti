@@ -43,7 +43,8 @@ func (c *Consumer) Consume(ctx context.Context, handler HandlerFunc) error {
 
 	for {
 		req := &pb.SubscribeRequest{
-			Topic: c.topic,
+			Topic:         c.topic,
+			ConsumerGroup: c.cfg.consumerGroup,
 		}
 		if c.cfg.visibilityTimeout > 0 {
 			vt := c.cfg.visibilityTimeout
@@ -106,7 +107,7 @@ func (c *Consumer) drainStream(
 		// First successful Recv resets the reconnect backoff.
 		*backoff = backoffStart
 
-		msg := protoToMessage(resp, c.client)
+		msg := protoToMessage(resp, c.cfg.consumerGroup, c.client)
 
 		// Acquire a concurrency slot before spawning.
 		sem <- struct{}{}
@@ -166,8 +167,9 @@ func (c *Consumer) ConsumeBatch(ctx context.Context, topic string, batchSize int
 		}
 
 		req := &pb.BatchDequeueRequest{
-			Topic: topic,
-			Count: uint32(batchSize),
+			Topic:         topic,
+			Count:         uint32(batchSize),
+			ConsumerGroup: c.cfg.consumerGroup,
 		}
 		if c.cfg.visibilityTimeout > 0 {
 			vt := c.cfg.visibilityTimeout
@@ -203,7 +205,7 @@ func (c *Consumer) ConsumeBatch(ctx context.Context, topic string, batchSize int
 
 		msgs := make([]*Message, len(resp.Messages))
 		for i, m := range resp.Messages {
-			msgs[i] = dequeueProtoToMessage(m, c.client)
+			msgs[i] = dequeueProtoToMessage(m, c.cfg.consumerGroup, c.client)
 		}
 
 		if err := handler(ctx, msgs); err != nil && ctx.Err() == nil {
@@ -212,18 +214,18 @@ func (c *Consumer) ConsumeBatch(ctx context.Context, topic string, batchSize int
 	}
 }
 
-func dequeueProtoToMessage(resp *pb.DequeueResponse, c *Client) *Message {
+func dequeueProtoToMessage(resp *pb.DequeueResponse, consumerGroup string, c *Client) *Message {
 	var createdAt time.Time
 	if resp.CreatedAt != nil {
 		createdAt = resp.CreatedAt.AsTime()
 	}
-	return buildMessage(resp.Id, resp.Topic, resp.Payload, resp.Metadata, createdAt, int(resp.RetryCount), c)
+	return buildMessage(resp.Id, resp.Topic, resp.Payload, resp.Metadata, createdAt, int(resp.RetryCount), consumerGroup, c)
 }
 
-func protoToMessage(resp *pb.SubscribeResponse, c *Client) *Message {
+func protoToMessage(resp *pb.SubscribeResponse, consumerGroup string, c *Client) *Message {
 	var createdAt time.Time
 	if resp.CreatedAt != nil {
 		createdAt = resp.CreatedAt.AsTime()
 	}
-	return buildMessage(resp.Id, resp.Topic, resp.Payload, resp.Metadata, createdAt, int(resp.RetryCount), c)
+	return buildMessage(resp.Id, resp.Topic, resp.Payload, resp.Metadata, createdAt, int(resp.RetryCount), consumerGroup, c)
 }
