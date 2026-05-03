@@ -125,6 +125,7 @@ func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, rateLimitSt
 	userRoutes.Get("/:id/grants", s.listUserGrants)
 	userRoutes.Post("/:id/grants", s.addUserGrant)
 	userRoutes.Delete("/:id/grants/:grantId", s.deleteUserGrant)
+	userRoutes.Post("/:id/consumer-group-grants", s.addConsumerGroupGrant)
 
 	api.Get("/messages", jwtAuth, s.requireGrant("read", func(c *fiber.Ctx) string { return c.Query("topic") }), s.listMessages)
 	api.Post("/messages", jwtAuth, s.requireGrant("write", func(c *fiber.Ctx) string {
@@ -134,14 +135,23 @@ func NewHTTPServer(qs *queue.Service, serverCfg config.ServerConfig, rateLimitSt
 		_ = json.Unmarshal(c.Body(), &peek)
 		return peek.Topic
 	}), s.enqueueMessage)
-	api.Post("/messages/dequeue", jwtAuth, s.requireGrant("write", func(c *fiber.Ctx) string {
-		var peek struct {
-			Topic string `json:"topic"`
-		}
-		_ = json.Unmarshal(c.Body(), &peek)
-		return peek.Topic
-	}), s.batchDequeueMessages)
-	api.Post("/messages/:id/nack", jwtAuth, s.requireWriteOnMsgTopic(), s.nackMessage)
+	api.Post("/messages/dequeue", jwtAuth, s.requireDequeueGrant(
+		func(c *fiber.Ctx) string {
+			var peek struct {
+				Topic string `json:"topic"`
+			}
+			_ = json.Unmarshal(c.Body(), &peek)
+			return peek.Topic
+		},
+		func(c *fiber.Ctx) string {
+			var peek struct {
+				ConsumerGroup string `json:"consumer_group"`
+			}
+			_ = json.Unmarshal(c.Body(), &peek)
+			return peek.ConsumerGroup
+		},
+	), s.batchDequeueMessages)
+	api.Post("/messages/:id/nack", jwtAuth, s.requireDequeueOnMsgTopic(), s.nackMessage)
 	api.Post("/messages/:id/requeue", jwtAuth, s.requireWriteOnMsgTopic(), s.requeueMessage)
 	api.Get("/stats", jwtAuth, s.requireAdmin(), s.statsHandler)
 	api.Get("/topic-configs", jwtAuth, s.requireAdmin(), s.listTopicConfigs)

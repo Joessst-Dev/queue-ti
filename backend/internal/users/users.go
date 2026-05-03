@@ -26,11 +26,12 @@ type User struct {
 }
 
 type Grant struct {
-	ID           string
-	UserID       string
-	Action       string
-	TopicPattern string
-	CreatedAt    time.Time
+	ID            string
+	UserID        string
+	Action        string
+	TopicPattern  string
+	ConsumerGroup string // non-empty only for action == "consume"
+	CreatedAt     time.Time
 }
 
 type Store struct {
@@ -170,15 +171,32 @@ func (s *Store) AddGrant(ctx context.Context, userID, action, topicPattern strin
 	err := s.pool.QueryRow(ctx,
 		`INSERT INTO user_grants (user_id, action, topic_pattern)
          VALUES ($1, $2, $3)
-         RETURNING id, user_id, action, topic_pattern, created_at`,
+         RETURNING id, user_id, action, topic_pattern, COALESCE(consumer_group, ''), created_at`,
 		userID, action, topicPattern,
-	).Scan(&g.ID, &g.UserID, &g.Action, &g.TopicPattern, &g.CreatedAt)
+	).Scan(&g.ID, &g.UserID, &g.Action, &g.TopicPattern, &g.ConsumerGroup, &g.CreatedAt)
 	return &g, err
+}
+
+func (s *Store) AddConsumerGroupGrant(ctx context.Context, userID, topicPattern, consumerGroup string) (*Grant, error) {
+	var g Grant
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO user_grants (user_id, action, topic_pattern, consumer_group)
+         VALUES ($1, 'consume', $2, $3)
+         RETURNING id, user_id, action, topic_pattern, COALESCE(consumer_group, ''), created_at`,
+		userID, topicPattern, consumerGroup,
+	).Scan(&g.ID, &g.UserID, &g.Action, &g.TopicPattern, &g.ConsumerGroup, &g.CreatedAt)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, ErrDuplicate
+		}
+		return nil, err
+	}
+	return &g, nil
 }
 
 func (s *Store) ListGrants(ctx context.Context, userID string) ([]Grant, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, user_id, action, topic_pattern, created_at
+		`SELECT id, user_id, action, topic_pattern, COALESCE(consumer_group, ''), created_at
          FROM user_grants WHERE user_id = $1 ORDER BY created_at`,
 		userID,
 	)
@@ -189,7 +207,7 @@ func (s *Store) ListGrants(ctx context.Context, userID string) ([]Grant, error) 
 	var result []Grant
 	for rows.Next() {
 		var g Grant
-		if err := rows.Scan(&g.ID, &g.UserID, &g.Action, &g.TopicPattern, &g.CreatedAt); err != nil {
+		if err := rows.Scan(&g.ID, &g.UserID, &g.Action, &g.TopicPattern, &g.ConsumerGroup, &g.CreatedAt); err != nil {
 			return nil, err
 		}
 		result = append(result, g)

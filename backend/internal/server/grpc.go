@@ -64,6 +64,34 @@ func (s *GRPCServer) checkGrant(ctx context.Context, action, topic string) error
 	return nil
 }
 
+// checkDequeueGrant verifies the caller has dequeue access (write or consume)
+// on the topic, and — when consumerGroup is non-empty — that the caller is
+// authorised for that specific consumer group. Grants are fetched once for
+// both checks to avoid a second round-trip.
+func (s *GRPCServer) checkDequeueGrant(ctx context.Context, topic, consumerGroup string) error {
+	if s.userStore == nil {
+		return nil
+	}
+	claims := auth.ClaimsFromContext(ctx)
+	if claims == nil {
+		return nil
+	}
+	if claims.IsAdmin {
+		return nil
+	}
+	grants, err := s.userStore.GetUserGrants(ctx, claims.UserID)
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to check grants: %v", err)
+	}
+	if !users.HasDequeueAccess(grants, topic) {
+		return status.Errorf(codes.PermissionDenied, "insufficient permissions")
+	}
+	if consumerGroup != "" && !users.HasConsumerGroupAccess(grants, topic, consumerGroup) {
+		return status.Errorf(codes.PermissionDenied, "insufficient permissions for consumer group")
+	}
+	return nil
+}
+
 func (s *GRPCServer) Enqueue(ctx context.Context, req *pb.EnqueueRequest) (*pb.EnqueueResponse, error) {
 	if req.Topic == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic is required")
@@ -102,7 +130,7 @@ func (s *GRPCServer) Dequeue(ctx context.Context, req *pb.DequeueRequest) (*pb.D
 		return nil, err
 	}
 
-	if err := s.checkGrant(ctx, "write", req.Topic); err != nil {
+	if err := s.checkDequeueGrant(ctx, req.Topic, req.ConsumerGroup); err != nil {
 		return nil, err
 	}
 
@@ -147,7 +175,7 @@ func (s *GRPCServer) BatchDequeue(ctx context.Context, req *pb.BatchDequeueReque
 		return nil, err
 	}
 
-	if err := s.checkGrant(ctx, "write", req.Topic); err != nil {
+	if err := s.checkDequeueGrant(ctx, req.Topic, req.ConsumerGroup); err != nil {
 		return nil, err
 	}
 
@@ -196,7 +224,7 @@ func (s *GRPCServer) Ack(ctx context.Context, req *pb.AckRequest) (*pb.AckRespon
 		}
 		return nil, status.Errorf(codes.Internal, "failed to look up message: %v", err)
 	}
-	if err := s.checkGrant(ctx, "write", topic); err != nil {
+	if err := s.checkDequeueGrant(ctx, topic, req.ConsumerGroup); err != nil {
 		return nil, err
 	}
 
@@ -228,7 +256,7 @@ func (s *GRPCServer) Subscribe(req *pb.SubscribeRequest, stream pb.QueueService_
 		return err
 	}
 
-	if err := s.checkGrant(stream.Context(), "write", req.Topic); err != nil {
+	if err := s.checkDequeueGrant(stream.Context(), req.Topic, req.ConsumerGroup); err != nil {
 		return err
 	}
 
@@ -301,7 +329,7 @@ func (s *GRPCServer) Nack(ctx context.Context, req *pb.NackRequest) (*pb.NackRes
 		}
 		return nil, status.Errorf(codes.Internal, "failed to look up message: %v", err)
 	}
-	if err := s.checkGrant(ctx, "write", topic); err != nil {
+	if err := s.checkDequeueGrant(ctx, topic, req.ConsumerGroup); err != nil {
 		return nil, err
 	}
 

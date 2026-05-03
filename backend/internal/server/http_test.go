@@ -1885,6 +1885,122 @@ var _ = Describe("HTTP Server", func() {
 	})
 
 	// ---------------------------------------------------------------------------
+	// POST /api/users/:id/consumer-group-grants
+	// ---------------------------------------------------------------------------
+
+	Describe("POST /api/users/:id/consumer-group-grants", func() {
+		var (
+			httpServer *server.HTTPServer
+			adminToken string
+			targetUser *users.User
+		)
+
+		BeforeEach(func() {
+			httpServer = server.NewHTTPServer(queueService, config.ServerConfig{CORSOrigins: "*"}, nil, config.AuthConfig{
+				Enabled:   true,
+				JWTSecret: testJWTSecret,
+			}, prometheus.NewRegistry(), userStore, "dev")
+
+			admin, err := userStore.Create(httpTestCtx, "cgg-admin", "strongpassword123", true)
+			Expect(err).NotTo(HaveOccurred())
+			adminToken, err = users.IssueToken([]byte(testJWTSecret), admin.ID, admin.Username, admin.IsAdmin)
+			Expect(err).NotTo(HaveOccurred())
+
+			targetUser, err = userStore.Create(httpTestCtx, "cgg-target", "strongpassword123", false)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when a valid consumer_group and topic_pattern are provided", func() {
+			It("should return 201 with a grant whose action is 'consume'", func() {
+				body := `{"topic_pattern":"orders.*","consumer_group":"team-a"}`
+				req := httptest.NewRequest("POST", "/api/users/"+targetUser.ID+"/consumer-group-grants", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+adminToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(201))
+
+				var result map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result["action"]).To(Equal("consume"))
+				Expect(result["topic_pattern"]).To(Equal("orders.*"))
+				Expect(result["consumer_group"]).To(Equal("team-a"))
+				Expect(result["id"]).NotTo(BeEmpty())
+			})
+		})
+
+		Context("when topic_pattern is omitted", func() {
+			It("should default to '*' and return 201", func() {
+				body := `{"consumer_group":"team-b"}`
+				req := httptest.NewRequest("POST", "/api/users/"+targetUser.ID+"/consumer-group-grants", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+adminToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(201))
+
+				var result map[string]any
+				Expect(json.NewDecoder(resp.Body).Decode(&result)).To(Succeed())
+				Expect(result["topic_pattern"]).To(Equal("*"))
+			})
+		})
+
+		Context("when consumer_group is missing", func() {
+			It("should return 400", func() {
+				body := `{"topic_pattern":"orders.*"}`
+				req := httptest.NewRequest("POST", "/api/users/"+targetUser.ID+"/consumer-group-grants", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+adminToken)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(400))
+				Expect(decodeErrorBody(resp.Body)).To(Equal("consumer_group is required"))
+			})
+		})
+
+		Context("when the same grant is added twice", func() {
+			It("should return 409 on the second call", func() {
+				dupBody := `{"topic_pattern":"orders","consumer_group":"team-dup"}`
+
+				req1 := httptest.NewRequest("POST", "/api/users/"+targetUser.ID+"/consumer-group-grants", strings.NewReader(dupBody))
+				req1.Header.Set("Content-Type", "application/json")
+				req1.Header.Set("Authorization", "Bearer "+adminToken)
+				resp1, err := httpServer.App.Test(req1)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp1.StatusCode).To(Equal(201))
+
+				req2 := httptest.NewRequest("POST", "/api/users/"+targetUser.ID+"/consumer-group-grants", strings.NewReader(dupBody))
+				req2.Header.Set("Content-Type", "application/json")
+				req2.Header.Set("Authorization", "Bearer "+adminToken)
+				resp2, err := httpServer.App.Test(req2)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp2.StatusCode).To(Equal(409))
+			})
+		})
+
+		Context("when the caller is not an admin", func() {
+			It("should return 403", func() {
+				nonAdmin, err := userStore.Create(httpTestCtx, "cgg-nonadmin", "strongpassword123", false)
+				Expect(err).NotTo(HaveOccurred())
+				token, err := users.IssueToken([]byte(testJWTSecret), nonAdmin.ID, nonAdmin.Username, nonAdmin.IsAdmin)
+				Expect(err).NotTo(HaveOccurred())
+
+				body := `{"consumer_group":"group-x"}`
+				req := httptest.NewRequest("POST", "/api/users/"+targetUser.ID+"/consumer-group-grants", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+token)
+				resp, err := httpServer.App.Test(req)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(403))
+			})
+		})
+	})
+
+	// ---------------------------------------------------------------------------
 	// Redis-backed rate limiter integration test
 	// ---------------------------------------------------------------------------
 
