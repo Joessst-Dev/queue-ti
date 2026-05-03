@@ -20,6 +20,7 @@ class PublishOptions:
 class ConsumerOptions:
     concurrency: int = 1
     visibility_timeout_seconds: int | None = None
+    consumer_group: str = ""
 
     def __post_init__(self) -> None:
         if self.concurrency < 1:
@@ -30,6 +31,7 @@ class ConsumerOptions:
 class BatchOptions:
     batch_size: int
     visibility_timeout_seconds: int | None = None
+    consumer_group: str = ""
 
     def __post_init__(self) -> None:
         if self.batch_size < 1:

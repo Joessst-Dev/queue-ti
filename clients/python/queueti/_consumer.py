@@ -42,6 +42,7 @@ class AsyncConsumer:
         opts = options or ConsumerOptions()
         self._concurrency = opts.concurrency
         self._visibility_timeout = opts.visibility_timeout_seconds
+        self._consumer_group: str = opts.consumer_group
 
     async def consume(self, handler: MessageHandler) -> None:
         """Stream messages from the topic, calling handler for each one.
@@ -51,7 +52,7 @@ class AsyncConsumer:
         """
         backoff = _BACKOFF_START
         while True:
-            req = queue_pb2.SubscribeRequest(topic=self._topic)
+            req = queue_pb2.SubscribeRequest(topic=self._topic, consumer_group=self._consumer_group)
             if self._visibility_timeout is not None:
                 req.visibility_timeout_seconds = self._visibility_timeout
 
@@ -128,13 +129,13 @@ class AsyncConsumer:
 
         if not threw:
             try:
-                await self._stub.Ack(queue_pb2.AckRequest(id=msg.id))
+                await self._stub.Ack(queue_pb2.AckRequest(id=msg.id, consumer_group=self._consumer_group))
             except Exception as exc:
                 logger.error("queue-ti consumer: ack failed for message %s: %s", msg.id, exc)
             return
 
         try:
-            await self._stub.Nack(queue_pb2.NackRequest(id=msg.id, error=reason))
+            await self._stub.Nack(queue_pb2.NackRequest(id=msg.id, error=reason, consumer_group=self._consumer_group))
         except Exception as exc:
             logger.error("queue-ti consumer: nack failed for message %s: %s", msg.id, exc)
 
@@ -146,7 +147,7 @@ class AsyncConsumer:
         """
         backoff = _BACKOFF_START
         while True:
-            req = queue_pb2.BatchDequeueRequest(topic=self._topic, count=options.batch_size)
+            req = queue_pb2.BatchDequeueRequest(topic=self._topic, count=options.batch_size, consumer_group=self._consumer_group)
             if options.visibility_timeout_seconds is not None:
                 req.visibility_timeout_seconds = options.visibility_timeout_seconds
 
@@ -182,10 +183,10 @@ class AsyncConsumer:
 
     def _build_message(self, raw: queue_pb2.SubscribeResponse | queue_pb2.DequeueResponse) -> Message:
         async def ack_fn() -> None:
-            await self._stub.Ack(queue_pb2.AckRequest(id=raw.id))
+            await self._stub.Ack(queue_pb2.AckRequest(id=raw.id, consumer_group=self._consumer_group))
 
         async def nack_fn(reason: str) -> None:
-            await self._stub.Nack(queue_pb2.NackRequest(id=raw.id, error=reason))
+            await self._stub.Nack(queue_pb2.NackRequest(id=raw.id, error=reason, consumer_group=self._consumer_group))
 
         return Message(
             id=raw.id,

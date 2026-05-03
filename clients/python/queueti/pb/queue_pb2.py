@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bqueue.proto\x12\x05queue\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb2\x01\n\x0e\x45nqueueRequest\x12\r\n\x05topic\x18\x01 \x01(\t\x12\x0f\n\x07payload\x18\x02 \x01(\x0c\x12\x35\n\x08metadata\x18\x03 \x03(\x0b\x32#.queue.EnqueueRequest.MetadataEntry\x12\x10\n\x03key\x18\x04 \x01(\tH\x00\x88\x01\x01\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\x06\n\x04_key\"\x1d\n\x0f\x45nqueueResponse\x12\n\n\x02id\x18\x01 \x01(\t\"g\n\x0e\x44\x65queueRequest\x12\r\n\x05topic\x18\x01 \x01(\t\x12\'\n\x1avisibility_timeout_seconds\x18\x02 \x01(\rH\x00\x88\x01\x01\x42\x1d\n\x1b_visibility_timeout_seconds\"\x9a\x02\n\x0f\x44\x65queueResponse\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x0f\n\x07payload\x18\x03 \x01(\x0c\x12\x36\n\x08metadata\x18\x04 \x03(\x0b\x32$.queue.DequeueResponse.MetadataEntry\x12.\n\ncreated_at\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bretry_count\x18\x06 \x01(\x05\x12\x13\n\x0bmax_retries\x18\x07 \x01(\x05\x12\x10\n\x03key\x18\x08 \x01(\tH\x00\x88\x01\x01\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\x06\n\x04_key\"{\n\x13\x42\x61tchDequeueRequest\x12\r\n\x05topic\x18\x01 \x01(\t\x12\r\n\x05\x63ount\x18\x02 \x01(\r\x12\'\n\x1avisibility_timeout_seconds\x18\x03 \x01(\rH\x00\x88\x01\x01\x42\x1d\n\x1b_visibility_timeout_seconds\"@\n\x14\x42\x61tchDequeueResponse\x12(\n\x08messages\x18\x01 \x03(\x0b\x32\x16.queue.DequeueResponse\"\x18\n\nAckRequest\x12\n\n\x02id\x18\x01 \x01(\t\"\r\n\x0b\x41\x63kResponse\"(\n\x0bNackRequest\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"\x0e\n\x0cNackResponse\"i\n\x10SubscribeRequest\x12\r\n\x05topic\x18\x01 \x01(\t\x12\'\n\x1avisibility_timeout_seconds\x18\x02 \x01(\rH\x00\x88\x01\x01\x42\x1d\n\x1b_visibility_timeout_seconds\"\xef\x01\n\x11SubscribeResponse\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x0f\n\x07payload\x18\x03 \x01(\x0c\x12\x38\n\x08metadata\x18\x04 \x03(\x0b\x32&.queue.SubscribeResponse.MetadataEntry\x12.\n\ncreated_at\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bretry_count\x18\x06 \x01(\x05\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x32\xec\x02\n\x0cQueueService\x12\x38\n\x07\x45nqueue\x12\x15.queue.EnqueueRequest\x1a\x16.queue.EnqueueResponse\x12\x38\n\x07\x44\x65queue\x12\x15.queue.DequeueRequest\x1a\x16.queue.DequeueResponse\x12G\n\x0c\x42\x61tchDequeue\x12\x1a.queue.BatchDequeueRequest\x1a\x1b.queue.BatchDequeueResponse\x12,\n\x03\x41\x63k\x12\x11.queue.AckRequest\x1a\x12.queue.AckResponse\x12/\n\x04Nack\x12\x12.queue.NackRequest\x1a\x13.queue.NackResponse\x12@\n\tSubscribe\x12\x17.queue.SubscribeRequest\x1a\x18.queue.SubscribeResponse0\x01\x42$Z\"github.com/Joessst-Dev/queue-ti/pbb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bqueue.proto\x12\x05queue\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb2\x01\n\x0e\x45nqueueRequest\x12\r\n\x05topic\x18\x01 \x01(\t\x12\x0f\n\x07payload\x18\x02 \x01(\x0c\x12\x35\n\x08metadata\x18\x03 \x03(\x0b\x32#.queue.EnqueueRequest.MetadataEntry\x12\x10\n\x03key\x18\x04 \x01(\tH\x00\x88\x01\x01\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\x06\n\x04_key\"\x1d\n\x0f\x45nqueueResponse\x12\n\n\x02id\x18\x01 \x01(\t\"\x7f\n\x0e\x44\x65queueRequest\x12\r\n\x05topic\x18\x01 \x01(\t\x12\'\n\x1avisibility_timeout_seconds\x18\x02 \x01(\rH\x00\x88\x01\x01\x12\x16\n\x0e\x63onsumer_group\x18\x03 \x01(\tB\x1d\n\x1b_visibility_timeout_seconds\"\x9a\x02\n\x0f\x44\x65queueResponse\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x0f\n\x07payload\x18\x03 \x01(\x0c\x12\x36\n\x08metadata\x18\x04 \x03(\x0b\x32$.queue.DequeueResponse.MetadataEntry\x12.\n\ncreated_at\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bretry_count\x18\x06 \x01(\x05\x12\x13\n\x0bmax_retries\x18\x07 \x01(\x05\x12\x10\n\x03key\x18\x08 \x01(\tH\x00\x88\x01\x01\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\x06\n\x04_key\"\x93\x01\n\x13\x42\x61tchDequeueRequest\x12\r\n\x05topic\x18\x01 \x01(\t\x12\r\n\x05\x63ount\x18\x02 \x01(\r\x12\'\n\x1avisibility_timeout_seconds\x18\x03 \x01(\rH\x00\x88\x01\x01\x12\x16\n\x0e\x63onsumer_group\x18\x04 \x01(\tB\x1d\n\x1b_visibility_timeout_seconds\"@\n\x14\x42\x61tchDequeueResponse\x12(\n\x08messages\x18\x01 \x03(\x0b\x32\x16.queue.DequeueResponse\"0\n\nAckRequest\x12\n\n\x02id\x18\x01 \x01(\t\x12\x16\n\x0e\x63onsumer_group\x18\x02 \x01(\t\"\r\n\x0b\x41\x63kResponse\"@\n\x0bNackRequest\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05\x65rror\x18\x02 \x01(\t\x12\x16\n\x0e\x63onsumer_group\x18\x03 \x01(\t\"\x0e\n\x0cNackResponse\"\x81\x01\n\x10SubscribeRequest\x12\r\n\x05topic\x18\x01 \x01(\t\x12\'\n\x1avisibility_timeout_seconds\x18\x02 \x01(\rH\x00\x88\x01\x01\x12\x16\n\x0e\x63onsumer_group\x18\x03 \x01(\tB\x1d\n\x1b_visibility_timeout_seconds\"\xef\x01\n\x11SubscribeResponse\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x0f\n\x07payload\x18\x03 \x01(\x0c\x12\x38\n\x08metadata\x18\x04 \x03(\x0b\x32&.queue.SubscribeResponse.MetadataEntry\x12.\n\ncreated_at\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bretry_count\x18\x06 \x01(\x05\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x32\xec\x02\n\x0cQueueService\x12\x38\n\x07\x45nqueue\x12\x15.queue.EnqueueRequest\x1a\x16.queue.EnqueueResponse\x12\x38\n\x07\x44\x65queue\x12\x15.queue.DequeueRequest\x1a\x16.queue.DequeueResponse\x12G\n\x0c\x42\x61tchDequeue\x12\x1a.queue.BatchDequeueRequest\x1a\x1b.queue.BatchDequeueResponse\x12,\n\x03\x41\x63k\x12\x11.queue.AckRequest\x1a\x12.queue.AckResponse\x12/\n\x04Nack\x12\x12.queue.NackRequest\x1a\x13.queue.NackResponse\x12@\n\tSubscribe\x12\x17.queue.SubscribeRequest\x1a\x18.queue.SubscribeResponse0\x01\x42$Z\"github.com/Joessst-Dev/queue-ti/pbb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -46,29 +46,29 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_ENQUEUERESPONSE']._serialized_start=236
   _globals['_ENQUEUERESPONSE']._serialized_end=265
   _globals['_DEQUEUEREQUEST']._serialized_start=267
-  _globals['_DEQUEUEREQUEST']._serialized_end=370
-  _globals['_DEQUEUERESPONSE']._serialized_start=373
-  _globals['_DEQUEUERESPONSE']._serialized_end=655
+  _globals['_DEQUEUEREQUEST']._serialized_end=394
+  _globals['_DEQUEUERESPONSE']._serialized_start=397
+  _globals['_DEQUEUERESPONSE']._serialized_end=679
   _globals['_DEQUEUERESPONSE_METADATAENTRY']._serialized_start=179
   _globals['_DEQUEUERESPONSE_METADATAENTRY']._serialized_end=226
-  _globals['_BATCHDEQUEUEREQUEST']._serialized_start=657
-  _globals['_BATCHDEQUEUEREQUEST']._serialized_end=780
-  _globals['_BATCHDEQUEUERESPONSE']._serialized_start=782
-  _globals['_BATCHDEQUEUERESPONSE']._serialized_end=846
-  _globals['_ACKREQUEST']._serialized_start=848
-  _globals['_ACKREQUEST']._serialized_end=872
-  _globals['_ACKRESPONSE']._serialized_start=874
-  _globals['_ACKRESPONSE']._serialized_end=887
-  _globals['_NACKREQUEST']._serialized_start=889
-  _globals['_NACKREQUEST']._serialized_end=929
-  _globals['_NACKRESPONSE']._serialized_start=931
-  _globals['_NACKRESPONSE']._serialized_end=945
-  _globals['_SUBSCRIBEREQUEST']._serialized_start=947
-  _globals['_SUBSCRIBEREQUEST']._serialized_end=1052
-  _globals['_SUBSCRIBERESPONSE']._serialized_start=1055
-  _globals['_SUBSCRIBERESPONSE']._serialized_end=1294
+  _globals['_BATCHDEQUEUEREQUEST']._serialized_start=682
+  _globals['_BATCHDEQUEUEREQUEST']._serialized_end=829
+  _globals['_BATCHDEQUEUERESPONSE']._serialized_start=831
+  _globals['_BATCHDEQUEUERESPONSE']._serialized_end=895
+  _globals['_ACKREQUEST']._serialized_start=897
+  _globals['_ACKREQUEST']._serialized_end=945
+  _globals['_ACKRESPONSE']._serialized_start=947
+  _globals['_ACKRESPONSE']._serialized_end=960
+  _globals['_NACKREQUEST']._serialized_start=962
+  _globals['_NACKREQUEST']._serialized_end=1026
+  _globals['_NACKRESPONSE']._serialized_start=1028
+  _globals['_NACKRESPONSE']._serialized_end=1042
+  _globals['_SUBSCRIBEREQUEST']._serialized_start=1045
+  _globals['_SUBSCRIBEREQUEST']._serialized_end=1174
+  _globals['_SUBSCRIBERESPONSE']._serialized_start=1177
+  _globals['_SUBSCRIBERESPONSE']._serialized_end=1416
   _globals['_SUBSCRIBERESPONSE_METADATAENTRY']._serialized_start=179
   _globals['_SUBSCRIBERESPONSE_METADATAENTRY']._serialized_end=226
-  _globals['_QUEUESERVICE']._serialized_start=1297
-  _globals['_QUEUESERVICE']._serialized_end=1661
+  _globals['_QUEUESERVICE']._serialized_start=1419
+  _globals['_QUEUESERVICE']._serialized_end=1783
 # @@protoc_insertion_point(module_scope)
