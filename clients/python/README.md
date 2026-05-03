@@ -324,6 +324,7 @@ All fields are optional.
 |-------|------|---------|-------------|
 | `concurrency` | `int` | `1` | Number of messages to process in parallel (must be ≥ 1) |
 | `visibility_timeout_seconds` | `int \| None` | `None` | Override server default visibility timeout for this consumer (seconds) |
+| `consumer_group` | `str \| None` | `None` | Consumer group name for independent message consumption; see [Consumer Groups](#consumer-groups) |
 
 ### BatchOptions
 
@@ -331,6 +332,7 @@ All fields are optional.
 |-------|------|-------------|
 | `batch_size` | `int` | Maximum messages to dequeue in one call (must be ≥ 1) |
 | `visibility_timeout_seconds` | `int \| None` | Optional visibility timeout override (seconds) |
+| `consumer_group` | `str \| None` | Consumer group name for independent message consumption |
 
 ## Message
 
@@ -362,6 +364,102 @@ Raises `NackError` if the RPC fails.
 ### SyncMessage
 
 Identical to `Message`, but with synchronous `ack()` and `nack()` methods. Used with `Consumer.consume()` and `Consumer.consume_batch()`.
+
+## Consumer Groups
+
+Consumer groups enable independent consumption of the same messages by multiple systems. Each group tracks its own delivery state, allowing parallel processing of the same message by different applications without interference.
+
+When a consumer group is specified, the client joins that group (if not already registered) and receives all messages enqueued to the topic. Each message is delivered independently to each group. A message is only deleted from the queue when **all** registered groups have acknowledged it.
+
+### Registering a Consumer Group
+
+Consumer groups must be registered on the server before use:
+
+```bash
+curl -X POST http://localhost:8080/api/consumer-groups \
+  -H "Content-Type: application/json" \
+  -d '{"topic": "orders", "consumer_group": "warehouse"}'
+```
+
+Once registered, the group automatically receives all pending messages enqueued before registration (backfill), plus all future messages.
+
+### Async Consumer
+
+```python
+import asyncio
+from queueti import connect, ConsumerOptions
+
+async def main():
+    client = await connect("localhost:50051", options=ConnectOptions(insecure=True))
+    consumer = client.consumer(
+        "orders",
+        options=ConsumerOptions(consumer_group="warehouse", concurrency=4),
+    )
+    
+    async def handler(msg):
+        print(f"[warehouse] processing {msg.id}")
+        # Return normally to Ack; raise to Nack
+    
+    await consumer.consume(handler)
+
+asyncio.run(main())
+```
+
+### Async Batch Consumer
+
+```python
+from queueti import BatchOptions
+
+async def handle_batch(messages):
+    for msg in messages:
+        try:
+            # Process...
+            await msg.ack()
+        except Exception as e:
+            await msg.nack(f"error: {e}")
+
+await consumer.consume_batch(
+    options=BatchOptions(batch_size=50, consumer_group="warehouse"),
+    handler=handle_batch,
+)
+```
+
+### Sync Consumer
+
+```python
+from queueti import connect_sync, ConsumerOptions
+
+client = connect_sync("localhost:50051", options=ConnectOptions(insecure=True))
+consumer = client.consumer(
+    "orders",
+    options=ConsumerOptions(consumer_group="warehouse", concurrency=4),
+)
+
+def handler(msg):
+    print(f"[warehouse] processing {msg.id}")
+    # Return normally to Ack; raise to Nack
+
+consumer.consume(handler)  # Blocks until interrupted
+```
+
+### Sync Batch Consumer
+
+```python
+from queueti import BatchOptions
+
+def handle_batch(messages):
+    for msg in messages:
+        try:
+            # Process...
+            msg.ack()
+        except Exception as e:
+            msg.nack(f"error: {e}")
+
+consumer.consume_batch(
+    options=BatchOptions(batch_size=50, consumer_group="warehouse"),
+    handler=handle_batch,
+)
+```
 
 ## Error Handling
 

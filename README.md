@@ -42,7 +42,9 @@ queue-ti is designed for teams who want reliable, observable message processing 
 - [Login Rate Limiting](#login-rate-limiting)
 - [Authentication & User Management](#authentication--user-management)
 - [Avro Schema Validation](#avro-schema-validation)
+- [Consumer Groups](#consumer-groups)
 - [Queue Mechanics](#queue-mechanics)
+- [Message Lifecycle](#message-lifecycle)
 - [Architecture](#architecture)
 - [API Reference](#api-reference)
 - [Observability](#observability)
@@ -1062,6 +1064,146 @@ graph TD
 - **Reapers**: Background goroutines that manage message lifecycle—expiry reaper marks old messages, delete reaper permanently removes them
 - **PostgreSQL** (single table design): All messages stored in one table with composite indexes for efficient concurrent access
 
+## Consumer Groups
+
+Consumer groups enable independent consumption of the same messages by multiple systems. Without consumer groups, a single dequeue operation removes a message from a topic for all consumers. With consumer groups, each group independently tracks the processing state of every message, allowing the same message to be delivered and processed by multiple consumer systems in parallel.
+
+**Key behaviors:**
+- **Group independence** — Each group maintains its own delivery state for every message. Acking a message in one group does not affect other groups.
+- **Parallel processing** — Multiple groups can process the same message concurrently without blocking each other.
+- **Message lifecycle per group** — A message is deleted from the queue only when **all** registered groups have acknowledged it. If any group has not yet processed (or nacked) a message, it remains available.
+- **Legacy mode** — When using the default consumer group (or no group specified in older client versions), queue-ti behaves as a single-consumer queue, maintaining backward compatibility.
+
+### Registering a Consumer Group
+
+Register a group via the HTTP admin API:
+
+```bash
+# Register a new group for a topic
+curl -X POST http://localhost:8080/api/consumer-groups \
+  -H "Content-Type: application/json" \
+  -d '{"topic": "orders", "consumer_group": "warehouse"}'
+
+# List all groups for a topic
+curl http://localhost:8080/api/consumer-groups?topic=orders
+
+# Unregister a group
+curl -X DELETE http://localhost:8080/api/consumer-groups/orders/warehouse
+```
+
+Once registered, a group automatically receives all pending messages that were enqueued before registration (backfill). Future messages are delivered to all registered groups.
+
+### Using Consumer Groups in Client Libraries
+
+#### Go Client
+
+```go
+consumer := client.NewConsumer("orders",
+    queueti.WithConsumerGroup("warehouse"),
+    queueti.WithConcurrency(4),
+)
+
+err := consumer.Consume(ctx, func(ctx context.Context, msg *queueti.Message) error {
+    // Process message...
+    return nil // Ack; return error to Nack
+})
+```
+
+For batch consumption:
+
+```go
+err := consumer.ConsumeBatch(ctx, "orders", 50, 
+    queueti.WithConsumerGroup("warehouse"),
+    func(ctx context.Context, messages []*queueti.Message) error {
+        for _, msg := range messages {
+            // Process...
+            msg.Ack(ctx)
+        }
+        return nil
+    },
+)
+```
+
+#### Node.js Client
+
+```typescript
+const consumer = client.consumer('orders', {
+  consumerGroup: 'warehouse',
+  concurrency: 4,
+})
+
+await consumer.consume(async (msg) => {
+  // Process message...
+  // Return normally to Ack; throw to Nack
+})
+```
+
+For batch consumption:
+
+```typescript
+await consumer.consumeBatch(
+  { batchSize: 50, consumerGroup: 'warehouse' },
+  async (messages) => {
+    for (const msg of messages) {
+      // Process...
+      await msg.ack()
+    }
+  },
+)
+```
+
+#### Python Client
+
+```python
+import asyncio
+from queueti import connect, ConsumerOptions
+
+async def main():
+    client = await connect("localhost:50051", options=ConnectOptions(insecure=True))
+    consumer = client.consumer(
+        "orders",
+        options=ConsumerOptions(consumer_group="warehouse", concurrency=4),
+    )
+    
+    async def handler(msg):
+        # Process message...
+        pass
+    
+    await consumer.consume(handler)
+
+asyncio.run(main())
+```
+
+For batch consumption:
+
+```python
+from queueti import BatchOptions
+
+async def handle_batch(messages):
+    for msg in messages:
+        # Process...
+        await msg.ack()
+
+await consumer.consume_batch(
+    options=BatchOptions(batch_size=50, consumer_group="warehouse"),
+    handler=handle_batch,
+)
+```
+
+Sync variant:
+
+```python
+from queueti import connect_sync, ConsumerOptions
+
+client = connect_sync("localhost:50051", options=ConnectOptions(insecure=True))
+consumer = client.consumer(
+    "orders",
+    options=ConsumerOptions(consumer_group="warehouse"),
+)
+
+consumer.consume(handler)  # Blocks until interrupted
+```
+
 ## Queue Mechanics
 
 ### Data Model
@@ -1146,12 +1288,49 @@ Clients can override the server-wide visibility timeout on a per-dequeue basis b
 
 ### Message Lifecycle
 
+```mermaid
+stateDiagram-v2
+    [*] --> pending: Enqueue
+
+    pending --> processing: Dequeue
+    
+    processing --> deleted: Ack
+    processing --> pending: Nack (retries remaining,<br/>below DLQ threshold)
+    processing --> dlq: Nack (DLQ threshold<br/>reached)
+    processing --> expired: TTL expires
+    
+    pending --> expired: TTL expires
+    pending --> pending: Visibility timeout<br/>expires (reappears)
+    
+    dlq --> pending: Requeue to<br/>original topic
+    
+    deleted --> [*]
+    expired --> [*]
+    
+    note right of dlq
+        Topic: &lt;original-topic&gt;.dlq
+        Status: pending
+        Max retries: 0
+    end note
+    
+    note right of processing
+        Each consumer group
+        tracks state independently
+    end note
+```
+
+**State Transitions:**
+
 - **pending** → (dequeued) → **processing** → (acknowledged) → **deleted**
 - **pending** → (dequeued) → **processing** → (nacked, retries remaining and below DLQ threshold) → **pending** (automatically retried)
 - **pending** → (dequeued) → **processing** → (nacked, DLQ threshold reached) → moved to **<topic>.dlq** as **pending** (with max_retries = 0)
 - **<topic>.dlq pending** → (manually requeued) → **pending** in original topic (resets retry_count and restores max_retries)
 - **pending** or **processing** → (TTL expires) → **expired** (marked by automatic reaper)
 - **pending** → (dequeued) → **processing** → (visibility timeout expires) → **pending** (automatically reappears)
+
+**Consumer Group Behavior:**
+
+When consumer groups are enabled, each group independently tracks delivery state for every message. A message transitions through pending/processing/deleted states per group. The message is only deleted from the queue when **all** registered groups have acknowledged it. If a group nacks a message, only that group's delivery state reverts to pending—other groups' states are unaffected.
 
 ### Dead-Letter Queue Details
 
