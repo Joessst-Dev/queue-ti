@@ -7,7 +7,9 @@ Topics can have an optional Avro schema registered. When a schema is registered 
 - **Schema registration**: Register an Avro schema for a topic via `PUT /api/topic-schemas/:topic`. The schema must be valid Avro JSON; invalid schemas are rejected with HTTP 400.
 - **Validation at enqueue**: When a message is enqueued to a topic with a schema, the payload is validated as JSON and checked against the schema structure. If the payload does not conform, the enqueue fails with HTTP 422.
 - **No schema = no validation**: Topics without a registered schema accept any payload. Existing messages are unaffected when a schema is added, updated, or removed.
-- **Performance**: Parsed Avro schemas are cached in memory per topic. The cache automatically invalidates when a schema is updated or deleted.
+- **Performance**: Parsed Avro schemas are cached to eliminate repeated database lookups. Cache behavior depends on your Redis configuration:
+  - **Without Redis**: Schemas are cached in-process (L1 only); invalidation uses PostgreSQL LISTEN/NOTIFY
+  - **With Redis**: Schemas are cached in two tiers — in-process (L1, ~microseconds) and Redis (L2, ~milliseconds) — shared across all instances with a 30-second TTL; invalidation uses Redis pub/sub. Topics with no registered schema are also cached via a sentinel to avoid repeated DB lookups.
 
 ## Validation Rules
 

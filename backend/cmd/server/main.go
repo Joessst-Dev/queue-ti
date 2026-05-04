@@ -18,6 +18,7 @@ import (
 
 	"github.com/Joessst-Dev/queue-ti/internal/auth"
 	"github.com/Joessst-Dev/queue-ti/internal/broadcast"
+	"github.com/Joessst-Dev/queue-ti/internal/cache"
 	"github.com/Joessst-Dev/queue-ti/internal/config"
 	"github.com/Joessst-Dev/queue-ti/internal/db"
 	"github.com/Joessst-Dev/queue-ti/internal/metrics"
@@ -100,11 +101,7 @@ func main() {
 	reg := prometheus.NewRegistry()
 	rec := metrics.New(pool, reg)
 
-	broadcaster := broadcast.NewPG(pool)
-	defer broadcaster.Close()
-
 	queueService := queue.NewService(pool, cfg.Queue.VisibilityTimeout, cfg.Queue.MaxRetries, cfg.Queue.MessageTTL, cfg.Queue.DLQThreshold, cfg.Queue.RequireTopicRegistration, rec)
-	queueService.UseBroadcaster(ctx, broadcaster)
 	queueService.StartExpiryReaper(ctx, time.Minute)
 
 	reaperSchedule := cfg.Queue.DeleteReaperSchedule
@@ -125,23 +122,10 @@ func main() {
 		opts = append(opts, grpc.UnaryInterceptor(auth.UnaryInterceptor(cfg.Auth)))
 	}
 
-	grpcServer := grpc.NewServer(opts...)
-	pb.RegisterQueueServiceServer(grpcServer, server.NewGRPCServer(queueService, userStore))
-
-	addr := fmt.Sprintf(":%d", cfg.Server.Port)
-	lis, err := net.Listen("tcp", addr)
-	if err != nil {
-		slog.Error("failed to listen", "addr", addr, "error", err)
-		os.Exit(1)
-	}
-
-	go func() {
-		slog.Info("gRPC server listening", "addr", addr)
-		if err := grpcServer.Serve(lis); err != nil {
-			slog.Error("gRPC server failed", "error", err)
-			os.Exit(1)
-		}
-	}()
+	// Select broadcaster and cache before starting servers so no request window
+	// sees the Noop defaults.
+	var activeBroadcaster broadcast.Broadcaster = broadcast.NewPG(pool)
+	defer activeBroadcaster.Close()
 
 	var rateLimitStore fiber.Storage
 	if cfg.Redis.Host != "" {
@@ -159,8 +143,30 @@ func main() {
 			os.Exit(1)
 		}
 		rateLimitStore = store
-		slog.Info("Redis connection verified for rate limiter", "host", cfg.Redis.Host, "port", cfg.Redis.Port)
+		queueService.UseCache(cache.NewRedis(store))
+		activeBroadcaster = broadcast.NewRedis(store.Conn())
+		slog.Info("Redis connection verified for rate limiter, cache, and broadcaster", "host", cfg.Redis.Host, "port", cfg.Redis.Port)
 	}
+
+	queueService.UseBroadcaster(ctx, activeBroadcaster)
+
+	grpcServer := grpc.NewServer(opts...)
+	pb.RegisterQueueServiceServer(grpcServer, server.NewGRPCServer(queueService, userStore))
+
+	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		slog.Error("failed to listen", "addr", addr, "error", err)
+		os.Exit(1)
+	}
+
+	go func() {
+		slog.Info("gRPC server listening", "addr", addr)
+		if err := grpcServer.Serve(lis); err != nil {
+			slog.Error("gRPC server failed", "error", err)
+			os.Exit(1)
+		}
+	}()
 
 	httpServer := server.NewHTTPServer(queueService, cfg.Server, rateLimitStore, cfg.Auth, reg, userStore, version)
 	httpAddr := fmt.Sprintf(":%d", cfg.Server.HTTPPort)

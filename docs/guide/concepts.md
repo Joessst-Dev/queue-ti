@@ -207,3 +207,5 @@ curl -u admin:secret -X PUT http://localhost:8080/api/topic-configs/orders \
 ```
 
 The admin UI **Config** tab allows interactive viewing and editing of all topic configurations without server restart.
+
+**Caching:** Topic configs are cached (like schemas) to avoid repeated database lookups. When Redis is configured, configs are cached in two tiers (in-process + Redis) with a 30-second TTL; changes to a config automatically invalidate caches across all instances via Redis pub/sub.

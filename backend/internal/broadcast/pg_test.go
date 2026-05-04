@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
+	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,9 +20,11 @@ import (
 )
 
 var (
-	suiteCtx     context.Context
-	pgContainer  *tcpostgres.PostgresContainer
-	containerDSN string
+	suiteCtx       context.Context
+	pgContainer    *tcpostgres.PostgresContainer
+	containerDSN   string
+	redisContainer *tcredis.RedisContainer
+	redisAddr      string
 )
 
 func TestMain(m *testing.M) {
@@ -59,9 +62,21 @@ func TestMain(m *testing.M) {
 		host, mappedPort.Num(),
 	)
 
+	redisContainer, err = tcredis.Run(suiteCtx, "redis:7-alpine")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to start redis container: %v\n", err)
+		os.Exit(1)
+	}
+	redisAddr, err = redisContainer.ConnectionString(suiteCtx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to get redis connection string: %v\n", err)
+		os.Exit(1)
+	}
+
 	code := m.Run()
 
 	_ = pgContainer.Terminate(suiteCtx)
+	_ = redisContainer.Terminate(suiteCtx)
 	os.Exit(code)
 }
 

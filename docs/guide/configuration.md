@@ -138,23 +138,31 @@ curl -X POST http://localhost:8080/api/messages \
 - Microservices architectures with schema registries (topics are registered alongside schemas)
 - Teams that want producer errors on typos rather than silent failures
 
-## Redis Rate Limiter
+## Redis Integration
 
-The login endpoint (`POST /api/auth/login`) is protected by a rate limiter that prevents brute-force authentication attacks. By default, the rate limiter uses in-memory storage. For multi-replica deployments, configure Redis to share rate-limit state across all backend instances.
+Redis is optional but recommended for production deployments. When configured, Redis powers three critical features:
 
-**Default behavior (in-memory):**
-- Rate limit: 10 requests per 60-second window per client IP
-- Storage: In-memory; each instance has its own rate-limit counter
-- Suitable for: Single-instance deployments, development, testing
+1. **Login rate limiter** — Prevents brute-force authentication attacks (shared state across instances)
+2. **Distributed cache** — Two-tier caching for schema and topic config lookups (in-process + Redis)
+3. **Cross-instance broadcaster** — Invalidates caches on all instances when schemas or configs change
 
-**With Redis (shared state):**
-- Rate limit: 10 requests per 60-second window per client IP (same limit, shared across instances)
-- Storage: Redis; all backend instances query the same counter
-- Suitable for: Multi-replica deployments, load-balanced production setups
+### When Redis is Enabled vs. Disabled
 
-### Enabling Redis Rate Limiter
+**Without Redis:**
+- Rate limiter: In-memory, per-instance (suitable for single-instance deployments)
+- Cache: In-process only, invalidation via PostgreSQL LISTEN/NOTIFY
+- Broadcaster: PostgreSQL LISTEN/NOTIFY (single-instance friendly)
+- Trade-off: Simpler setup, but multiple instances don't share cached state — each instance has its own L1 cache
 
-To enable Redis-backed rate limiting, set the `redis.host` configuration:
+**With Redis:**
+- Rate limiter: Shared Redis counter across all instances
+- Cache: Two-tier (in-process L1 + Redis L2); L1 protects warm entries, Redis errors degrade gracefully to DB
+- Broadcaster: Redis pub/sub (faster, more reliable for multi-instance)
+- Trade-off: Additional infrastructure, but significant performance gains in multi-instance deployments
+
+### Enabling Redis
+
+To enable Redis, set the `redis.host` configuration:
 
 ```yaml
 redis:
@@ -173,13 +181,48 @@ QUEUETI_REDIS_PASSWORD=your-redis-password
 QUEUETI_REDIS_TLS_ENABLED=true
 ```
 
-When `QUEUETI_REDIS_HOST` is empty or unset, the rate limiter falls back to in-memory storage automatically.
+When `QUEUETI_REDIS_HOST` is empty or unset, Redis is disabled, and the service falls back to in-memory storage and PostgreSQL LISTEN/NOTIFY.
 
-### Redis Connection
+### Distributed Caching
+
+Schema and topic config lookups use a two-tier cache:
+
+- **L1 (in-process)**: `sync.Map` of compiled schemas and configs, fastest access
+- **L2 (Redis)**: JSON-serialized schemas and configs, shared across instances, survives restarts
+- **L3 (PostgreSQL)**: Source of truth
+
+**Cache keys:**
+- Schemas: `queueti:cache:schema:<topic>` (TTL 30 seconds)
+- Topic configs: `queueti:cache:topic_config:<topic>` (TTL 30 seconds)
+
+When a schema or config does not exist in the database, a sentinel value (`"null"`) is stored in Redis to prevent repeated lookups for 30 seconds.
+
+**Invalidation:**
+- When a schema is registered, updated, or deleted, the local cache is evicted and a broadcast is sent to all instances
+- When a topic config is created, updated, or deleted, the local cache is evicted and a broadcast is sent to all instances
+- Without Redis, invalidation uses PostgreSQL LISTEN/NOTIFY (all instances receive the notification in real time)
+- With Redis, invalidation uses Redis pub/sub (purpose-built for messaging, lower overhead than holding a dedicated DB connection per listener)
+
+### Login Rate Limiter
+
+The login endpoint (`POST /api/auth/login`) is protected by a rate limiter that prevents brute-force authentication attacks.
+
+**Default behavior (in-memory):**
+- Rate limit: 10 requests per 60-second window per client IP
+- Storage: In-memory; each instance has its own rate-limit counter
+- Suitable for: Single-instance deployments, development, testing
+
+**With Redis (shared state):**
+- Rate limit: 10 requests per 60-second window per client IP (same limit, shared across instances)
+- Storage: Redis; all backend instances query the same counter
+- Suitable for: Multi-replica deployments, load-balanced production setups
+
+### Redis Connection Details
 
 - **Startup validation**: The server pings Redis at startup to verify reachability. If the ping fails, the server logs an error and exits.
 - **Client IP detection**: The rate limiter uses the `X-Real-IP` header (set by reverse proxies like Nginx) to identify the client. Ensure your proxy sets this header correctly.
-- **Key isolation**: Rate-limit keys include the client IP to prevent one user's failed login attempts from blocking others.
+- **Key isolation**: Rate-limit and cache keys are namespaced to prevent collisions.
+- **Performance**: Redis is treated as an optimization layer. If Redis becomes unavailable after startup, the service continues to function with graceful degradation (in-process caching and PostgreSQL lookups).
 
 ### Example: Docker Compose with Redis
 
@@ -211,7 +254,7 @@ In production with multiple backend replicas behind a load balancer:
 
 1. **Configure Redis** to a shared instance (e.g., an AWS ElastiCache, Google Cloud Memorystore, or self-hosted Redis cluster)
 2. **Set Redis credentials** via `QUEUETI_REDIS_PASSWORD` and optionally `QUEUETI_REDIS_TLS_ENABLED`
-3. **Deploy replicas** — each instance connects to the same Redis and shares rate-limit state
+3. **Deploy replicas** — each instance connects to the same Redis for shared caching, broadcasting, and rate limiting
 4. **Security note**: Bind your Redis instance to a private network or use authentication and TLS (`QUEUETI_REDIS_TLS_ENABLED=true`) in production
 
 ## Delete Reaper Schedule

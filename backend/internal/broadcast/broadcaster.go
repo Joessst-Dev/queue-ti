@@ -3,8 +3,7 @@ package broadcast
 import "context"
 
 // Broadcaster publishes and receives text notifications across service instances.
-// The PostgreSQL implementation uses LISTEN/NOTIFY; a future Redis implementation
-// will satisfy the same interface, making PG the fallback when Redis is disabled.
+// Redis pub/sub is used when Redis is configured; PostgreSQL LISTEN/NOTIFY is the fallback.
 type Broadcaster interface {
 	// Publish sends payload on channel to all subscribers across all instances.
 	Publish(ctx context.Context, channel, payload string) error

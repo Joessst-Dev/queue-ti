@@ -21,6 +21,12 @@ var (
 	ErrInvalidSchema    = errors.New("invalid avro schema")
 )
 
+// cacheNotFoundSentinel is stored in Redis to represent a confirmed DB miss,
+// preventing repeated round-trips for topics with no schema or no config.
+const cacheNotFoundSentinel = "null"
+const schemaCachePrefix      = "queueti:cache:schema:"
+const schemaCacheTTL         = 30 * time.Second
+
 // TopicSchema holds the registered Avro schema for a single topic.
 type TopicSchema struct {
 	Topic      string
@@ -129,6 +135,7 @@ func (s *Service) UpsertTopicSchemaAndNotify(ctx context.Context, topic, schemaJ
 	if err != nil {
 		return nil, err
 	}
+	_ = s.cache.Delete(ctx, schemaCachePrefix+topic)
 	if err := s.broadcaster.Publish(ctx, broadcast.ChannelSchemaChanged, topic); err != nil {
 		slog.Warn("broadcast schema change failed", "topic", topic, "error", err)
 	}
@@ -139,10 +146,54 @@ func (s *Service) DeleteTopicSchemaAndNotify(ctx context.Context, topic string) 
 	if err := DeleteTopicSchema(ctx, s.pool, topic); err != nil {
 		return err
 	}
+	_ = s.cache.Delete(ctx, schemaCachePrefix+topic)
 	if err := s.broadcaster.Publish(ctx, broadcast.ChannelSchemaChanged, topic); err != nil {
 		slog.Warn("broadcast schema delete failed", "topic", topic, "error", err)
 	}
 	return nil
+}
+
+// getTopicSchemaCached returns the TopicSchema for the given topic, consulting
+// the distributed cache (Redis when configured) before falling back to the DB.
+// A sentinel in Redis represents a confirmed absent schema so we don't query
+// the DB on every enqueue when no schema is registered.
+//
+// Note: there is no local in-process tier for the raw TopicSchema. The local
+// globalSchemaCache holds compiled avro.Schema objects (L1); Redis holds the
+// raw TopicSchema JSON (L2); the DB is the source of truth (L3).
+func (s *Service) getTopicSchemaCached(ctx context.Context, topic string) (*TopicSchema, error) {
+	cacheKey := schemaCachePrefix + topic
+
+	// L2: Redis cache (L1 for compiled avro.Schema is in globalSchemaCache)
+	raw, err := s.cache.Get(ctx, cacheKey)
+	if err == nil && raw != nil {
+		if string(raw) == cacheNotFoundSentinel {
+			return nil, nil
+		}
+		var ts TopicSchema
+		if jsonErr := json.Unmarshal(raw, &ts); jsonErr == nil {
+			return &ts, nil
+		}
+		// Corrupted cache entry — evict it so other instances don't repeat the fallback.
+		_ = s.cache.Delete(ctx, cacheKey)
+	}
+
+	// L3: Database
+	ts, err := GetTopicSchema(ctx, s.pool, topic)
+	if err != nil {
+		return nil, err
+	}
+
+	// Populate cache: sentinel for absent, JSON for present.
+	if ts == nil {
+		_ = s.cache.Set(ctx, cacheKey, []byte(cacheNotFoundSentinel), schemaCacheTTL)
+	} else {
+		if encoded, encErr := json.Marshal(ts); encErr == nil {
+			_ = s.cache.Set(ctx, cacheKey, encoded, schemaCacheTTL)
+		}
+	}
+
+	return ts, nil
 }
 
 // validatePayload checks the payload against the topic's registered Avro schema.
@@ -159,7 +210,7 @@ func (s *Service) DeleteTopicSchemaAndNotify(ctx context.Context, topic string) 
 // Compiled schemas are cached in memory keyed by (topic, version), so
 // avro.Parse is only invoked when the schema version changes.
 func (s *Service) validatePayload(ctx context.Context, topic string, payload []byte) error {
-	ts, err := GetTopicSchema(ctx, s.pool, topic)
+	ts, err := s.getTopicSchemaCached(ctx, topic)
 	if err != nil {
 		return err
 	}
