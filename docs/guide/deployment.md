@@ -98,7 +98,7 @@ For production deployments with multiple queue-ti instances behind a load balanc
    - Login rate limiting (shared state across instances, prevents brute-force attacks)
    - Distributed caching (schema and topic config lookups avoid repeated DB round-trips)
    - Cross-instance broadcaster (schema and config changes invalidate caches immediately via Redis pub/sub)
-5. **PostgreSQL LISTEN/NOTIFY fallback** — Without Redis, changes to topic schemas or configurations are broadcast via PostgreSQL LISTEN/NOTIFY to all instances in real-time. This works but is less efficient for high-frequency changes.
+5. **PostgreSQL LISTEN/NOTIFY fallback** — Without Redis, schema and config changes are broadcast via PostgreSQL LISTEN/NOTIFY. This is fully functional for single-instance deployments; with multiple instances each maintains its own L1 cache with no shared L2.
 
 ### Example Kubernetes Deployment
 

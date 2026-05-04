@@ -9,7 +9,7 @@ Topics can have an optional Avro schema registered. When a schema is registered 
 - **No schema = no validation**: Topics without a registered schema accept any payload. Existing messages are unaffected when a schema is added, updated, or removed.
 - **Performance**: Parsed Avro schemas are cached to eliminate repeated database lookups. Cache behavior depends on your Redis configuration:
   - **Without Redis**: Schemas are cached in-process (L1 only); invalidation uses PostgreSQL LISTEN/NOTIFY
-  - **With Redis**: Schemas are cached in two tiers — in-process (L1, ~microseconds) and Redis (L2, ~milliseconds) — shared across all instances; invalidation uses Redis pub/sub. Cache TTL is 30 seconds; "no schema" is also cached via a sentinel value to prevent repeated lookups for missing schemas.
+  - **With Redis**: Schemas are cached in two tiers — in-process (L1, ~microseconds) and Redis (L2, ~milliseconds) — shared across all instances with a 30-second TTL; invalidation uses Redis pub/sub. Topics with no registered schema are also cached via a sentinel to avoid repeated DB lookups.
 
 ## Validation Rules
 

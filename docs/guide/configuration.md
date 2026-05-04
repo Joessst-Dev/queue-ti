@@ -152,11 +152,11 @@ Redis is optional but recommended for production deployments. When configured, R
 - Rate limiter: In-memory, per-instance (suitable for single-instance deployments)
 - Cache: In-process only, invalidation via PostgreSQL LISTEN/NOTIFY
 - Broadcaster: PostgreSQL LISTEN/NOTIFY (single-instance friendly)
-- Trade-off: Simpler setup, but repeated DB lookups in single-instance; less efficient multi-instance cache coherence
+- Trade-off: Simpler setup, but multiple instances don't share cached state — each instance has its own L1 cache
 
 **With Redis:**
 - Rate limiter: Shared Redis counter across all instances
-- Cache: Two-tier (in-process L1 + Redis L2), zero overhead if Redis is unavailable (falls back to DB)
+- Cache: Two-tier (in-process L1 + Redis L2); L1 protects warm entries, Redis errors degrade gracefully to DB
 - Broadcaster: Redis pub/sub (faster, more reliable for multi-instance)
 - Trade-off: Additional infrastructure, but significant performance gains in multi-instance deployments
 
@@ -201,7 +201,7 @@ When a schema or config does not exist in the database, a sentinel value (`"null
 - When a schema is registered, updated, or deleted, the local cache is evicted and a broadcast is sent to all instances
 - When a topic config is created, updated, or deleted, the local cache is evicted and a broadcast is sent to all instances
 - Without Redis, invalidation uses PostgreSQL LISTEN/NOTIFY (all instances receive the notification in real time)
-- With Redis, invalidation uses Redis pub/sub (faster, more reliable in high-latency networks)
+- With Redis, invalidation uses Redis pub/sub (purpose-built for messaging, lower overhead than holding a dedicated DB connection per listener)
 
 ### Login Rate Limiter
 
