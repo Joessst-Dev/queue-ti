@@ -32,6 +32,9 @@ features:
   - icon: 🔒
     title: JWT Authentication
     details: Optional JWT-based auth with user accounts, role-based access, and per-topic grants. OAuth-ready.
+  - icon: 📦
+    title: Multi-Language Clients
+    details: Official clients for Go, Node.js, Python, and Java — auto-reconnect, token refresh, and batch consumption included.
 
 ---
 

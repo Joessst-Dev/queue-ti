@@ -15,7 +15,7 @@ If you already run Postgres, you have a production-ready queue. One table, at-le
 - **Fine-grained access control** — JWT auth with per-topic grants and consumer group restrictions
 - **Avro schema validation** — enforce payload contracts at enqueue time
 - **Admin UI** — inspect messages, requeue from DLQ, manage topics and users without writing code
-- **Go, Node.js, and Python clients** — auto-reconnect, token refresh, batch consumption
+- **Go, Node.js, Python, and Java clients** — auto-reconnect, token refresh, batch consumption
 
 ## Quick Start
 
@@ -31,6 +31,8 @@ Access the admin UI at `http://localhost:8081` (login: `admin` / `secret`).
 go get github.com/Joessst-Dev/queue-ti/clients/go-client
 npm install @queue-ti/client
 pip install queue-ti-client
+# Java: see docs for GitHub Packages setup
+implementation("de.joesst.dev:queue-ti-java-client:VERSION")
 ```
 
 ## License
