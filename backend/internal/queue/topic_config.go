@@ -42,7 +42,7 @@ func (s *Service) GetTopicConfig(ctx context.Context, topic string) (*TopicConfi
 
 	// L2: distributed cache (Redis when configured).
 	if raw, err := s.cache.Get(ctx, cacheKey); err == nil && raw != nil {
-		if string(raw) == schemaNotFoundSentinel {
+		if string(raw) == cacheNotFoundSentinel {
 			s.topicConfigCache.Store(topic, topicConfigEntry{cfg: nil})
 			return nil, nil
 		}
@@ -65,7 +65,7 @@ func (s *Service) GetTopicConfig(ctx context.Context, topic string) (*TopicConfi
 		&cfg.ThroughputLimit)
 	if errors.Is(err, pgx.ErrNoRows) {
 		s.topicConfigCache.Store(topic, topicConfigEntry{cfg: nil})
-		_ = s.cache.Set(ctx, cacheKey, []byte(schemaNotFoundSentinel), configCacheTTL)
+		_ = s.cache.Set(ctx, cacheKey, []byte(cacheNotFoundSentinel), configCacheTTL)
 		return nil, nil
 	}
 	if err != nil {

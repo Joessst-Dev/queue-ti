@@ -21,9 +21,9 @@ var (
 	ErrInvalidSchema    = errors.New("invalid avro schema")
 )
 
-// schemaNotFoundSentinel is stored in Redis to cache a "no schema" result,
-// preventing repeated DB round-trips when no schema has been registered.
-const schemaNotFoundSentinel = "null"
+// cacheNotFoundSentinel is stored in Redis to represent a confirmed DB miss,
+// preventing repeated round-trips for topics with no schema or no config.
+const cacheNotFoundSentinel = "null"
 const schemaCachePrefix      = "queueti:cache:schema:"
 const schemaCacheTTL         = 30 * time.Second
 
@@ -155,15 +155,19 @@ func (s *Service) DeleteTopicSchemaAndNotify(ctx context.Context, topic string) 
 
 // getTopicSchemaCached returns the TopicSchema for the given topic, consulting
 // the distributed cache (Redis when configured) before falling back to the DB.
-// A "null" sentinel in Redis represents a confirmed absent schema so we don't
-// query the DB on every enqueue when no schema is registered.
+// A sentinel in Redis represents a confirmed absent schema so we don't query
+// the DB on every enqueue when no schema is registered.
+//
+// Note: there is no local in-process tier for the raw TopicSchema. The local
+// globalSchemaCache holds compiled avro.Schema objects (L1); Redis holds the
+// raw TopicSchema JSON (L2); the DB is the source of truth (L3).
 func (s *Service) getTopicSchemaCached(ctx context.Context, topic string) (*TopicSchema, error) {
 	cacheKey := schemaCachePrefix + topic
 
-	// L1: Redis cache
+	// L2: Redis cache (L1 for compiled avro.Schema is in globalSchemaCache)
 	raw, err := s.cache.Get(ctx, cacheKey)
 	if err == nil && raw != nil {
-		if string(raw) == schemaNotFoundSentinel {
+		if string(raw) == cacheNotFoundSentinel {
 			return nil, nil
 		}
 		var ts TopicSchema
@@ -181,7 +185,7 @@ func (s *Service) getTopicSchemaCached(ctx context.Context, topic string) (*Topi
 
 	// Populate cache: sentinel for absent, JSON for present.
 	if ts == nil {
-		_ = s.cache.Set(ctx, cacheKey, []byte(schemaNotFoundSentinel), schemaCacheTTL)
+		_ = s.cache.Set(ctx, cacheKey, []byte(cacheNotFoundSentinel), schemaCacheTTL)
 	} else {
 		if encoded, encErr := json.Marshal(ts); encErr == nil {
 			_ = s.cache.Set(ctx, cacheKey, encoded, schemaCacheTTL)
