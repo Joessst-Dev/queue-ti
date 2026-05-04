@@ -5,6 +5,7 @@ export default withMermaid(defineConfig({
   title: 'queue-ti',
   description: 'Self-hosted distributed message queue backed by PostgreSQL',
   base: '/queue-ti/',
+  head: [['link', { rel: 'icon', href: '/queue-ti/favicon.ico' }]],
   themeConfig: {
     nav: [
       { text: 'Home', link: '/' },
