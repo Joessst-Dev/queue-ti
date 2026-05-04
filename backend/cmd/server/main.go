@@ -101,11 +101,7 @@ func main() {
 	reg := prometheus.NewRegistry()
 	rec := metrics.New(pool, reg)
 
-	broadcaster := broadcast.NewPG(pool)
-	defer broadcaster.Close()
-
 	queueService := queue.NewService(pool, cfg.Queue.VisibilityTimeout, cfg.Queue.MaxRetries, cfg.Queue.MessageTTL, cfg.Queue.DLQThreshold, cfg.Queue.RequireTopicRegistration, rec)
-	queueService.UseBroadcaster(ctx, broadcaster)
 	queueService.StartExpiryReaper(ctx, time.Minute)
 
 	reaperSchedule := cfg.Queue.DeleteReaperSchedule
@@ -144,6 +140,10 @@ func main() {
 		}
 	}()
 
+	pgBroadcaster := broadcast.NewPG(pool)
+	defer pgBroadcaster.Close()
+	var activeBroadcaster broadcast.Broadcaster = pgBroadcaster
+
 	var rateLimitStore fiber.Storage
 	if cfg.Redis.Host != "" {
 		redisCfg := redisstorage.Config{
@@ -161,8 +161,11 @@ func main() {
 		}
 		rateLimitStore = store
 		queueService.UseCache(cache.NewRedis(store))
-		slog.Info("Redis connection verified for rate limiter and cache", "host", cfg.Redis.Host, "port", cfg.Redis.Port)
+		activeBroadcaster = broadcast.NewRedis(store.Conn())
+		slog.Info("Redis connection verified for rate limiter, cache, and broadcaster", "host", cfg.Redis.Host, "port", cfg.Redis.Port)
 	}
+
+	queueService.UseBroadcaster(ctx, activeBroadcaster)
 
 	httpServer := server.NewHTTPServer(queueService, cfg.Server, rateLimitStore, cfg.Auth, reg, userStore, version)
 	httpAddr := fmt.Sprintf(":%d", cfg.Server.HTTPPort)
