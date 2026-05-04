@@ -122,27 +122,10 @@ func main() {
 		opts = append(opts, grpc.UnaryInterceptor(auth.UnaryInterceptor(cfg.Auth)))
 	}
 
-	grpcServer := grpc.NewServer(opts...)
-	pb.RegisterQueueServiceServer(grpcServer, server.NewGRPCServer(queueService, userStore))
-
-	addr := fmt.Sprintf(":%d", cfg.Server.Port)
-	lis, err := net.Listen("tcp", addr)
-	if err != nil {
-		slog.Error("failed to listen", "addr", addr, "error", err)
-		os.Exit(1)
-	}
-
-	go func() {
-		slog.Info("gRPC server listening", "addr", addr)
-		if err := grpcServer.Serve(lis); err != nil {
-			slog.Error("gRPC server failed", "error", err)
-			os.Exit(1)
-		}
-	}()
-
-	pgBroadcaster := broadcast.NewPG(pool)
-	defer pgBroadcaster.Close()
-	var activeBroadcaster broadcast.Broadcaster = pgBroadcaster
+	// Select broadcaster and cache before starting servers so no request window
+	// sees the Noop defaults.
+	var activeBroadcaster broadcast.Broadcaster = broadcast.NewPG(pool)
+	defer activeBroadcaster.Close()
 
 	var rateLimitStore fiber.Storage
 	if cfg.Redis.Host != "" {
@@ -166,6 +149,24 @@ func main() {
 	}
 
 	queueService.UseBroadcaster(ctx, activeBroadcaster)
+
+	grpcServer := grpc.NewServer(opts...)
+	pb.RegisterQueueServiceServer(grpcServer, server.NewGRPCServer(queueService, userStore))
+
+	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		slog.Error("failed to listen", "addr", addr, "error", err)
+		os.Exit(1)
+	}
+
+	go func() {
+		slog.Info("gRPC server listening", "addr", addr)
+		if err := grpcServer.Serve(lis); err != nil {
+			slog.Error("gRPC server failed", "error", err)
+			os.Exit(1)
+		}
+	}()
 
 	httpServer := server.NewHTTPServer(queueService, cfg.Server, rateLimitStore, cfg.Auth, reg, userStore, version)
 	httpAddr := fmt.Sprintf(":%d", cfg.Server.HTTPPort)

@@ -174,10 +174,11 @@ func (s *Service) getTopicSchemaCached(ctx context.Context, topic string) (*Topi
 		if jsonErr := json.Unmarshal(raw, &ts); jsonErr == nil {
 			return &ts, nil
 		}
-		// Corrupted cache entry — fall through to DB.
+		// Corrupted cache entry — evict it so other instances don't repeat the fallback.
+		_ = s.cache.Delete(ctx, cacheKey)
 	}
 
-	// L2: Database
+	// L3: Database
 	ts, err := GetTopicSchema(ctx, s.pool, topic)
 	if err != nil {
 		return nil, err

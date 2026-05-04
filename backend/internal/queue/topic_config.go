@@ -51,7 +51,8 @@ func (s *Service) GetTopicConfig(ctx context.Context, topic string) (*TopicConfi
 			s.topicConfigCache.Store(topic, topicConfigEntry{cfg: &cfg})
 			return &cfg, nil
 		}
-		// Corrupted entry — fall through to DB.
+		// Corrupted entry — evict it so other instances don't repeat the fallback.
+		_ = s.cache.Delete(ctx, cacheKey)
 	}
 
 	// L3: database.

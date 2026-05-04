@@ -72,10 +72,9 @@ func (f *fakeCache) getCount(key string) int {
 
 var _ cache.Cache = (*fakeCache)(nil) // compile-time interface check
 
-// schemaKey returns the Redis cache key for a topic's schema.
+// schemaKey and configKey mirror the private constants in the queue package
+// (schemaCachePrefix, configCachePrefix). Keep in sync if those change.
 func schemaKey(topic string) string { return "queueti:cache:schema:" + topic }
-
-// configKey returns the Redis cache key for a topic's config.
 func configKey(topic string) string { return "queueti:cache:topic_config:" + topic }
 
 var _ = Describe("Schema Cache", func() {
