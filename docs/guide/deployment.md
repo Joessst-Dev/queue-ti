@@ -94,8 +94,11 @@ For production deployments with multiple queue-ti instances behind a load balanc
 1. **Database** — Use a managed PostgreSQL service (AWS RDS, Google Cloud SQL, etc.) or a highly available PostgreSQL cluster
 2. **Load Balancer** — Place instances behind a load balancer for HTTP traffic (port 8080)
 3. **gRPC Routing** — For gRPC clients, use a gRPC-aware load balancer (e.g., Envoy, AWS NLB with gRPC support) or direct DNS to backend instances
-4. **Redis** — Configure a shared Redis instance for login rate limiting across all instances
-5. **Schema/Config Invalidation** — Changes to topic schemas or configurations are broadcast via PostgreSQL LISTEN/NOTIFY to all instances in real-time
+4. **Redis (recommended)** — Configure a shared Redis instance for:
+   - Login rate limiting (shared state across instances, prevents brute-force attacks)
+   - Distributed caching (schema and topic config lookups avoid repeated DB round-trips)
+   - Cross-instance broadcaster (schema and config changes invalidate caches immediately via Redis pub/sub)
+5. **PostgreSQL LISTEN/NOTIFY fallback** — Without Redis, changes to topic schemas or configurations are broadcast via PostgreSQL LISTEN/NOTIFY to all instances in real-time. This works but is less efficient for high-frequency changes.
 
 ### Example Kubernetes Deployment
 
@@ -141,6 +144,13 @@ spec:
           value: redis.default.svc.cluster.local
         - name: QUEUETI_REDIS_PORT
           value: "6379"
+        - name: QUEUETI_REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: queue-ti-redis
+              key: password
+        - name: QUEUETI_REDIS_TLS_ENABLED
+          value: "true"
         - name: QUEUETI_AUTH_ENABLED
           value: "true"
         - name: QUEUETI_AUTH_JWT_SECRET
