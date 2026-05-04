@@ -486,8 +486,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "clients/go-client/${{ github.ref_name }}" "${{ github.sha }}"
-          git push origin "clients/go-client/${{ github.ref_name }}"
+          if git rev-parse "clients/go-client/${{ github.ref_name }}" > /dev/null 2>&1; then
+            echo "Tag clients/go-client/${{ github.ref_name }} already exists — skipping."
+          else
+            git tag "clients/go-client/${{ github.ref_name }}" "${{ github.sha }}"
+            git push origin "clients/go-client/${{ github.ref_name }}"
+          fi
 
       - name: Create GitHub Release
         # --generate-notes  auto-generates release notes from merged PRs since
