@@ -18,6 +18,7 @@ import (
 
 	"github.com/Joessst-Dev/queue-ti/internal/auth"
 	"github.com/Joessst-Dev/queue-ti/internal/broadcast"
+	"github.com/Joessst-Dev/queue-ti/internal/cache"
 	"github.com/Joessst-Dev/queue-ti/internal/config"
 	"github.com/Joessst-Dev/queue-ti/internal/db"
 	"github.com/Joessst-Dev/queue-ti/internal/metrics"
@@ -159,7 +160,8 @@ func main() {
 			os.Exit(1)
 		}
 		rateLimitStore = store
-		slog.Info("Redis connection verified for rate limiter", "host", cfg.Redis.Host, "port", cfg.Redis.Port)
+		queueService.UseCache(cache.NewRedis(store))
+		slog.Info("Redis connection verified for rate limiter and cache", "host", cfg.Redis.Host, "port", cfg.Redis.Port)
 	}
 
 	httpServer := server.NewHTTPServer(queueService, cfg.Server, rateLimitStore, cfg.Auth, reg, userStore, version)
