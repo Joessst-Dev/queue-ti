@@ -31,9 +31,15 @@ Access the admin UI at `http://localhost:8081` (login: `admin` / `secret`).
 go get github.com/Joessst-Dev/queue-ti/clients/go-client
 npm install @queue-ti/client
 pip install queue-ti-client
-# Java: see docs for GitHub Packages setup
+```
+
+**Java** (GitHub Packages — [see setup instructions](https://joessst-dev.github.io/queue-ti/clients/java)):
+
+```kotlin
 implementation("de.joesst.dev:queue-ti-java-client:VERSION")
 ```
+
+Latest version: [github.com/Joessst-Dev/queue-ti-java-client/releases](https://github.com/Joessst-Dev/queue-ti-java-client/releases)
 
 ## License
 
