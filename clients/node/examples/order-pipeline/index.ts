@@ -2,10 +2,10 @@
  * Order pipeline — demonstrates the full producer → consumer → ack lifecycle
  * against a local queue-ti instance.
  *
- * Run: npx ts-node index.ts (requires docker-compose up)
+ * Run: npx ts-node --transpile-only examples/order-pipeline/index.ts (requires docker-compose up)
  */
 
-import { connect, AdminClient } from '../../src'
+import { connect, AdminClient, QueueTiAuth } from '../../src'
 import type { Message } from '../../src/message'
 import type { MessageHandler } from '../../src/consumer'
 
@@ -14,6 +14,8 @@ const ADMIN_URL = 'http://localhost:8080'
 const TOPIC = 'orders'
 const DLQ_TOPIC = 'orders.dlq'
 const CONSUMER_GROUP = 'fulfillment'
+const USERNAME = process.env.QUEUETI_USERNAME ?? 'admin'
+const PASSWORD = process.env.QUEUETI_PASSWORD ?? 'secret'
 
 interface Order {
   id: string
@@ -34,8 +36,8 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function registerConsumerGroup(): Promise<void> {
-  const admin = new AdminClient(ADMIN_URL)
+async function registerConsumerGroup(auth: QueueTiAuth): Promise<void> {
+  const admin = new AdminClient(ADMIN_URL, { token: auth.token ?? undefined })
   try {
     await admin.registerConsumerGroup(TOPIC, CONSUMER_GROUP)
     console.log(`consumer group "${CONSUMER_GROUP}" registered`)
@@ -49,8 +51,12 @@ async function registerConsumerGroup(): Promise<void> {
   }
 }
 
-async function produce(controller: AbortController): Promise<void> {
-  const client = await connect(GRPC_ADDR, { insecure: true })
+async function produce(auth: QueueTiAuth, controller: AbortController): Promise<void> {
+  const client = await connect(GRPC_ADDR, {
+    insecure: true,
+    token: auth.token ?? undefined,
+    tokenRefresher: auth.refresh,
+  })
   const producer = client.producer()
 
   for (const order of orders) {
@@ -67,8 +73,12 @@ async function produce(controller: AbortController): Promise<void> {
   client.close()
 }
 
-async function consume(controller: AbortController): Promise<void> {
-  const client = await connect(GRPC_ADDR, { insecure: true })
+async function consume(auth: QueueTiAuth, controller: AbortController): Promise<void> {
+  const client = await connect(GRPC_ADDR, {
+    insecure: true,
+    token: auth.token ?? undefined,
+    tokenRefresher: auth.refresh,
+  })
   const consumer = client.consumer(TOPIC, {
     consumerGroup: CONSUMER_GROUP,
     concurrency: 3,
@@ -82,21 +92,23 @@ async function consume(controller: AbortController): Promise<void> {
 
     if (order.poison) {
       console.log(`nack ${msg.id}: poison pill detected (retry ${msg.retryCount})`)
-      await msg.nack('poison pill')
-      return
+      throw new Error('poison pill')
     }
 
     console.log(`ack ${msg.id}: processed order ${order.id} — ${order.amount}×${order.item}`)
-    await msg.ack()
   }
 
   await consumer.consume(handler)
   client.close()
 }
 
-async function drainDLQ(controller: AbortController): Promise<void> {
-  const client = await connect(GRPC_ADDR, { insecure: true })
-  const consumer = client.consumer(DLQ_TOPIC, { consumerGroup: CONSUMER_GROUP })
+async function drainDLQ(auth: QueueTiAuth, controller: AbortController): Promise<void> {
+  const client = await connect(GRPC_ADDR, {
+    insecure: true,
+    token: auth.token ?? undefined,
+    tokenRefresher: auth.refresh,
+  })
+  const consumer = client.consumer(DLQ_TOPIC, { consumerGroup: CONSUMER_GROUP, signal: controller.signal })
 
   console.log(`draining DLQ "${DLQ_TOPIC}"`)
 
@@ -114,6 +126,8 @@ async function drainDLQ(controller: AbortController): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  const auth = await QueueTiAuth.login(ADMIN_URL, USERNAME, PASSWORD)
+
   const controller = new AbortController()
 
   process.on('SIGINT', () => {
@@ -122,11 +136,11 @@ async function main(): Promise<void> {
   })
   process.on('SIGTERM', () => controller.abort())
 
-  await registerConsumerGroup()
+  await registerConsumerGroup(auth)
 
-  void produce(controller)
-  void drainDLQ(controller)
-  await consume(controller)
+  void produce(auth, controller)
+  void drainDLQ(auth, controller)
+  await consume(auth, controller)
 }
 
 main().catch((err) => {

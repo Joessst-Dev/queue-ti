@@ -250,32 +250,131 @@ except Exception as err:
 
 ## Authentication
 
-### With JWT Tokens
+### Using QueueTiAuth (recommended)
+
+The `QueueTiAuth` helper automatically checks if authentication is required and handles login and token refresh:
+
+```python
+import asyncio
+import queueti
+
+auth = queueti.QueueTiAuth.login("http://localhost:8080", "admin", "secret")
+
+async def main():
+    opts = queueti.ConnectOptions(
+        token=auth.token,
+        token_refresher=auth.async_refresh,
+    )
+    client = await queueti.connect("localhost:50051", opts)
+    try:
+        producer = client.producer()
+        msg_id = await producer.publish("orders", b"...")
+        print(f"Published: {msg_id}")
+    finally:
+        await client.close()
+
+    async with queueti.AsyncAdminClient(
+        "http://localhost:8080",
+        queueti.AdminOptions(token=auth.token),
+    ) as admin:
+        configs = await admin.list_topic_configs()
+
+asyncio.run(main())
+```
+
+For the synchronous client, use `connect_sync` with `async_refresh` — the sync wrapper runs an internal event loop and requires an async refresher:
+
+```python
+import queueti
+
+auth = queueti.QueueTiAuth.login("http://localhost:8080", "admin", "secret")
+
+client = queueti.connect_sync("localhost:50051", queueti.ConnectOptions(
+    token=auth.token,
+    token_refresher=auth.async_refresh,
+))
+try:
+    producer = client.producer()
+    msg_id = producer.publish("orders", b"...")
+    print(f"Published: {msg_id}")
+finally:
+    client.close()
+```
+
+The `QueueTiAuth` helper:
+1. Calls `GET /api/auth/status` to check if authentication is required
+2. If auth is disabled, returns a no-op instance with a null token
+3. If auth is enabled, calls `POST /api/auth/login` with the provided credentials
+4. Exposes `.token` (str or None) for the current JWT, `.async_refresh()` for async clients, and `.refresh()` for sync clients
+
+### Option 1 — Obtaining a token manually
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"secret"}' \
+  | jq -r '.token')
+```
+
+### Option 2 — Automatic refresh with custom fetcher
 
 ```python
 import asyncio
 from queueti import connect, ConnectOptions
 
-async def refresh_token(current_token):
-    # Your token refresh logic
-    response = await http_client.post(
-        "http://localhost:8080/api/auth/refresh",
-        headers={"Authorization": f"Bearer {current_token}"},
-    )
-    data = await response.json()
-    return data["token"]
+async def refresh_token() -> str:
+    import httpx
+    async with httpx.AsyncClient() as http:
+        resp = await http.post(
+            "http://localhost:8080/api/auth/login",
+            json={"username": "admin", "password": "secret"},
+        )
+        return resp.json()["token"]
 
 async def main():
     client = await connect(
         "localhost:50051",
-        options=ConnectOptions(
-            insecure=True,
-            auth_token=initial_token,
+        ConnectOptions(
+            token="initial-token",
             token_refresher=refresh_token,
         ),
     )
+    try:
+        ...
+    finally:
+        await client.close()
 
 asyncio.run(main())
+```
+
+### Option 3 — Manual update
+
+Call `client.set_token()` to swap the token on a live connection. The new token takes effect on the very next RPC call; no reconnection is needed.
+
+```python
+client = await connect(
+    "localhost:50051",
+    ConnectOptions(token="initial-token"),
+)
+
+# Later, when you have a fresh token:
+client.set_token("new-token")
+```
+
+This is useful when token lifecycle is managed externally (e.g. a shared token store, a sidecar, or an existing refresh loop in your application).
+
+### Option 4 — Static token (short-lived processes)
+
+For scripts or batch jobs that complete within the 15-minute token window, a static token is sufficient:
+
+```python
+import os
+from queueti import connect, ConnectOptions
+
+client = await connect(
+    "localhost:50051",
+    ConnectOptions(token=os.getenv("QUEUETI_TOKEN")),
+)
 ```
 
 ## Consumer Groups
@@ -379,7 +478,8 @@ For complete examples and method signatures, see [clients/python/queueti/_admin.
 
 A self-contained end-to-end example demonstrating the full producer → consumer → ack lifecycle:
 
-- Client creation and consumer group registration via the admin REST API
+- Authentication via `QueueTiAuth.login` — checks server auth status, logs in, and wires `async_refresh` automatically
+- Consumer group registration via `AsyncAdminClient`
 - Publishing messages with metadata
 - Streaming consumption with `concurrency=3`, ack on success, nack on failure (poison pill)
 - DLQ drain — batch-polls `orders.dlq` and acks dead-lettered messages
@@ -389,6 +489,8 @@ A self-contained end-to-end example demonstrating the full producer → consumer
 
 ```bash
 # From clients/python/ — requires: docker-compose up (from repo root)
+# Credentials default to admin/secret; override with env vars:
+# QUEUETI_USERNAME=admin QUEUETI_PASSWORD=secret python examples/order_pipeline/main.py
 pip install -e ".[dev]"
 python examples/order_pipeline/main.py
 ```

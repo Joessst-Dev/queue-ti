@@ -1,5 +1,6 @@
 import * as protoLoader from '@grpc/proto-loader'
 import * as grpc from '@grpc/grpc-js'
+import fs from 'fs'
 import path from 'path'
 import { ConnectOptions, ConsumerOptions, TokenRefresher } from './options'
 import { TokenStore, parseTokenExpiry } from './token-store'
@@ -7,8 +8,11 @@ import { sleepUntilOrAbort } from './internal/sleep'
 import { Producer, ProducerStub } from './producer'
 import { Consumer, ConsumerStub } from './consumer'
 
-// Proto is copied into dist/ by the build script so the package is self-contained.
-const PROTO_PATH = path.join(__dirname, 'queue.proto')
+// Proto is copied into dist/ by the build script. When running from source via
+// ts-node, fall back to the proto file in the repo root.
+const PROTO_PATH = fs.existsSync(path.join(__dirname, 'queue.proto'))
+  ? path.join(__dirname, 'queue.proto')
+  : path.join(__dirname, '../../../proto/queue.proto')
 
 const packageDef = protoLoader.loadSync(PROTO_PATH, {
   keepCase: false,
@@ -119,19 +123,35 @@ export async function connect(address: string, options?: ConnectOptions): Promis
   }
 
   let store: TokenStore | null = null
-  let callCredentials: grpc.CallCredentials | undefined
+  const channelOptions: grpc.ChannelOptions = {}
 
   if (options?.token) {
     store = new TokenStore(options.token)
-    callCredentials = grpc.credentials.createFromMetadataGenerator((_params, callback) => {
-      const meta = new grpc.Metadata()
-      meta.add('authorization', `Bearer ${store!.get()}`)
-      callback(null, meta)
-    })
-    credentials = grpc.credentials.combineChannelCredentials(credentials, callCredentials)
+
+    if (options.insecure) {
+      // grpc-js forbids composing call credentials with insecure channel credentials.
+      // Use a channel interceptor to inject the Authorization header instead.
+      channelOptions.interceptors = [
+        (interceptorOptions: grpc.InterceptorOptions, nextCall: grpc.NextCall) => {
+          return new grpc.InterceptingCall(nextCall(interceptorOptions), {
+            start(metadata, listener, next) {
+              metadata.add('authorization', `Bearer ${store!.get()}`)
+              next(metadata, listener)
+            },
+          })
+        },
+      ]
+    } else {
+      const callCredentials = grpc.credentials.createFromMetadataGenerator((_params, callback) => {
+        const meta = new grpc.Metadata()
+        meta.add('authorization', `Bearer ${store!.get()}`)
+        callback(null, meta)
+      })
+      credentials = grpc.credentials.combineChannelCredentials(credentials, callCredentials)
+    }
   }
 
-  const stub = new proto.queue.QueueService(address, credentials) as unknown
+  const stub = new proto.queue.QueueService(address, credentials, channelOptions) as unknown
 
   return new Client(stub, store, options?.tokenRefresher)
 }

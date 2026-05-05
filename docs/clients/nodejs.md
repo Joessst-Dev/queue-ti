@@ -201,23 +201,48 @@ try {
 
 ## Authentication
 
-### With JWT Tokens
+### Using QueueTiAuth (recommended)
+
+The `QueueTiAuth` helper automatically checks if authentication is required and handles login and token refresh:
+
+```typescript
+import { connect, AdminClient, QueueTiAuth } from '@queue-ti/client'
+
+const auth = await QueueTiAuth.login('http://localhost:8080', 'admin', 'secret')
+
+const client = await connect('localhost:50051', {
+  insecure: true,
+  token: auth.token ?? undefined,
+  tokenRefresher: auth.refresh,
+})
+
+const admin = new AdminClient('http://localhost:8080', {
+  token: auth.token ?? undefined,
+})
+```
+
+The `QueueTiAuth` helper:
+1. Calls `GET /api/auth/status` to check if authentication is required
+2. If auth is disabled, returns a no-op instance with a null token
+3. If auth is enabled, calls `POST /api/auth/login` with the provided credentials
+4. Exposes `.token` (string or null) for the current JWT and `.refresh` (arrow function) which satisfies the `ConnectOptions.tokenRefresher` interface for automatic token refresh
+
+### With JWT Tokens (manual)
 
 ```typescript
 import { connect } from '@queue-ti/client'
 
 const client = await connect('localhost:50051', {
   insecure: true,
-  auth: {
-    token: initialToken,
-    refreshToken: async () => {
-      const response = await fetch('http://localhost:8080/api/auth/refresh', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${currentToken}` },
-      })
-      const data = await response.json()
-      return data.token
-    },
+  token: initialToken,
+  tokenRefresher: async () => {
+    const response = await fetch('http://localhost:8080/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'secret' }),
+    })
+    const data = await response.json()
+    return data.token
   },
 })
 ```
@@ -307,7 +332,8 @@ For complete examples and method signatures, see [clients/node/src/admin.ts](htt
 
 A self-contained end-to-end example demonstrating the full producer → consumer → ack lifecycle:
 
-- Client creation and consumer group registration via the admin REST API
+- Authentication via `QueueTiAuth.login` — checks server auth status, logs in, and wires `tokenRefresher` automatically
+- Consumer group registration via `AdminClient`
 - Publishing messages with metadata and a deduplication key
 - Streaming consumption with `concurrency: 3`, ack on success, nack on failure (poison pill)
 - DLQ drain — batch-polls `orders.dlq` and acks dead-lettered messages
@@ -317,8 +343,10 @@ A self-contained end-to-end example demonstrating the full producer → consumer
 
 ```bash
 # From clients/node/ — requires: docker-compose up (from repo root)
+# Credentials default to admin/secret; override with env vars:
+# QUEUETI_USERNAME=admin QUEUETI_PASSWORD=secret npx ts-node --transpile-only examples/order-pipeline/index.ts
 npm install
-npx ts-node --esm examples/order-pipeline/index.ts
+npx ts-node --transpile-only examples/order-pipeline/index.ts
 ```
 
 ## Full Client Documentation
