@@ -2,7 +2,7 @@
 
 [![NuGet](https://img.shields.io/nuget/v/QueueTi.Client)](https://www.nuget.org/packages/QueueTi.Client)
 
-A proto-first gRPC client library for queue-ti. Targets `.NET 10.0`.
+A proto-first gRPC client library for queue-ti. Targets `.NET 8.0`+.
 
 - **Repository**: [github.com/Joessst-Dev/queue-ti-csharp-client](https://github.com/Joessst-Dev/queue-ti-csharp-client)
 - **NuGet**: [nuget.org/packages/QueueTi.Client](https://www.nuget.org/packages/QueueTi.Client)
