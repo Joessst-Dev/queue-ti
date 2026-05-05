@@ -11,9 +11,11 @@ import asyncio
 import dataclasses
 import json
 import logging
+import os
 import signal
 
 from queueti import (
+    AdminOptions,
     AsyncAdminClient,
     AdminError,
     BatchOptions,
@@ -21,6 +23,7 @@ from queueti import (
     ConsumerOptions,
     Message,
     PublishOptions,
+    QueueTiAuth,
     connect,
 )
 
@@ -32,6 +35,8 @@ ADMIN_URL = "http://localhost:8080"
 TOPIC = "orders"
 DLQ_TOPIC = "orders.dlq"
 CONSUMER_GROUP = "fulfillment"
+USERNAME = os.environ.get("QUEUETI_USERNAME", "admin")
+PASSWORD = os.environ.get("QUEUETI_PASSWORD", "secret")
 
 
 @dataclasses.dataclass
@@ -51,8 +56,8 @@ ORDERS = [
 ]
 
 
-async def register_consumer_group() -> None:
-    async with AsyncAdminClient(ADMIN_URL) as admin:
+async def register_consumer_group(auth: QueueTiAuth) -> None:
+    async with AsyncAdminClient(ADMIN_URL, AdminOptions(token=auth.token)) as admin:
         try:
             await admin.register_consumer_group(TOPIC, CONSUMER_GROUP)
             log.info("consumer group %r registered", CONSUMER_GROUP)
@@ -63,8 +68,12 @@ async def register_consumer_group() -> None:
                 raise
 
 
-async def produce(stop: asyncio.Event) -> None:
-    client = await connect(GRPC_ADDR, ConnectOptions(insecure=True))
+async def produce(auth: QueueTiAuth, stop: asyncio.Event) -> None:
+    client = await connect(GRPC_ADDR, ConnectOptions(
+        insecure=True,
+        token=auth.token,
+        token_refresher=auth.async_refresh,
+    ))
     producer = client.producer()
 
     for order in ORDERS:
@@ -82,8 +91,12 @@ async def produce(stop: asyncio.Event) -> None:
     await client.close()
 
 
-async def consume(stop: asyncio.Event) -> None:
-    client = await connect(GRPC_ADDR, ConnectOptions(insecure=True))
+async def consume(auth: QueueTiAuth, stop: asyncio.Event) -> None:
+    client = await connect(GRPC_ADDR, ConnectOptions(
+        insecure=True,
+        token=auth.token,
+        token_refresher=auth.async_refresh,
+    ))
     consumer = client.consumer(
         TOPIC,
         ConsumerOptions(consumer_group=CONSUMER_GROUP, concurrency=3),
@@ -112,8 +125,12 @@ async def consume(stop: asyncio.Event) -> None:
     await client.close()
 
 
-async def drain_dlq() -> None:
-    client = await connect(GRPC_ADDR, ConnectOptions(insecure=True))
+async def drain_dlq(auth: QueueTiAuth) -> None:
+    client = await connect(GRPC_ADDR, ConnectOptions(
+        insecure=True,
+        token=auth.token,
+        token_refresher=auth.async_refresh,
+    ))
     consumer = client.consumer(
         DLQ_TOPIC,
         ConsumerOptions(consumer_group=CONSUMER_GROUP),
@@ -130,6 +147,8 @@ async def drain_dlq() -> None:
 
 
 async def main() -> None:
+    auth = QueueTiAuth.login(ADMIN_URL, USERNAME, PASSWORD)
+
     stop = asyncio.Event()
 
     def _shutdown() -> None:
@@ -140,12 +159,12 @@ async def main() -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, _shutdown)
 
-    await register_consumer_group()
+    await register_consumer_group(auth)
 
     async with asyncio.TaskGroup() as tg:
-        tg.create_task(produce(stop))
-        tg.create_task(drain_dlq())
-        tg.create_task(consume(stop))
+        tg.create_task(produce(auth, stop))
+        tg.create_task(drain_dlq(auth))
+        tg.create_task(consume(auth, stop))
 
 
 if __name__ == "__main__":

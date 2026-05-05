@@ -7,12 +7,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -38,13 +37,28 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	client, err := queueti.Dial(grpcAddr, queueti.WithInsecure())
+	auth, err := queueti.NewAuth(adminAddr, envOr("QUEUETI_USERNAME", "admin"), envOr("QUEUETI_PASSWORD", "secret"))
+	if err != nil {
+		log.Fatalf("auth: %v", err)
+	}
+
+	dialOpts := []queueti.DialOption{queueti.WithInsecure()}
+	if auth.Token() != "" {
+		dialOpts = append(dialOpts,
+			queueti.WithBearerToken(auth.Token()),
+			queueti.WithTokenRefresher(auth.Refresh),
+		)
+	}
+
+	client, err := queueti.Dial(grpcAddr, dialOpts...)
 	if err != nil {
 		log.Fatalf("dial: %v", err)
 	}
 	defer client.Close()
 
-	if err := registerConsumerGroup(ctx); err != nil {
+	admin := queueti.NewAdminClient(adminAddr, queueti.WithAdminToken(auth.Token()))
+
+	if err := registerConsumerGroup(ctx, admin); err != nil {
 		log.Fatalf("register consumer group: %v", err)
 	}
 
@@ -53,24 +67,18 @@ func main() {
 	consume(ctx, client)
 }
 
-// registerConsumerGroup calls the admin REST API to ensure the consumer group exists.
-func registerConsumerGroup(ctx context.Context) error {
-	body := fmt.Sprintf(`{"consumer_group":%q}`, consumerGroup)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		fmt.Sprintf("%s/api/topics/%s/consumer-groups", adminAddr, topic),
-		strings.NewReader(body))
-	if err != nil {
-		return err
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
 	}
-	req.Header.Set("Content-Type", "application/json")
+	return fallback
+}
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
-		return fmt.Errorf("unexpected status %d", resp.StatusCode)
+// registerConsumerGroup ensures the consumer group exists via the admin API.
+func registerConsumerGroup(ctx context.Context, admin *queueti.AdminClient) error {
+	err := admin.RegisterConsumerGroup(ctx, topic, consumerGroup)
+	if err != nil && !errors.Is(err, queueti.ErrConflict) {
+		return fmt.Errorf("register consumer group: %w", err)
 	}
 	log.Printf("consumer group %q ready", consumerGroup)
 	return nil
