@@ -308,6 +308,8 @@ admin.upsertTopicSchema("orders", "{\"type\":\"string\"}");
 admin.deleteTopicSchema("orders");
 ```
 
+### TopicSchema fields
+
 | Field | Type | Description |
 |-------|------|-------------|
 | `topic` | `String` | Topic name |
