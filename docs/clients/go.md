@@ -247,6 +247,67 @@ analytics := c.NewConsumer("orders",
 
 See [Consumer Groups](../guide/consumer-groups) for details.
 
+## Admin API
+
+The `AdminClient` provides programmatic management of topic configuration, schemas, and consumer groups through the HTTP admin API on port 8080.
+
+### Setup
+
+```go
+admin := queueti.NewAdminClient("http://localhost:8080",
+    queueti.WithAdminToken("your-jwt-token"),
+)
+```
+
+**Options:**
+- `WithAdminToken(token)` — Set JWT token for authenticated requests
+- `WithAdminHTTPClient(client)` — Replace the default HTTP client
+
+### Example: Topic Configuration
+
+```go
+// List all topic configs
+configs, err := admin.ListTopicConfigs(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Set per-topic overrides
+maxRetries, ttl := 5, 3600
+result, err := admin.UpsertTopicConfig(ctx, "orders", queueti.TopicConfig{
+    Topic:             "orders",
+    MaxRetries:        &maxRetries,
+    MessageTTLSeconds: &ttl,
+    Replayable:        true,
+})
+
+// Delete a topic config (reverts to defaults)
+err = admin.DeleteTopicConfig(ctx, "orders")
+```
+
+### Error Handling
+
+```go
+import "errors"
+
+_, err := admin.ListTopicConfigs(ctx)
+if errors.Is(err, queueti.ErrNotFound) {
+    // Handle HTTP 404
+} else if errors.Is(err, queueti.ErrConflict) {
+    // Handle HTTP 409
+}
+```
+
+### Full API
+
+The `AdminClient` covers:
+- **Topic configs**: `ListTopicConfigs`, `UpsertTopicConfig`, `DeleteTopicConfig`
+- **Topic schemas**: `ListTopicSchemas`, `GetTopicSchema`, `UpsertTopicSchema`, `DeleteTopicSchema`
+- **Consumer groups**: `ListConsumerGroups`, `RegisterConsumerGroup`, `UnregisterConsumerGroup`
+- **Statistics**: `Stats()`
+
+For complete examples and method signatures, see [clients/go-client/admin.go](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/go-client/admin.go).
+
 ## Full Client Documentation
 
 For complete API reference and examples, see [clients/go-client/README.md](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/go-client).

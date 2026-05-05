@@ -306,6 +306,73 @@ analytics = client.consumer(
 
 See [Consumer Groups](../guide/consumer-groups) for details.
 
+## Admin API
+
+The `AsyncAdminClient` provides programmatic management of topic configuration, schemas, and consumer groups through the HTTP admin API on port 8080.
+
+### Setup
+
+```python
+from queueti import AsyncAdminClient, AdminOptions
+
+async with AsyncAdminClient(
+    'http://localhost:8080',
+    options=AdminOptions(token='your-jwt-token'),
+) as admin:
+    configs = await admin.list_topic_configs()
+```
+
+### Example: Topic Configuration
+
+```python
+from queueti import AsyncAdminClient, AdminOptions, TopicConfig
+
+admin = AsyncAdminClient('http://localhost:8080')
+
+# List all topic configs
+configs = await admin.list_topic_configs()
+
+# Set per-topic overrides
+config = TopicConfig(
+    topic='orders',
+    max_retries=5,
+    message_ttl_seconds=3600,
+    replayable=True,
+)
+result = await admin.upsert_topic_config('orders', config)
+
+# Delete a topic config (reverts to defaults)
+await admin.delete_topic_config('orders')
+
+await admin.close()
+```
+
+### Error Handling
+
+```python
+from queueti import AsyncAdminClient, AdminError
+
+try:
+    await admin.list_topic_configs()
+except AdminError as err:
+    if err.status_code == 404:
+        # Handle HTTP 404
+        print(f"Not found: {err}")
+    elif err.status_code == 409:
+        # Handle HTTP 409
+        print(f"Conflict: {err}")
+```
+
+### Full API
+
+The `AsyncAdminClient` covers:
+- **Topic configs**: `list_topic_configs()`, `upsert_topic_config(topic, config)`, `delete_topic_config(topic)`
+- **Topic schemas**: `list_topic_schemas()`, `get_topic_schema(topic)`, `upsert_topic_schema(topic, schema_json)`, `delete_topic_schema(topic)`
+- **Consumer groups**: `list_consumer_groups(topic)`, `register_consumer_group(topic, group)`, `unregister_consumer_group(topic, group)`
+- **Statistics**: `stats()`
+
+For complete examples and method signatures, see [clients/python/queueti/_admin.py](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/python/queueti/_admin.py).
+
 ## Full Client Documentation
 
 For complete API reference and examples, see [clients/python/README.md](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/python).

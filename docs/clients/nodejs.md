@@ -242,6 +242,65 @@ const analytics = client.consumer('orders', {
 
 See [Consumer Groups](../guide/consumer-groups) for details.
 
+## Admin API
+
+The `AdminClient` provides programmatic management of topic configuration, schemas, and consumer groups through the HTTP admin API on port 8080.
+
+### Setup
+
+```typescript
+import { AdminClient } from '@queue-ti/client'
+
+const admin = new AdminClient('http://localhost:8080', {
+  token: 'your-jwt-token',
+})
+```
+
+### Example: Topic Configuration
+
+```typescript
+// List all topic configs
+const configs = await admin.listTopicConfigs()
+
+// Set per-topic overrides
+const config = await admin.upsertTopicConfig('orders', {
+  max_retries: 5,
+  message_ttl_seconds: 3600,
+  replayable: true,
+})
+
+// Delete a topic config (reverts to defaults)
+await admin.deleteTopicConfig('orders')
+```
+
+### Error Handling
+
+```typescript
+import { AdminError } from '@queue-ti/client'
+
+try {
+  await admin.listTopicConfigs()
+} catch (err) {
+  if (err instanceof AdminError) {
+    if (err.statusCode === 404) {
+      // Handle HTTP 404
+    } else if (err.statusCode === 409) {
+      // Handle HTTP 409
+    }
+  }
+}
+```
+
+### Full API
+
+The `AdminClient` covers:
+- **Topic configs**: `listTopicConfigs()`, `upsertTopicConfig(topic, config)`, `deleteTopicConfig(topic)`
+- **Topic schemas**: `listTopicSchemas()`, `getTopicSchema(topic)`, `upsertTopicSchema(topic, schemaJson)`, `deleteTopicSchema(topic)`
+- **Consumer groups**: `listConsumerGroups(topic)`, `registerConsumerGroup(topic, group)`, `unregisterConsumerGroup(topic, group)`
+- **Statistics**: `stats()`
+
+For complete examples and method signatures, see [clients/node/src/admin.ts](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/node/src/admin.ts).
+
 ## Full Client Documentation
 
 For complete API reference and examples, see [clients/node/README.md](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/node).
