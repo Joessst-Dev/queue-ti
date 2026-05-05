@@ -36,10 +36,9 @@ docker run -d \
   -e QUEUETI_DB_PASSWORD=postgres \
   -e QUEUETI_DB_NAME=queueti \
   ghcr.io/joessst-dev/queue-ti:latest
-
-# Admin UI (points to the backend at http://localhost:8080 by default)
-docker run -d -p 8081:80 ghcr.io/joessst-dev/queue-ti-ui:latest
 ```
+
+The admin UI image proxies API calls to the hostname `queueti` (the Docker Compose service name). It is designed to run alongside the backend via Docker Compose rather than as a standalone `docker run` container. Use the [Docker Compose](#docker-compose) setup below to run both together.
 
 ### Build Locally from Source
 

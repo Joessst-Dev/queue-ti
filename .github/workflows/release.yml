@@ -301,8 +301,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: BUILD_VERSION=${{ github.ref_name }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Job 2b: Build & push admin UI Docker image to GHCR
