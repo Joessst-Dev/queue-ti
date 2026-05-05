@@ -119,6 +119,31 @@ describe('AdminClient', () => {
     })
   })
 
+  describe('listTopicSchemas()', () => {
+    describe('when the server returns schemas', () => {
+      it('should return the items array', async () => {
+        const items = [{ topic: 'orders', schema_json: '{}', version: 1, updated_at: '2024-01-01T00:00:00Z' }]
+        vi.stubGlobal('fetch', makeFetch(200, { items }))
+
+        const result = await makeClient().listTopicSchemas()
+
+        expect(result).toEqual(items)
+      })
+
+      it('should send GET /api/topic-schemas', async () => {
+        const mockFetch = makeFetch(200, { items: [] })
+        vi.stubGlobal('fetch', mockFetch)
+
+        await makeClient().listTopicSchemas()
+
+        expect(mockFetch).toHaveBeenCalledWith(
+          `${BASE_URL}/api/topic-schemas`,
+          expect.objectContaining({ method: 'GET' }),
+        )
+      })
+    })
+  })
+
   describe('getTopicSchema()', () => {
     describe('when the schema exists', () => {
       it('should return the schema', async () => {
@@ -164,6 +189,40 @@ describe('AdminClient', () => {
             method: 'PUT',
             body: JSON.stringify({ schema_json: '{"type":"record"}' }),
           }),
+        )
+      })
+    })
+  })
+
+  describe('deleteTopicSchema()', () => {
+    describe('when the server responds with 204', () => {
+      it('should resolve void', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+          ok: true,
+          status: 204,
+          statusText: 'No Content',
+          json: () => Promise.resolve(null),
+          text: () => Promise.resolve(''),
+        }))
+
+        await expect(makeClient().deleteTopicSchema('orders')).resolves.toBeUndefined()
+      })
+
+      it('should send DELETE /api/topic-schemas/{topic}', async () => {
+        const mockFetch = vi.fn().mockResolvedValue({
+          ok: true,
+          status: 204,
+          statusText: 'No Content',
+          json: () => Promise.resolve(null),
+          text: () => Promise.resolve(''),
+        })
+        vi.stubGlobal('fetch', mockFetch)
+
+        await makeClient().deleteTopicSchema('orders')
+
+        expect(mockFetch).toHaveBeenCalledWith(
+          `${BASE_URL}/api/topic-schemas/orders`,
+          expect.objectContaining({ method: 'DELETE' }),
         )
       })
     })

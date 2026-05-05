@@ -55,7 +55,8 @@ def _topic_schema_from_dict(d: dict[str, Any]) -> TopicSchema:
     return TopicSchema(
         topic=str(d["topic"]),
         schema_json=str(d["schema_json"]),
-        version=int(d["version"]),        updated_at=str(d["updated_at"]),
+        version=int(d["version"]),
+        updated_at=str(d["updated_at"]),
     )
 
 
@@ -63,7 +64,8 @@ def _topic_stat_from_dict(d: dict[str, Any]) -> TopicStat:
     return TopicStat(
         topic=str(d["topic"]),
         status=str(d["status"]),
-        count=int(d["count"]),    )
+        count=int(d["count"]),
+    )
 
 
 class AsyncAdminClient:
@@ -117,6 +119,7 @@ class AsyncAdminClient:
         data: dict[str, Any] = resp.json()
         items = data.get("items") or []
         return [_topic_config_from_dict(item) for item in items]
+
     async def upsert_topic_config(self, topic: str, config: TopicConfig) -> TopicConfig:
         """PUT /api/topic-configs/{topic} — create or replace a topic configuration."""
         body: dict[str, Any] = {
@@ -154,6 +157,7 @@ class AsyncAdminClient:
         data: dict[str, Any] = resp.json()
         items = data.get("items") or []
         return [_topic_schema_from_dict(item) for item in items]
+
     async def get_topic_schema(self, topic: str) -> TopicSchema:
         """GET /api/topic-schemas/{topic} — fetch a single topic's schema."""
         resp = await self._client.get(f"/api/topic-schemas/{topic}")
@@ -185,6 +189,7 @@ class AsyncAdminClient:
         data: dict[str, Any] = resp.json()
         items = data.get("items") or []
         return [str(g) for g in items]
+
     async def register_consumer_group(self, topic: str, group: str) -> None:
         """POST /api/topics/{topic}/consumer-groups — register a consumer group."""
         resp = await self._client.post(

@@ -292,9 +292,9 @@ func (c *AdminClient) doRequest(ctx context.Context, method, url string, body an
 
 	switch resp.StatusCode {
 	case http.StatusNotFound:
-		return nil, fmt.Errorf("%w: %s %s", ErrNotFound, method, url)
+		return nil, fmt.Errorf("%w: %s %s: %s", ErrNotFound, method, url, string(rawBody))
 	case http.StatusConflict:
-		return nil, fmt.Errorf("%w: %s %s", ErrConflict, method, url)
+		return nil, fmt.Errorf("%w: %s %s: %s", ErrConflict, method, url, string(rawBody))
 	default:
 		return nil, fmt.Errorf("unexpected status %d from %s %s: %s", resp.StatusCode, method, url, string(rawBody))
 	}

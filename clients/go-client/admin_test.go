@@ -3,6 +3,7 @@ package queueti_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -246,7 +247,7 @@ var _ = Describe("AdminClient", func() {
 
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(ContainSubstring("not found")))
-				Expect(isNotFound(err)).To(BeTrue())
+				Expect(errors.Is(err, queueti.ErrNotFound)).To(BeTrue())
 			})
 		})
 	})
@@ -335,7 +336,7 @@ var _ = Describe("AdminClient", func() {
 
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(ContainSubstring("conflict")))
-				Expect(isConflict(err)).To(BeTrue())
+				Expect(errors.Is(err, queueti.ErrConflict)).To(BeTrue())
 			})
 		})
 	})
@@ -366,7 +367,7 @@ var _ = Describe("AdminClient", func() {
 
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(ContainSubstring("not found")))
-				Expect(isNotFound(err)).To(BeTrue())
+				Expect(errors.Is(err, queueti.ErrNotFound)).To(BeTrue())
 			})
 		})
 	})
@@ -415,36 +416,3 @@ var _ = Describe("AdminClient", func() {
 	})
 })
 
-// isNotFound reports whether err wraps queueti.ErrNotFound.
-func isNotFound(err error) bool {
-	target := queueti.ErrNotFound
-	for err != nil {
-		if err == target {
-			return true
-		}
-		type unwrapper interface{ Unwrap() error }
-		if u, ok := err.(unwrapper); ok {
-			err = u.Unwrap()
-		} else {
-			return false
-		}
-	}
-	return false
-}
-
-// isConflict reports whether err wraps queueti.ErrConflict.
-func isConflict(err error) bool {
-	target := queueti.ErrConflict
-	for err != nil {
-		if err == target {
-			return true
-		}
-		type unwrapper interface{ Unwrap() error }
-		if u, ok := err.(unwrapper); ok {
-			err = u.Unwrap()
-		} else {
-			return false
-		}
-	}
-	return false
-}
