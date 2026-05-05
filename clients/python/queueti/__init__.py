@@ -1,5 +1,6 @@
 """queue-ti Python client library."""
 
+from queueti._auth import QueueTiAuth
 from queueti._admin import AdminOptions, AsyncAdminClient, TopicConfig, TopicSchema, TopicStat
 from queueti._client import AsyncClient, connect
 from queueti._consumer import AsyncConsumer, BatchHandler, MessageHandler
@@ -10,6 +11,8 @@ from queueti._producer import AsyncProducer
 from queueti._sync import Client, Consumer, Producer, connect_sync
 
 __all__ = [
+    # Auth
+    "QueueTiAuth",
     # Async API
     "connect",
     "AsyncClient",
