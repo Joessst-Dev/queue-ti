@@ -373,6 +373,26 @@ The `AsyncAdminClient` covers:
 
 For complete examples and method signatures, see [clients/python/queueti/_admin.py](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/python/queueti/_admin.py).
 
+## Sample Applications
+
+### Order Pipeline
+
+A self-contained end-to-end example demonstrating the full producer → consumer → ack lifecycle:
+
+- Client creation and consumer group registration via the admin REST API
+- Publishing messages with metadata
+- Streaming consumption with `concurrency=3`, ack on success, nack on failure (poison pill)
+- DLQ drain — batch-polls `orders.dlq` and acks dead-lettered messages
+- Graceful shutdown on SIGINT/SIGTERM via `asyncio.Event` + `loop.add_signal_handler`
+
+**Location**: [`clients/python/examples/order_pipeline/`](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/python/examples/order_pipeline)
+
+```bash
+# From clients/python/ — requires: docker-compose up (from repo root)
+pip install -e ".[dev]"
+python examples/order_pipeline/main.py
+```
+
 ## Full Client Documentation
 
 For complete API reference and examples, see [clients/python/README.md](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/python).

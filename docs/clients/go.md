@@ -308,6 +308,25 @@ The `AdminClient` covers:
 
 For complete examples and method signatures, see [clients/go-client/admin.go](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/go-client/admin.go).
 
+## Sample Applications
+
+### Order Pipeline
+
+A self-contained end-to-end example demonstrating the full producer → consumer → ack lifecycle:
+
+- Client creation and consumer group registration via the admin REST API
+- Publishing messages with metadata and a deduplication key
+- Streaming consumption with `concurrency=3`, ack on success, nack on failure (poison pill)
+- DLQ drain — batch-polls `orders.dlq` and acks dead-lettered messages
+- Graceful shutdown on SIGINT/SIGTERM via `signal.NotifyContext`
+
+**Location**: [`clients/go-client/examples/order-pipeline/`](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/go-client/examples/order-pipeline)
+
+```bash
+# Requires: docker-compose up (from repo root)
+go run .
+```
+
 ## Full Client Documentation
 
 For complete API reference and examples, see [clients/go-client/README.md](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/go-client).
