@@ -274,7 +274,7 @@ if err != nil {
 
 // Set per-topic overrides
 maxRetries, ttl := 5, 3600
-result, err := admin.UpsertTopicConfig(ctx, "orders", queueti.TopicConfig{
+_, err = admin.UpsertTopicConfig(ctx, "orders", queueti.TopicConfig{
     Topic:             "orders",
     MaxRetries:        &maxRetries,
     MessageTTLSeconds: &ttl,
