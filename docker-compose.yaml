@@ -47,9 +47,7 @@ services:
         condition: service_healthy
 
   admin-ui:
-    build:
-      context: ./ui
-      dockerfile: Dockerfile
+    image: ghcr.io/joessst-dev/queue-ti-ui:latest
     ports:
       - "8081:80"
     depends_on:

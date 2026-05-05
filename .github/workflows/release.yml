@@ -305,6 +305,57 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2b: Build & push admin UI Docker image to GHCR
+  # Runs in parallel with publish-image after the frontend gate passes.
+  # Same tag strategy as the backend image; uses ghcr.io/joessst-dev/queue-ti-ui.
+  # ─────────────────────────────────────────────────────────────────────────────
+  publish-ui-image:
+    name: "Docker: Build & push admin UI image"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [backend, frontend, node-client, python-client, go-client]
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Docker metadata and tags
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ghcr.io/joessst-dev/queue-ti-ui
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+            type=raw,value=preview,enable=${{ contains(github.ref_name, '-preview') }}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-preview') && !contains(github.ref_name, '-rc') }}
+
+      - name: Build and push multi-arch admin UI image
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: ./ui
+          file: ./ui/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=ui
+          cache-to: type=gha,mode=max,scope=ui
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Job 3: Publish @queue-ti/client to npm
   # Runs in parallel with publish-image after all gate jobs pass.
   # Version is derived from the CalVer tag (v2026.05.1 → 2026.5.1).
@@ -465,7 +516,7 @@ jobs:
     name: "GitHub: Create release"
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [publish-image, publish-npm, publish-pypi]
+    needs: [publish-image, publish-ui-image, publish-npm, publish-pypi]
 
     permissions:
       contents: write
