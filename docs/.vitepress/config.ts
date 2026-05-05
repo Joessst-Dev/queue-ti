@@ -47,6 +47,7 @@ export default withMermaid(defineConfig({
             { text: 'Node.js Client', link: '/clients/nodejs' },
             { text: 'Python Client', link: '/clients/python' },
             { text: 'Java Client', link: '/clients/java' },
+            { text: 'C# Client', link: '/clients/csharp' },
           ],
         },
       ],
