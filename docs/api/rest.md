@@ -155,6 +155,22 @@ Enqueues a message.
 - `metadata` (object, optional) — Key-value metadata
 - `key` (string, optional) — Deduplication key; see [Message Keys](../guide/concepts#message-keys-and-upsert-semantics)
 
+**Example:**
+
+```bash
+# Enqueue without key (always creates a new message)
+curl -X POST -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"topic": "orders", "payload": "{\"order_id\": 12345}", "metadata": {"user_id": "42"}}' \
+  http://localhost:8080/api/messages
+
+# Enqueue with key (upserts any existing pending message with the same key)
+curl -X POST -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"topic": "orders", "payload": "{\"order_id\": 12345}", "key": "order-123"}' \
+  http://localhost:8080/api/messages
+```
+
 **Response:** HTTP 201 Created
 
 ```json
@@ -460,6 +476,8 @@ Re-enqueues messages from the topic's archive log. The topic must have `replayab
 }
 ```
 
+`from_time` in the response is an empty string when the request did not include a `from_time`.
+
 **Errors:**
 - HTTP 422 if the topic is not replayable or `from_time` falls outside the replay window
 
@@ -614,6 +632,11 @@ curl -X DELETE -H "Authorization: Bearer <token>" \
 
 Lists all grants for a user.
 
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/users/550e8400-e29b-41d4-a716-446655440000/grants
+```
+
 **Response:** HTTP 200 OK
 
 ```json
@@ -748,6 +771,11 @@ curl -X POST -H "Authorization: Bearer <token>" \
 ### GET /api/admin/delete-reaper/schedule
 
 Returns the current delete reaper cron schedule.
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/admin/delete-reaper/schedule
+```
 
 **Response:** HTTP 200 OK
 
