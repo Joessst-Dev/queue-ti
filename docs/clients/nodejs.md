@@ -332,7 +332,8 @@ For complete examples and method signatures, see [clients/node/src/admin.ts](htt
 
 A self-contained end-to-end example demonstrating the full producer → consumer → ack lifecycle:
 
-- Client creation and consumer group registration via the admin REST API
+- Authentication via `QueueTiAuth.login` — checks server auth status, logs in, and wires `tokenRefresher` automatically
+- Consumer group registration via `AdminClient`
 - Publishing messages with metadata and a deduplication key
 - Streaming consumption with `concurrency: 3`, ack on success, nack on failure (poison pill)
 - DLQ drain — batch-polls `orders.dlq` and acks dead-lettered messages
@@ -342,8 +343,10 @@ A self-contained end-to-end example demonstrating the full producer → consumer
 
 ```bash
 # From clients/node/ — requires: docker-compose up (from repo root)
+# Credentials default to admin/secret; override with env vars:
+# QUEUETI_USERNAME=admin QUEUETI_PASSWORD=secret npx ts-node --transpile-only examples/order-pipeline/index.ts
 npm install
-npx ts-node --esm examples/order-pipeline/index.ts
+npx ts-node --transpile-only examples/order-pipeline/index.ts
 ```
 
 ## Full Client Documentation

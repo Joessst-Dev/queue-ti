@@ -349,7 +349,8 @@ For complete examples and method signatures, see [clients/go-client/admin.go](ht
 
 A self-contained end-to-end example demonstrating the full producer → consumer → ack lifecycle:
 
-- Client creation and consumer group registration via the admin REST API
+- Authentication via `NewAuth` — checks server auth status, logs in, and wires `TokenRefresher` automatically
+- Consumer group registration via `AdminClient`
 - Publishing messages with metadata and a deduplication key
 - Streaming consumption with `concurrency=3`, ack on success, nack on failure (poison pill)
 - DLQ drain — batch-polls `orders.dlq` and acks dead-lettered messages
@@ -359,6 +360,8 @@ A self-contained end-to-end example demonstrating the full producer → consumer
 
 ```bash
 # Requires: docker-compose up (from repo root)
+# Credentials default to admin/secret; override with env vars:
+# QUEUETI_USERNAME=admin QUEUETI_PASSWORD=secret go run .
 go run .
 ```
 

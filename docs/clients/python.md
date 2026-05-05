@@ -478,7 +478,8 @@ For complete examples and method signatures, see [clients/python/queueti/_admin.
 
 A self-contained end-to-end example demonstrating the full producer → consumer → ack lifecycle:
 
-- Client creation and consumer group registration via the admin REST API
+- Authentication via `QueueTiAuth.login` — checks server auth status, logs in, and wires `async_refresh` automatically
+- Consumer group registration via `AsyncAdminClient`
 - Publishing messages with metadata
 - Streaming consumption with `concurrency=3`, ack on success, nack on failure (poison pill)
 - DLQ drain — batch-polls `orders.dlq` and acks dead-lettered messages
@@ -488,6 +489,8 @@ A self-contained end-to-end example demonstrating the full producer → consumer
 
 ```bash
 # From clients/python/ — requires: docker-compose up (from repo root)
+# Credentials default to admin/secret; override with env vars:
+# QUEUETI_USERNAME=admin QUEUETI_PASSWORD=secret python examples/order_pipeline/main.py
 pip install -e ".[dev]"
 python examples/order_pipeline/main.py
 ```
