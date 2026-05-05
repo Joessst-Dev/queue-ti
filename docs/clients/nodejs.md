@@ -301,6 +301,26 @@ The `AdminClient` covers:
 
 For complete examples and method signatures, see [clients/node/src/admin.ts](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/node/src/admin.ts).
 
+## Sample Applications
+
+### Order Pipeline
+
+A self-contained end-to-end example demonstrating the full producer → consumer → ack lifecycle:
+
+- Client creation and consumer group registration via the admin REST API
+- Publishing messages with metadata and a deduplication key
+- Streaming consumption with `concurrency: 3`, ack on success, nack on failure (poison pill)
+- DLQ drain — batch-polls `orders.dlq` and acks dead-lettered messages
+- Graceful shutdown on SIGINT/SIGTERM via `AbortController`
+
+**Location**: [`clients/node/examples/order-pipeline/`](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/node/examples/order-pipeline)
+
+```bash
+# From clients/node/ — requires: docker-compose up (from repo root)
+npm install
+npx ts-node --esm examples/order-pipeline/index.ts
+```
+
 ## Full Client Documentation
 
 For complete API reference and examples, see [clients/node/README.md](https://github.com/Joessst-Dev/queue-ti/tree/main/clients/node).
