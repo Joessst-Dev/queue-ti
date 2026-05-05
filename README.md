@@ -47,6 +47,8 @@ Latest version: [github.com/Joessst-Dev/queue-ti-java-client/releases](https://g
 dotnet add package QueueTi.Client
 ```
 
+Latest version: [nuget.org/packages/QueueTi.Client](https://www.nuget.org/packages/QueueTi.Client)
+
 ## License
 
 MIT

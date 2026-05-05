@@ -25,25 +25,25 @@ Install-Package QueueTi.Client
 using QueueTi;
 using System.Text;
 
-// Create a client
-var client = QueueTiClient.Create("https://queue.example.com", new QueueTiClientOptions
+await using var client = QueueTiClient.Create("https://queue.example.com", new QueueTiClientOptions
 {
     BearerToken = "your-jwt-token"  // optional
 });
 
 // Publish a message
 var producer = client.NewProducer();
-string id = await producer.PublishAsync("orders", Encoding.UTF8.GetBytes("Hello!"), ct: ct);
+string id = await producer.PublishAsync(
+    "orders", Encoding.UTF8.GetBytes("Hello!"), ct: CancellationToken.None);
 
-// Consume messages
+// Consume messages — ConsumeAsync blocks until the token is cancelled.
+using var cts = new CancellationTokenSource();
 var consumer = client.NewConsumer("orders", new ConsumerOptions { ConsumerGroup = "billing" });
 await consumer.ConsumeAsync(async (msg, ct) =>
 {
     Console.WriteLine($"[{msg.Id}] {Encoding.UTF8.GetString(msg.Payload)}");
     // Automatically acked on return; nacked if an exception is thrown.
-}, ct);
-
-await client.DisposeAsync();
+}, cts.Token);
+// Client is disposed by the await using block above.
 ```
 
 ## Client Creation
@@ -73,6 +73,8 @@ When using a manual channel you are responsible for adding any interceptors — 
 
 ### Dependency Injection (ASP.NET Core)
 
+`AddQueueTiClient` registers `QueueTiClient` as a singleton. Inject it into controllers, services, or minimal API handlers:
+
 ```csharp
 builder.Services.AddQueueTiClient("https://queue.example.com", opts =>
 {
@@ -80,8 +82,7 @@ builder.Services.AddQueueTiClient("https://queue.example.com", opts =>
     opts.TokenRefresher = async ct => await GetFreshTokenAsync(ct);
 });
 
-// Inject QueueTiClient into controllers or minimal API handlers
-app.MapPost("/orders", async (QueueTiClient client) =>
+app.MapPost("/orders", async ([FromServices] QueueTiClient client) =>
 {
     var id = await client.NewProducer().PublishAsync("orders", orderPayload);
     return Results.Created($"/orders/{id}", new { id });
@@ -109,7 +110,7 @@ string id = await producer.PublishAsync("orders", payload, new PublishOptions
 | Property | Type | Description |
 |----------|------|-------------|
 | `Key` | `string?` | Optional routing or ordering key. |
-| `Metadata` | `IReadOnlyDictionary<string, string>?` | Arbitrary key-value pairs attached to the message. |
+| `Metadata` | `IDictionary<string, string>?` | Arbitrary key-value pairs attached to the message. |
 
 ## Consuming Messages
 
