@@ -10,3 +10,5 @@ export type {
   ConsumerOptions,
   BatchOptions,
 } from './options'
+export { AdminClient, AdminError } from './admin'
+export type { AdminOptions, TopicConfig, TopicConfigInput, TopicSchema, TopicStat } from './admin'
