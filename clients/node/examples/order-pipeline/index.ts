@@ -7,7 +7,7 @@
 
 import { connect, AdminClient } from '../../src'
 import type { Message } from '../../src/message'
-import type { BatchHandler, MessageHandler } from '../../src/consumer'
+import type { MessageHandler } from '../../src/consumer'
 
 const GRPC_ADDR = 'localhost:50051'
 const ADMIN_URL = 'http://localhost:8080'

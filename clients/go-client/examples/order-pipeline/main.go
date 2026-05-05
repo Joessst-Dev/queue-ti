@@ -56,9 +56,12 @@ func main() {
 // registerConsumerGroup calls the admin REST API to ensure the consumer group exists.
 func registerConsumerGroup(ctx context.Context) error {
 	body := fmt.Sprintf(`{"consumer_group":%q}`, consumerGroup)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		fmt.Sprintf("%s/api/topics/%s/consumer-groups", adminAddr, topic),
 		strings.NewReader(body))
+	if err != nil {
+		return err
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)

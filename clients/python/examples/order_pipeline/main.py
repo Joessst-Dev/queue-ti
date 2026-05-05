@@ -12,7 +12,6 @@ import dataclasses
 import json
 import logging
 import signal
-import sys
 
 import httpx
 
