@@ -265,6 +265,8 @@ dotnet add package QueueTi.Client.Aspire
 
 ```csharp
 // Program.cs — Aspire AppHost project
+using QueueTi.Aspire.Hosting;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 var postgres = builder.AddPostgres("postgres")
@@ -290,10 +292,12 @@ builder.Build().Run();
 |--------|-------------|
 | `AddQueueTi(name, grpcPort?, httpPort?, tag?)` | Adds a QueueTi container resource. Pulls `ghcr.io/joessst-dev/queue-ti`. Exposes endpoints `grpc` (50051) and `http` (8080). |
 | `WithNpgsqlDatabase(database)` | Wires an Npgsql database resource. Sets `QUEUETI_DB_*` env vars and adds a `WaitFor` dependency so QueueTi starts only after the database is healthy. |
-| `WithAuthentication(username, password, jwtSecret)` | Enables auth. Sets `QUEUETI_AUTH_ENABLED` and related env vars. Accepts `ParameterResource` values for secrets. |
+| `WithAuthentication(username, password, jwtSecret)` | Enables auth. Sets `QUEUETI_AUTH_ENABLED` and related env vars. `username` is a plain string; `password` and `jwtSecret` accept `ParameterResource` values for secrets. |
 | `WithLogLevel(level)` | Sets `QUEUETI_LOG_LEVEL`. |
 
 ### Service Project Setup
+
+`QueueTi.Client.Aspire` provides `AddQueueTiClient` on `IHostApplicationBuilder`. This is distinct from the [non-Aspire `IServiceCollection` extension](#dependency-injection-aspnet-core) documented earlier.
 
 ```csharp
 // Program.cs — Service or worker project
@@ -323,7 +327,7 @@ builder.AddQueueTiClient("queue", settings =>
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `ConnectionString` | `string?` | `null` | Explicit connection string. If unset, read from `ConnectionStrings:{name}` or `QueueTi:{name}` config. |
+| `ConnectionString` | `string?` | `null` | Explicit connection string. If unset, read from `ConnectionStrings:{name}` or `QueueTi:{name}` config, where `{name}` is the connection name passed to `AddQueueTiClient`. |
 | `DisableHealthChecks` | `bool` | `false` | Skip automatic health check registration. |
 | `DisableTracing` | `bool` | `false` | Skip OpenTelemetry instrumentation. |
 | `BearerToken` | `string?` | `null` | Optional bearer token for authentication. |
