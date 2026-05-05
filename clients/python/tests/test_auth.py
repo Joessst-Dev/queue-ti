@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -110,12 +110,11 @@ class TestQueueTiAuthRefresh:
 
     def test_refresh_reauthenticates_and_updates_token(self) -> None:
         status_resp = _make_response(body={"auth_required": True})
-        login_resp_1 = _make_response(body={"token": "initial"})
-        login_resp_2 = _make_response(body={"token": "refreshed"})
+        login_resp = _make_response(body={"token": "initial"})
         with patch("httpx.Client") as mock_client_cls:
             mock_client = mock_client_cls.return_value.__enter__.return_value
             mock_client.get.return_value = status_resp
-            mock_client.post.return_value = login_resp_1
+            mock_client.post.return_value = login_resp
             auth = QueueTiAuth.login("http://localhost:8080", "admin", "secret")
         assert auth.token == "initial"
 
@@ -127,7 +126,6 @@ class TestQueueTiAuthRefresh:
 
         assert result == "refreshed"
         assert auth.token == "refreshed"
-        _ = login_resp_2  # silence unused warning
 
 
 @pytest.mark.asyncio
@@ -143,8 +141,6 @@ class TestQueueTiAuthAsyncRefresh:
         assert result == ""
 
     async def test_async_refresh_reauthenticates(self) -> None:
-        from unittest.mock import AsyncMock
-
         status_resp = _make_response(body={"auth_required": True})
         login_resp = _make_response(body={"token": "initial"})
         with patch("httpx.Client") as mock_client_cls:

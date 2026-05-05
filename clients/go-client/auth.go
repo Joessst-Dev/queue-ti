@@ -19,9 +19,9 @@ import (
 // When auth is disabled on the server, NewAuth returns an Auth whose Token()
 // is empty and whose Refresh method is a no-op.
 type Auth struct {
-	adminAddr string
-	username  string
-	password  string
+	adminAddr  string
+	username   string
+	password   string
 	httpClient *http.Client
 
 	mu    sync.RWMutex
@@ -41,7 +41,7 @@ func NewAuth(adminAddr, username, password string) (*Auth, error) {
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 
-	required, err := a.authRequired()
+	required, err := a.authRequired(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("queue-ti auth: check auth status: %w", err)
 	}
@@ -49,7 +49,7 @@ func NewAuth(adminAddr, username, password string) (*Auth, error) {
 		return a, nil
 	}
 
-	if err := a.login(); err != nil {
+	if err := a.login(context.Background()); err != nil {
 		return nil, fmt.Errorf("queue-ti auth: login: %w", err)
 	}
 	return a, nil
@@ -66,11 +66,11 @@ func (a *Auth) Token() string {
 // Refresh implements TokenRefresher. It re-authenticates with the server and
 // updates the stored token. When auth is disabled (Token() is empty) it is a
 // no-op and returns ("", nil).
-func (a *Auth) Refresh(_ context.Context) (string, error) {
+func (a *Auth) Refresh(ctx context.Context) (string, error) {
 	if a.Token() == "" {
 		return "", nil
 	}
-	if err := a.login(); err != nil {
+	if err := a.login(ctx); err != nil {
 		return "", fmt.Errorf("queue-ti auth: refresh: %w", err)
 	}
 	return a.Token(), nil
@@ -78,8 +78,8 @@ func (a *Auth) Refresh(_ context.Context) (string, error) {
 
 // authRequired calls GET /api/auth/status and returns true when the server
 // requires authentication.
-func (a *Auth) authRequired() (bool, error) {
-	req, err := http.NewRequest(http.MethodGet, a.adminAddr+"/api/auth/status", nil)
+func (a *Auth) authRequired(ctx context.Context) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.adminAddr+"/api/auth/status", nil)
 	if err != nil {
 		return false, err
 	}
@@ -107,7 +107,7 @@ func (a *Auth) authRequired() (bool, error) {
 }
 
 // login calls POST /api/auth/login and stores the returned JWT.
-func (a *Auth) login() error {
+func (a *Auth) login(ctx context.Context) error {
 	payload, err := json.Marshal(map[string]string{
 		"username": a.username,
 		"password": a.password,
@@ -116,7 +116,7 @@ func (a *Auth) login() error {
 		return fmt.Errorf("marshal request body: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, a.adminAddr+"/api/auth/login", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.adminAddr+"/api/auth/login", bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}

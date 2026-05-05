@@ -115,6 +115,7 @@ describe('QueueTiAuth', () => {
 
       const newToken = await auth.refresh()
       expect(newToken).toBe('refreshed-token')
+      expect(auth.token).toBe('refreshed-token')
     })
   })
 })

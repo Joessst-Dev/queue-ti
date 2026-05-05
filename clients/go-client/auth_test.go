@@ -81,7 +81,6 @@ var _ = Describe("Auth", func() {
 					case "/api/auth/status":
 						json.NewEncoder(w).Encode(map[string]any{"auth_required": true})
 					case "/api/auth/login":
-						capturedBody, _ = json.Marshal(nil)
 						var body map[string]string
 						json.NewDecoder(r.Body).Decode(&body)
 						capturedBody, _ = json.Marshal(body)
@@ -123,6 +122,34 @@ var _ = Describe("Auth", func() {
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("check auth status"))
 			})
+		})
+	})
+
+	Describe("Refresh context propagation", func() {
+		It("respects a cancelled context and does not perform the HTTP call", func() {
+			loginCalled := false
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/api/auth/status":
+					json.NewEncoder(w).Encode(map[string]any{"auth_required": true})
+				case "/api/auth/login":
+					loginCalled = true
+					json.NewEncoder(w).Encode(map[string]string{"token": "tok"})
+				}
+			}))
+			defer srv.Close()
+
+			auth, err := queueti.NewAuth(srv.URL, "admin", "secret")
+			Expect(err).NotTo(HaveOccurred())
+			loginCalled = false // reset after initial login
+
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel() // cancel before calling Refresh
+
+			_, err = auth.Refresh(ctx)
+			Expect(err).To(HaveOccurred())
+			Expect(loginCalled).To(BeFalse())
 		})
 	})
 

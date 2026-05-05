@@ -1,7 +1,7 @@
 import type { TokenRefresher } from './options'
 
 export class QueueTiAuth {
-  readonly token: string | null
+  token: string | null
   private readonly adminAddr: string
   private readonly username: string
   private readonly password: string
@@ -43,14 +43,17 @@ export class QueueTiAuth {
   }
 
   /**
-   * Implements the TokenRefresher interface. Re-authenticates with the server
-   * and returns the new token. When auth is disabled, returns an empty string.
+   * Implements the TokenRefresher interface. Re-authenticates with the server,
+   * updates the stored token, and returns the new token. When auth is disabled,
+   * returns an empty string.
    */
   readonly refresh: TokenRefresher = async (): Promise<string> => {
     if (this.token === null) {
       return ''
     }
-    return QueueTiAuth._doLogin(this.adminAddr, this.username, this.password)
+    const newToken = await QueueTiAuth._doLogin(this.adminAddr, this.username, this.password)
+    this.token = newToken
+    return newToken
   }
 
   private static async _doLogin(base: string, username: string, password: string): Promise<string> {

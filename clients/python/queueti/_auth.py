@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from typing import Callable, Awaitable
 
 import httpx
 
@@ -56,6 +55,19 @@ class QueueTiAuth:
             raise ValueError("queue-ti auth: server returned empty token")
         return str(token)
 
+    @staticmethod
+    async def _async_do_login(client: httpx.AsyncClient, base: str, username: str, password: str) -> str:
+        resp = await client.post(
+            f"{base}/api/auth/login",
+            content=json.dumps({"username": username, "password": password}),
+            headers={"Content-Type": "application/json"},
+        )
+        resp.raise_for_status()
+        token = resp.json().get("token", "")
+        if not token:
+            raise ValueError("queue-ti auth: server returned empty token")
+        return str(token)
+
     def refresh(self) -> str:
         """Re-authenticate and return the new token.
 
@@ -77,14 +89,5 @@ class QueueTiAuth:
         if self.token is None:
             return ""
         async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{self._base}/api/auth/login",
-                content=json.dumps({"username": self._username, "password": self._password}),
-                headers={"Content-Type": "application/json"},
-            )
-            resp.raise_for_status()
-            token = resp.json().get("token", "")
-            if not token:
-                raise ValueError("queue-ti auth: server returned empty token")
-            self.token = str(token)
+            self.token = await self._async_do_login(client, self._base, self._username, self._password)
         return self.token
