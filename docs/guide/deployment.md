@@ -2,9 +2,11 @@
 
 ## Docker
 
-### Pull the Latest Released Image
+### Pull the Latest Released Images
 
-The easiest way to run queue-ti is to pull a pre-built Docker image from GitHub Container Registry (GHCR). Releases are published automatically and include backend, admin UI, and all dependencies.
+Both the backend and the admin UI are published to GitHub Container Registry (GHCR) on every release.
+
+**Backend** (gRPC + HTTP API):
 
 ```bash
 # Latest stable release
@@ -12,6 +14,15 @@ docker pull ghcr.io/joessst-dev/queue-ti:latest
 
 # Or a specific version (e.g. v2026.05.0-preview.1)
 docker pull ghcr.io/joessst-dev/queue-ti:v2026.05.0-preview.1
+```
+
+**Admin UI** (Nginx serving the Angular SPA):
+
+```bash
+docker pull ghcr.io/joessst-dev/queue-ti-ui:latest
+
+# Or a specific version
+docker pull ghcr.io/joessst-dev/queue-ti-ui:v2026.05.0-preview.1
 ```
 
 ### Run with Docker
@@ -26,6 +37,8 @@ docker run -d \
   -e QUEUETI_DB_NAME=queueti \
   ghcr.io/joessst-dev/queue-ti:latest
 ```
+
+The admin UI image proxies API calls to the hostname `queueti` (the Docker Compose service name). It is designed to run alongside the backend via Docker Compose rather than as a standalone `docker run` container. Use the [Docker Compose](#docker-compose) setup below to run both together.
 
 ### Build Locally from Source
 
