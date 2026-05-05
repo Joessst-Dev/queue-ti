@@ -2,7 +2,7 @@
  * Order pipeline — demonstrates the full producer → consumer → ack lifecycle
  * against a local queue-ti instance.
  *
- * Run: npx ts-node index.ts (requires docker-compose up)
+ * Run: npx ts-node --transpile-only examples/order-pipeline/index.ts (requires docker-compose up)
  */
 
 import { connect, AdminClient, QueueTiAuth } from '../../src'
@@ -92,25 +92,23 @@ async function consume(auth: QueueTiAuth, controller: AbortController): Promise<
 
     if (order.poison) {
       console.log(`nack ${msg.id}: poison pill detected (retry ${msg.retryCount})`)
-      await msg.nack('poison pill')
-      return
+      throw new Error('poison pill')
     }
 
     console.log(`ack ${msg.id}: processed order ${order.id} — ${order.amount}×${order.item}`)
-    await msg.ack()
   }
 
   await consumer.consume(handler)
   client.close()
 }
 
-async function drainDLQ(auth: QueueTiAuth): Promise<void> {
+async function drainDLQ(auth: QueueTiAuth, controller: AbortController): Promise<void> {
   const client = await connect(GRPC_ADDR, {
     insecure: true,
     token: auth.token ?? undefined,
     tokenRefresher: auth.refresh,
   })
-  const consumer = client.consumer(DLQ_TOPIC, { consumerGroup: CONSUMER_GROUP })
+  const consumer = client.consumer(DLQ_TOPIC, { consumerGroup: CONSUMER_GROUP, signal: controller.signal })
 
   console.log(`draining DLQ "${DLQ_TOPIC}"`)
 
@@ -141,7 +139,7 @@ async function main(): Promise<void> {
   await registerConsumerGroup(auth)
 
   void produce(auth, controller)
-  void drainDLQ(auth)
+  void drainDLQ(auth, controller)
   await consume(auth, controller)
 }
 

@@ -108,11 +108,9 @@ async def consume(auth: QueueTiAuth, stop: asyncio.Event) -> None:
 
         if order.poison:
             log.info("nack %s: poison pill detected (retry %d)", msg.id, msg.retry_count)
-            await msg.nack("poison pill")
-            return
+            raise ValueError("poison pill")
 
         log.info("ack %s: processed order %s — %d×%s", msg.id, order.id, order.amount, order.item)
-        await msg.ack()
 
     consume_task = asyncio.create_task(consumer.consume(handler))
     await stop.wait()
@@ -161,10 +159,13 @@ async def main() -> None:
 
     await register_consumer_group(auth)
 
-    async with asyncio.TaskGroup() as tg:
-        tg.create_task(produce(auth, stop))
-        tg.create_task(drain_dlq(auth))
-        tg.create_task(consume(auth, stop))
+    produce_task = asyncio.create_task(produce(auth, stop))
+    drain_task = asyncio.create_task(drain_dlq(auth))
+
+    await consume(auth, stop)
+
+    drain_task.cancel()
+    await asyncio.gather(produce_task, drain_task, return_exceptions=True)
 
 
 if __name__ == "__main__":
