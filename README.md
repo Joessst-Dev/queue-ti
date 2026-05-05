@@ -15,7 +15,7 @@ If you already run Postgres, you have a production-ready queue. One table, at-le
 - **Fine-grained access control** — JWT auth with per-topic grants and consumer group restrictions
 - **Avro schema validation** — enforce payload contracts at enqueue time
 - **Admin UI** — inspect messages, requeue from DLQ, manage topics and users without writing code
-- **Go, Node.js, Python, and Java clients** — auto-reconnect, token refresh, batch consumption
+- **Go, Node.js, Python, Java, and C# clients** — auto-reconnect, token refresh, batch consumption
 
 ## Quick Start
 
@@ -40,6 +40,14 @@ implementation("de.joesst.dev:queue-ti-java-client:VERSION")
 ```
 
 Latest version: [github.com/Joessst-Dev/queue-ti-java-client/releases](https://github.com/Joessst-Dev/queue-ti-java-client/releases)
+
+**C#** ([NuGet](https://www.nuget.org/packages/QueueTi.Client)):
+
+```bash
+dotnet add package QueueTi.Client
+```
+
+Latest version: [nuget.org/packages/QueueTi.Client](https://www.nuget.org/packages/QueueTi.Client)
 
 ## License
 
