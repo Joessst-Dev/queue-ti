@@ -325,7 +325,46 @@ Returns the message to the queue. `reason` is stored as the failure string and i
 
 When the server has `auth.enabled = true`, every RPC call requires a valid JWT. Tokens are issued by the server's HTTP API and expire after 15 minutes.
 
-### Obtaining a token
+### Using QueueTiAuth (recommended)
+
+The `NewAuth` helper automatically checks if authentication is required and handles login and token refresh:
+
+```go
+auth, err := queueti.NewAuth("http://localhost:8080", "admin", "secret")
+if err != nil {
+    log.Fatal(err)
+}
+
+// Build dial options conditionally on whether auth is enabled
+opts := []queueti.DialOption{queueti.WithInsecure()}
+
+// If auth is required, add token and refresh
+if auth.Token() != "" {
+    opts = append(opts,
+        queueti.WithBearerToken(auth.Token()),
+        queueti.WithTokenRefresher(auth.Refresh),
+    )
+}
+
+client, err := queueti.Dial("localhost:50051", opts...)
+if err != nil {
+    log.Fatal(err)
+}
+defer client.Close()
+
+// For the admin client
+adminClient := queueti.NewAdminClient("http://localhost:8080",
+    queueti.WithAdminToken(auth.Token()),
+)
+```
+
+The `NewAuth` helper:
+1. Calls `GET /api/auth/status` to check if authentication is required
+2. If auth is disabled, returns a no-op instance with an empty token
+3. If auth is enabled, calls `POST /api/auth/login` with the provided credentials
+4. Exposes `Token()` for the current JWT and `Refresh(ctx)` which satisfies the `TokenRefresher` interface for automatic token refresh
+
+### Option 1 — Obtaining a token manually
 
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
@@ -334,7 +373,7 @@ TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   | jq -r '.token')
 ```
 
-### Option 1 — Automatic refresh (recommended)
+### Option 2 — Automatic refresh with custom fetcher
 
 Pass an initial token and a `TokenRefresher` callback. The library decodes the JWT `exp` claim, sleeps until 60 seconds before expiry, and calls your callback to obtain a fresh token. The new token is applied to the next RPC call — no reconnection needed.
 
@@ -355,7 +394,7 @@ defer client.Close() // also stops the background refresh goroutine
 
 If the refresher returns an error, the library retries with exponential backoff (5 s → 60 s) and logs each failure. RPCs will start failing with `Unauthenticated` once the token expires, so ensure the refresher can recover.
 
-### Option 2 — Manual update
+### Option 3 — Manual update
 
 Call `client.SetToken` to swap the token on a live connection. The new token takes effect on the very next RPC call; no reconnection is needed.
 
@@ -373,7 +412,7 @@ if err := client.SetToken(newToken); err != nil {
 
 This is useful when token lifecycle is managed externally (e.g. a shared token store, a sidecar, or an existing refresh loop in your application).
 
-### Option 3 — Static token (short-lived processes)
+### Option 4 — Static token (short-lived processes)
 
 For scripts or batch jobs that complete within the 15-minute token window, a static token is sufficient:
 

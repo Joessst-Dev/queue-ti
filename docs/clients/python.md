@@ -250,7 +250,43 @@ except Exception as err:
 
 ## Authentication
 
-### With JWT Tokens
+### Using QueueTiAuth (recommended)
+
+The `QueueTiAuth` helper automatically checks if authentication is required and handles login and token refresh:
+
+```python
+import asyncio
+import queueti
+
+auth = queueti.QueueTiAuth.login("http://localhost:8080", "admin", "secret")
+
+async def main():
+    opts = queueti.ConnectOptions(
+        token=auth.token,
+        token_refresher=auth.async_refresh,
+    )
+    async with await queueti.connect("localhost:50051", opts) as client:
+        producer = client.producer()
+        msg_id = await producer.publish("orders", b"...")
+        print(f"Published: {msg_id}")
+
+    admin = queueti.AsyncAdminClient(
+        "http://localhost:8080",
+        queueti.AdminOptions(token=auth.token),
+    )
+    configs = await admin.list_topic_configs()
+    await admin.close()
+
+asyncio.run(main())
+```
+
+The `QueueTiAuth` helper:
+1. Calls `GET /api/auth/status` to check if authentication is required
+2. If auth is disabled, returns a no-op instance with a null token
+3. If auth is enabled, calls `POST /api/auth/login` with the provided credentials
+4. Exposes `.token` (str or None) for the current JWT and `.async_refresh()` (async callable) which satisfies the `ConnectOptions.token_refresher` interface for automatic token refresh
+
+### With JWT Tokens (manual)
 
 ```python
 import asyncio

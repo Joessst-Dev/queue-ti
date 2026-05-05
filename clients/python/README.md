@@ -170,6 +170,108 @@ All fields are optional.
 | `token_refresher` | `Callable[[], Awaitable[str]] \| None` | Async function to refresh the token before expiry |
 | `insecure` | `bool` | Disable TLS (for development only; default: `False`) |
 
+## Authentication
+
+When the server has `auth.enabled = true`, every RPC call requires a valid JWT. Tokens are issued by the server's HTTP API and expire after 15 minutes.
+
+### Using QueueTiAuth (recommended)
+
+The `QueueTiAuth` helper automatically checks if authentication is required and handles login and token refresh:
+
+```python
+import asyncio
+import queueti
+
+auth = queueti.QueueTiAuth.login("http://localhost:8080", "admin", "secret")
+
+async def main():
+    opts = queueti.ConnectOptions(
+        token=auth.token,
+        token_refresher=auth.async_refresh,
+    )
+    async with await queueti.connect("localhost:50051", opts) as client:
+        producer = client.producer()
+        msg_id = await producer.publish("orders", b"...")
+        print(f"Published: {msg_id}")
+
+    admin = queueti.AsyncAdminClient(
+        "http://localhost:8080",
+        queueti.AdminOptions(token=auth.token),
+    )
+    configs = await admin.list_topic_configs()
+    await admin.close()
+
+asyncio.run(main())
+```
+
+The `QueueTiAuth` helper:
+1. Calls `GET /api/auth/status` to check if authentication is required
+2. If auth is disabled, returns a no-op instance with a null token
+3. If auth is enabled, calls `POST /api/auth/login` with the provided credentials
+4. Exposes `.token` (str or None) for the current JWT and `.async_refresh()` (async callable) which satisfies the `ConnectOptions.token_refresher` interface for automatic token refresh
+
+### Option 1 — Obtaining a token manually
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"secret"}' \
+  | jq -r '.token')
+```
+
+### Option 2 — Automatic refresh with custom fetcher
+
+When your token expires, you can provide a refresher function to obtain a new token automatically:
+
+```python
+from queueti import connect, ConnectOptions
+
+async def refresh_token() -> str:
+    # Fetch a new token (e.g., from your auth service)
+    new_token = await fetch_fresh_token()
+    return new_token
+
+client = await connect(
+    "localhost:50051",
+    options=ConnectOptions(
+        token="initial-token",
+        token_refresher=refresh_token,
+    ),
+)
+
+# Token will refresh automatically before expiry
+```
+
+### Option 3 — Manual update
+
+Call `client.set_token()` to swap the token on a live connection. The new token takes effect on the very next RPC call; no reconnection is needed.
+
+```python
+client = await connect(
+    "localhost:50051",
+    options=ConnectOptions(token="initial-token"),
+)
+
+# Later, when you have a fresh token:
+client.set_token("new-token")
+```
+
+This is useful when token lifecycle is managed externally (e.g. a shared token store, a sidecar, or an existing refresh loop in your application).
+
+### Option 4 — Static token (short-lived processes)
+
+For scripts or batch jobs that complete within the 15-minute token window, a static token is sufficient:
+
+```python
+from queueti import connect, ConnectOptions
+import os
+
+client = await connect(
+    "localhost:50051",
+    options=ConnectOptions(token=os.getenv("QUEUETI_TOKEN")),
+)
+```
+
 ## Producer API
 
 ### AsyncProducer.publish()

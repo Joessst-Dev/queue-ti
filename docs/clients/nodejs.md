@@ -201,23 +201,47 @@ try {
 
 ## Authentication
 
-### With JWT Tokens
+### Using QueueTiAuth (recommended)
+
+The `QueueTiAuth` helper automatically checks if authentication is required and handles login and token refresh:
+
+```typescript
+import { connect, AdminClient, QueueTiAuth } from '@queue-ti/client'
+
+const auth = await QueueTiAuth.login('http://localhost:8080', 'admin', 'secret')
+
+const client = await connect('localhost:50051', {
+  insecure: true,
+  token: auth.token ?? undefined,
+  tokenRefresher: auth.refresh,
+})
+
+const admin = new AdminClient('http://localhost:8080', {
+  token: auth.token ?? undefined,
+})
+```
+
+The `QueueTiAuth` helper:
+1. Calls `GET /api/auth/status` to check if authentication is required
+2. If auth is disabled, returns a no-op instance with a null token
+3. If auth is enabled, calls `POST /api/auth/login` with the provided credentials
+4. Exposes `.token` (string or null) for the current JWT and `.refresh` (arrow function) which satisfies the `ConnectOptions.tokenRefresher` interface for automatic token refresh
+
+### With JWT Tokens (manual)
 
 ```typescript
 import { connect } from '@queue-ti/client'
 
 const client = await connect('localhost:50051', {
   insecure: true,
-  auth: {
-    token: initialToken,
-    refreshToken: async () => {
-      const response = await fetch('http://localhost:8080/api/auth/refresh', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${currentToken}` },
-      })
-      const data = await response.json()
-      return data.token
-    },
+  token: initialToken,
+  tokenRefresher: async () => {
+    const response = await fetch('http://localhost:8080/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${currentToken}` },
+    })
+    const data = await response.json()
+    return data.token
   },
 })
 ```
