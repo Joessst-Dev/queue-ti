@@ -282,7 +282,7 @@ async def main():
 asyncio.run(main())
 ```
 
-For the synchronous client, use `connect_sync` and `refresh()` (the sync variant of `async_refresh()`):
+For the synchronous client, use `connect_sync` with `async_refresh` — the sync wrapper runs an internal event loop and requires an async refresher:
 
 ```python
 import queueti
