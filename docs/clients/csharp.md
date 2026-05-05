@@ -237,3 +237,94 @@ Disposal cancels the background token refresh task and shuts down the managed gR
 ## Thread Safety
 
 `QueueTiClient`, `Producer`, and `Consumer` are all thread-safe. `SetToken()` is safe to call from any thread and takes effect immediately.
+
+## .NET Aspire Integration
+
+Two additional packages provide first-class [.NET Aspire](https://learn.microsoft.com/dotnet/aspire/get-started/aspire-overview) support:
+
+| Package | Project type | Purpose |
+|---------|-------------|---------|
+| `QueueTi.Aspire.Hosting` | AppHost | Adds QueueTi as a container resource in the Aspire orchestrator |
+| `QueueTi.Client.Aspire` | Service / worker | Registers the client, health checks, and OTel tracing via a single call |
+
+### Installation
+
+**AppHost project:**
+
+```bash
+dotnet add package QueueTi.Aspire.Hosting
+```
+
+**Service or worker project:**
+
+```bash
+dotnet add package QueueTi.Client.Aspire
+```
+
+### AppHost Setup
+
+```csharp
+// Program.cs — Aspire AppHost project
+var builder = DistributedApplication.CreateBuilder(args);
+
+var postgres = builder.AddPostgres("postgres")
+    .AddDatabase("queueti-db");
+
+var queue = builder.AddQueueTi("queue")
+    .WithNpgsqlDatabase(postgres)
+    .WithAuthentication(
+        username: "admin",
+        password: builder.AddParameter("queue-password", secret: true),
+        jwtSecret: builder.AddParameter("queue-jwt-secret", secret: true))
+    .WithLogLevel("info");
+
+builder.AddProject<Projects.MyWorker>("worker")
+    .WithReference(queue);
+
+builder.Build().Run();
+```
+
+**Builder methods:**
+
+| Method | Description |
+|--------|-------------|
+| `AddQueueTi(name, grpcPort?, httpPort?, tag?)` | Adds a QueueTi container resource. Pulls `ghcr.io/joessst-dev/queue-ti`. Exposes endpoints `grpc` (50051) and `http` (8080). |
+| `WithNpgsqlDatabase(database)` | Wires an Npgsql database resource. Sets `QUEUETI_DB_*` env vars and adds a `WaitFor` dependency so QueueTi starts only after the database is healthy. |
+| `WithAuthentication(username, password, jwtSecret)` | Enables auth. Sets `QUEUETI_AUTH_ENABLED` and related env vars. Accepts `ParameterResource` values for secrets. |
+| `WithLogLevel(level)` | Sets `QUEUETI_LOG_LEVEL`. |
+
+### Service Project Setup
+
+```csharp
+// Program.cs — Service or worker project
+builder.AddQueueTiClient("queue");
+
+var app = builder.Build();
+app.Run();
+```
+
+`AddQueueTiClient` reads the connection string from `ConnectionStrings:queue` (injected by Aspire via `WithReference`) and automatically:
+
+- Registers `QueueTiClient` as a singleton in DI
+- Registers a health check (`GET /healthz` on port 8080, no auth required) under tags `live` and `queueti`
+- Instruments outbound gRPC calls with OpenTelemetry tracing via `OpenTelemetry.Instrumentation.GrpcNetClient`
+
+**With custom settings:**
+
+```csharp
+builder.AddQueueTiClient("queue", settings =>
+{
+    settings.DisableHealthChecks = true;  // if health checks are managed elsewhere
+    settings.BearerToken = "your-jwt";    // if auth is enabled on the server
+});
+```
+
+### QueueTiClientSettings
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `ConnectionString` | `string?` | `null` | Explicit connection string. If unset, read from `ConnectionStrings:{name}` or `QueueTi:{name}` config. |
+| `DisableHealthChecks` | `bool` | `false` | Skip automatic health check registration. |
+| `DisableTracing` | `bool` | `false` | Skip OpenTelemetry instrumentation. |
+| `BearerToken` | `string?` | `null` | Optional bearer token for authentication. |
+| `TokenRefresher` | `Func<CancellationToken, Task<string>>?` | `null` | Optional callback to refresh the bearer token at runtime. |
