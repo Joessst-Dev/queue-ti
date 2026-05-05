@@ -166,6 +166,73 @@ spec:
           periodSeconds: 10
 ```
 
+## Scaling
+
+### Fixed replicas (.NET Aspire)
+
+When using the `QueueTi.Aspire.Hosting` package, set a fixed replica count with `WithReplicas`. Wire a Redis resource to keep rate-limiting and cache state consistent across instances:
+
+```csharp
+var redis = builder.AddRedis("redis");
+
+var queue = builder.AddQueueTi("queue")
+    .WithReplicas(3)
+    .WithNpgsqlDatabase(postgres)
+    .WithRedis(redis);
+```
+
+`WithReplicas` sets the count at startup. For dynamic scaling in production, use platform auto-scaling instead (see below).
+
+### Auto-scaling in production
+
+queue-ti exposes Prometheus metrics at `GET /metrics` on port 8080 (JWT auth required). Point your auto-scaler at this endpoint to scale based on queue depth, throughput, or any other exported metric.
+
+**Kubernetes — Horizontal Pod Autoscaler**
+
+Use the [Prometheus Adapter](https://github.com/kubernetes-sigs/prometheus-adapter) to surface queue-ti metrics as custom Kubernetes metrics, then reference them in an HPA:
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: queue-ti-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: queue-ti
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Pods
+    pods:
+      metric:
+        name: queue_ti_messages_pending  # exposed by /metrics
+      target:
+        type: AverageValue
+        averageValue: "500"
+```
+
+**Azure Container Apps**
+
+Use a [KEDA custom metrics scaler](https://keda.sh/docs/scalers/metrics-api/) pointing at the `/metrics` endpoint:
+
+```yaml
+triggers:
+- type: metrics-api
+  metadata:
+    targetValue: "500"
+    url: "http://queue-ti/metrics"
+    valueLocation: "queue_ti_messages_pending"
+```
+
+Ensure your scaler can reach the HTTP port (8080) and presents a valid JWT in the `Authorization` header if authentication is enabled.
+
+### Notes for all multi-instance deployments
+
+- Each replica connects independently to the same PostgreSQL database and Redis — no additional coordination is needed
+- Redis is strongly recommended when running more than one instance: it keeps rate-limiting counters, distributed caches, and pub/sub invalidation consistent across replicas (set `QUEUETI_REDIS_HOST` or use `WithRedis` in Aspire)
+
 ## Security Best Practices
 
 1. **Enable authentication** — Use JWT with strong secrets in production
