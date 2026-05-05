@@ -13,8 +13,6 @@ import json
 import logging
 import signal
 
-import httpx
-
 from queueti import (
     AsyncAdminClient,
     AdminError,
