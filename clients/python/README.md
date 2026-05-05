@@ -189,26 +189,47 @@ async def main():
         token=auth.token,
         token_refresher=auth.async_refresh,
     )
-    async with await queueti.connect("localhost:50051", opts) as client:
+    client = await queueti.connect("localhost:50051", opts)
+    try:
         producer = client.producer()
         msg_id = await producer.publish("orders", b"...")
         print(f"Published: {msg_id}")
+    finally:
+        await client.close()
 
-    admin = queueti.AsyncAdminClient(
+    async with queueti.AsyncAdminClient(
         "http://localhost:8080",
         queueti.AdminOptions(token=auth.token),
-    )
-    configs = await admin.list_topic_configs()
-    await admin.close()
+    ) as admin:
+        configs = await admin.list_topic_configs()
 
 asyncio.run(main())
+```
+
+For the synchronous client, use `connect_sync` and `refresh()` (the sync variant of `async_refresh()`):
+
+```python
+import queueti
+
+auth = queueti.QueueTiAuth.login("http://localhost:8080", "admin", "secret")
+
+client = queueti.connect_sync("localhost:50051", queueti.ConnectOptions(
+    token=auth.token,
+    token_refresher=auth.async_refresh,
+))
+try:
+    producer = client.producer()
+    msg_id = producer.publish("orders", b"...")
+    print(f"Published: {msg_id}")
+finally:
+    client.close()
 ```
 
 The `QueueTiAuth` helper:
 1. Calls `GET /api/auth/status` to check if authentication is required
 2. If auth is disabled, returns a no-op instance with a null token
 3. If auth is enabled, calls `POST /api/auth/login` with the provided credentials
-4. Exposes `.token` (str or None) for the current JWT and `.async_refresh()` (async callable) which satisfies the `ConnectOptions.token_refresher` interface for automatic token refresh
+4. Exposes `.token` (str or None) for the current JWT, `.async_refresh()` for async clients, and `.refresh()` for sync clients
 
 ### Option 1 — Obtaining a token manually
 

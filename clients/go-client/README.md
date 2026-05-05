@@ -335,10 +335,7 @@ if err != nil {
     log.Fatal(err)
 }
 
-// Build dial options conditionally on whether auth is enabled
 opts := []queueti.DialOption{queueti.WithInsecure()}
-
-// If auth is required, add token and refresh
 if auth.Token() != "" {
     opts = append(opts,
         queueti.WithBearerToken(auth.Token()),
@@ -352,7 +349,6 @@ if err != nil {
 }
 defer client.Close()
 
-// For the admin client
 adminClient := queueti.NewAdminClient("http://localhost:8080",
     queueti.WithAdminToken(auth.Token()),
 )

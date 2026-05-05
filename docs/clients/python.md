@@ -265,53 +265,116 @@ async def main():
         token=auth.token,
         token_refresher=auth.async_refresh,
     )
-    async with await queueti.connect("localhost:50051", opts) as client:
+    client = await queueti.connect("localhost:50051", opts)
+    try:
         producer = client.producer()
         msg_id = await producer.publish("orders", b"...")
         print(f"Published: {msg_id}")
+    finally:
+        await client.close()
 
-    admin = queueti.AsyncAdminClient(
+    async with queueti.AsyncAdminClient(
         "http://localhost:8080",
         queueti.AdminOptions(token=auth.token),
-    )
-    configs = await admin.list_topic_configs()
-    await admin.close()
+    ) as admin:
+        configs = await admin.list_topic_configs()
 
 asyncio.run(main())
+```
+
+For the synchronous client, use `connect_sync` and `refresh()` (the sync variant of `async_refresh()`):
+
+```python
+import queueti
+
+auth = queueti.QueueTiAuth.login("http://localhost:8080", "admin", "secret")
+
+client = queueti.connect_sync("localhost:50051", queueti.ConnectOptions(
+    token=auth.token,
+    token_refresher=auth.async_refresh,
+))
+try:
+    producer = client.producer()
+    msg_id = producer.publish("orders", b"...")
+    print(f"Published: {msg_id}")
+finally:
+    client.close()
 ```
 
 The `QueueTiAuth` helper:
 1. Calls `GET /api/auth/status` to check if authentication is required
 2. If auth is disabled, returns a no-op instance with a null token
 3. If auth is enabled, calls `POST /api/auth/login` with the provided credentials
-4. Exposes `.token` (str or None) for the current JWT and `.async_refresh()` (async callable) which satisfies the `ConnectOptions.token_refresher` interface for automatic token refresh
+4. Exposes `.token` (str or None) for the current JWT, `.async_refresh()` for async clients, and `.refresh()` for sync clients
 
-### With JWT Tokens (manual)
+### Option 1 — Obtaining a token manually
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"secret"}' \
+  | jq -r '.token')
+```
+
+### Option 2 — Automatic refresh with custom fetcher
 
 ```python
 import asyncio
 from queueti import connect, ConnectOptions
 
-async def refresh_token(current_token):
-    # Your token refresh logic
-    response = await http_client.post(
-        "http://localhost:8080/api/auth/refresh",
-        headers={"Authorization": f"Bearer {current_token}"},
-    )
-    data = await response.json()
-    return data["token"]
+async def refresh_token() -> str:
+    import httpx
+    async with httpx.AsyncClient() as http:
+        resp = await http.post(
+            "http://localhost:8080/api/auth/login",
+            json={"username": "admin", "password": "secret"},
+        )
+        return resp.json()["token"]
 
 async def main():
     client = await connect(
         "localhost:50051",
-        options=ConnectOptions(
-            insecure=True,
-            auth_token=initial_token,
+        ConnectOptions(
+            token="initial-token",
             token_refresher=refresh_token,
         ),
     )
+    try:
+        ...
+    finally:
+        await client.close()
 
 asyncio.run(main())
+```
+
+### Option 3 — Manual update
+
+Call `client.set_token()` to swap the token on a live connection. The new token takes effect on the very next RPC call; no reconnection is needed.
+
+```python
+client = await connect(
+    "localhost:50051",
+    ConnectOptions(token="initial-token"),
+)
+
+# Later, when you have a fresh token:
+client.set_token("new-token")
+```
+
+This is useful when token lifecycle is managed externally (e.g. a shared token store, a sidecar, or an existing refresh loop in your application).
+
+### Option 4 — Static token (short-lived processes)
+
+For scripts or batch jobs that complete within the 15-minute token window, a static token is sufficient:
+
+```python
+import os
+from queueti import connect, ConnectOptions
+
+client = await connect(
+    "localhost:50051",
+    ConnectOptions(token=os.getenv("QUEUETI_TOKEN")),
+)
 ```
 
 ## Consumer Groups

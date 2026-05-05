@@ -236,9 +236,10 @@ const client = await connect('localhost:50051', {
   insecure: true,
   token: initialToken,
   tokenRefresher: async () => {
-    const response = await fetch('http://localhost:8080/api/auth/refresh', {
+    const response = await fetch('http://localhost:8080/api/auth/login', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${currentToken}` },
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'secret' }),
     })
     const data = await response.json()
     return data.token
