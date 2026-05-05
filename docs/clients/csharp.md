@@ -345,3 +345,73 @@ builder.AddQueueTiClient("queue", settings =>
 | `DisableTracing` | `bool` | `false` | Skip OpenTelemetry instrumentation. |
 | `BearerToken` | `string?` | `null` | Optional bearer token for authentication. |
 | `TokenRefresher` | `Func<CancellationToken, Task<string>>?` | `null` | Optional callback to refresh the bearer token at runtime. |
+
+## Admin API
+
+`AdminClient` wraps the QueueTi HTTP admin API (port 8080) for programmatic management of topic configurations, schemas, consumer groups, and stats. It ships in the same `QueueTi.Client` NuGet package.
+
+### Setup
+
+```csharp
+using QueueTi;
+
+// Factory method (manages its own HttpClient)
+var admin = AdminClient.Create(
+    baseUrl: "http://queue.example.com",
+    options: new QueueTiClientOptions { BearerToken = "your-jwt-token" }
+);
+
+// Dependency injection
+builder.Services.AddQueueTiAdminClient("http://queue.example.com", opts =>
+{
+    opts.BearerToken = "admin-token";
+});
+```
+
+### Example: Topic Configuration
+
+```csharp
+// List all topic configs
+var configs = await admin.ListTopicConfigsAsync();
+
+// Create or replace a topic config
+await admin.UpsertTopicConfigAsync("orders", new TopicConfig(
+    Topic: "orders",
+    Replayable: true,
+    MaxRetries: 3,
+    MessageTtlSeconds: 86400,
+    MaxDepth: 10000
+));
+
+// Delete a topic config
+await admin.DeleteTopicConfigAsync("orders");
+```
+
+### Error Handling
+
+```csharp
+try
+{
+    await admin.DeleteTopicConfigAsync("nonexistent");
+}
+catch (QueueTiNotFoundException ex)
+{
+    // HTTP 404 — resource does not exist
+}
+catch (QueueTiConflictException ex)
+{
+    // HTTP 409 — resource already exists
+}
+```
+
+### Full API
+
+The `AdminClient` covers:
+- **Topic configs**: `ListTopicConfigsAsync()`, `UpsertTopicConfigAsync(topic, config)`, `DeleteTopicConfigAsync(topic)`
+- **Topic schemas**: `ListTopicSchemasAsync()`, `GetTopicSchemaAsync(topic)`, `UpsertTopicSchemaAsync(topic, schemaJson)`, `DeleteTopicSchemaAsync(topic)`
+- **Consumer groups**: `ListConsumerGroupsAsync(topic)`, `RegisterConsumerGroupAsync(topic, group)`, `UnregisterConsumerGroupAsync(topic, group)`
+- **Statistics**: `StatsAsync()`
+
+`AdminClient` implements `IDisposable` and `IAsyncDisposable`. When created via `AdminClient.Create`, it owns its `HttpClient` and disposes it on cleanup.
+
+For complete method signatures and DI details, see the [C# client README](https://github.com/Joessst-Dev/queue-ti-csharp-client/blob/main/README.md#admin-client).

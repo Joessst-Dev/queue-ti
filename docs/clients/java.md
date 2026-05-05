@@ -250,6 +250,95 @@ message.ack();                    // CompletableFuture<Void>
 message.nack("processing error"); // CompletableFuture<Void>
 ```
 
+## Admin API
+
+`AdminClient` provides programmatic management of topic configuration, schemas, consumer groups, and stats via the HTTP admin API on port 8080. It is separate from `QueueTiClient` so queue-only consumers carry no extra dependency surface.
+
+### Setup
+
+```java
+// No auth (local / dev)
+var admin = AdminClient.connect("http://localhost:8080", AdminOptions.defaults());
+
+// With bearer token
+var admin = AdminClient.connect("http://localhost:8080",
+        AdminOptions.builder().token("eyJ...").build());
+```
+
+### AdminOptions
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `token` | `String` | `null` | Bearer token sent in every `Authorization` header |
+| `requestTimeout` | `Duration` | 30s | Per-request HTTP timeout (must be positive) |
+
+### Topic configuration
+
+```java
+List<TopicConfig> configs = admin.listTopicConfigs();
+
+admin.upsertTopicConfig("orders", new TopicConfig(
+        "orders",
+        true,   // replayable
+        3,      // maxRetries
+        null, null, null, null));
+
+admin.deleteTopicConfig("orders");
+```
+
+### TopicConfig fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `topic` | `String` | Topic name |
+| `replayable` | `boolean` | Whether the topic supports message replay |
+| `maxRetries` | `Integer` | Max delivery attempts; `null` = server default |
+| `messageTtlSeconds` | `Integer` | Message TTL in seconds; `null` = server default |
+| `maxDepth` | `Integer` | Max queue depth; `null` = server default |
+| `replayWindowSeconds` | `Integer` | Replay window in seconds; `null` = server default |
+| `throughputLimit` | `Integer` | Max messages per second; `null` = server default |
+
+### Schema management
+
+```java
+List<TopicSchema> schemas = admin.listTopicSchemas();
+TopicSchema schema = admin.getTopicSchema("orders"); // throws NotFoundException on 404
+
+admin.upsertTopicSchema("orders", "{\"type\":\"string\"}");
+admin.deleteTopicSchema("orders");
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `topic` | `String` | Topic name |
+| `schemaJson` | `String` | The JSON Schema document |
+| `version` | `int` | Schema version number |
+| `updatedAt` | `String` | ISO-8601 timestamp of last update |
+
+### Consumer groups
+
+```java
+List<String> groups = admin.listConsumerGroups("orders");
+
+admin.registerConsumerGroup("orders", "billing");   // throws ConflictException if exists
+admin.unregisterConsumerGroup("orders", "billing"); // throws NotFoundException if not found
+```
+
+### Stats
+
+```java
+List<TopicStat> stats = admin.stats();
+// each entry: stat.topic(), stat.status(), stat.count()
+```
+
+### Exceptions
+
+| Exception | HTTP status | Meaning |
+|-----------|-------------|---------|
+| `NotFoundException` | 404 | Resource does not exist |
+| `ConflictException` | 409 | Resource already exists |
+| `UncheckedIOException` | other / network | Unexpected error |
+
 ## Building from source
 
 ```bash
