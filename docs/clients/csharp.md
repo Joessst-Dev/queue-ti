@@ -286,6 +286,18 @@ builder.AddProject<Projects.MyWorker>("worker")
 builder.Build().Run();
 ```
 
+To run multiple replicas in development, chain `WithReplicas` and `WithRedis` so all instances share rate-limiting and cache state:
+
+```csharp
+var redis = builder.AddRedis("redis");
+
+var queue = builder.AddQueueTi("queue")
+    .WithReplicas(3)
+    .WithNpgsqlDatabase(postgres)
+    .WithRedis(redis)
+    .WithAuthentication(...);
+```
+
 **Builder methods:**
 
 | Method | Description |
@@ -293,6 +305,7 @@ builder.Build().Run();
 | `AddQueueTi(name, grpcPort?, httpPort?, tag?)` | Adds a QueueTi container resource. Pulls `ghcr.io/joessst-dev/queue-ti`. Exposes endpoints `grpc` (50051) and `http` (8080). |
 | `WithNpgsqlDatabase(database)` | Wires an Npgsql database resource. Sets `QUEUETI_DB_*` env vars and adds a `WaitFor` dependency so QueueTi starts only after the database is healthy. |
 | `WithAuthentication(username, password, jwtSecret)` | Enables auth. Sets `QUEUETI_AUTH_ENABLED` and related env vars. `username` is a plain string; `password` and `jwtSecret` accept `ParameterResource` values for secrets. |
+| `WithReplicas(count)` | Runs `count` instances of the container. When using more than one replica, wire a Redis resource with `WithRedis` to keep rate-limiting and cache state consistent across instances. |
 | `WithLogLevel(level)` | Sets `QUEUETI_LOG_LEVEL`. |
 
 ### Service Project Setup
