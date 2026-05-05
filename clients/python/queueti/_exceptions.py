@@ -12,3 +12,14 @@ class AckError(QueueTiError):
 
 class NackError(QueueTiError):
     """Raised when a nack RPC fails."""
+
+
+class AdminError(QueueTiError):
+    """Raised when an admin HTTP request fails.
+
+    :param status_code: HTTP status code returned by the server.
+    """
+
+    def __init__(self, message: str, status_code: int) -> None:
+        super().__init__(message)
+        self.status_code = status_code

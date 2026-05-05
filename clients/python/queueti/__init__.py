@@ -1,8 +1,9 @@
 """queue-ti Python client library."""
 
+from queueti._admin import AdminOptions, AsyncAdminClient, TopicConfig, TopicSchema, TopicStat
 from queueti._client import AsyncClient, connect
 from queueti._consumer import AsyncConsumer, BatchHandler, MessageHandler
-from queueti._exceptions import AckError, NackError, PublishError, QueueTiError
+from queueti._exceptions import AckError, AdminError, NackError, PublishError, QueueTiError
 from queueti._message import Message, SyncMessage
 from queueti._options import BatchOptions, ConnectOptions, ConsumerOptions, PublishOptions
 from queueti._producer import AsyncProducer
@@ -17,6 +18,12 @@ __all__ = [
     "Message",
     "MessageHandler",
     "BatchHandler",
+    # Admin API
+    "AsyncAdminClient",
+    "AdminOptions",
+    "TopicConfig",
+    "TopicSchema",
+    "TopicStat",
     # Sync API
     "connect_sync",
     "Client",
@@ -33,4 +40,5 @@ __all__ = [
     "PublishError",
     "AckError",
     "NackError",
+    "AdminError",
 ]
