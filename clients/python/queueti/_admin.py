@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -137,13 +138,13 @@ class AsyncAdminClient:
         if config.throughput_limit is not None:
             body["throughput_limit"] = config.throughput_limit
 
-        resp = await self._client.put(f"/api/topic-configs/{topic}", json=body)
+        resp = await self._client.put(f"/api/topic-configs/{quote(topic, safe='')}", json=body)
         self._raise_for_status(resp)
         return _topic_config_from_dict(resp.json())
 
     async def delete_topic_config(self, topic: str) -> None:
         """DELETE /api/topic-configs/{topic} — remove a topic configuration."""
-        resp = await self._client.delete(f"/api/topic-configs/{topic}")
+        resp = await self._client.delete(f"/api/topic-configs/{quote(topic, safe='')}")
         self._raise_for_status(resp)
 
     # ------------------------------------------------------------------
@@ -160,14 +161,14 @@ class AsyncAdminClient:
 
     async def get_topic_schema(self, topic: str) -> TopicSchema:
         """GET /api/topic-schemas/{topic} — fetch a single topic's schema."""
-        resp = await self._client.get(f"/api/topic-schemas/{topic}")
+        resp = await self._client.get(f"/api/topic-schemas/{quote(topic, safe='')}")
         self._raise_for_status(resp)
         return _topic_schema_from_dict(resp.json())
 
     async def upsert_topic_schema(self, topic: str, schema_json: str) -> TopicSchema:
         """PUT /api/topic-schemas/{topic} — register or replace a topic schema."""
         resp = await self._client.put(
-            f"/api/topic-schemas/{topic}",
+            f"/api/topic-schemas/{quote(topic, safe='')}",
             json={"schema_json": schema_json},
         )
         self._raise_for_status(resp)
@@ -175,7 +176,7 @@ class AsyncAdminClient:
 
     async def delete_topic_schema(self, topic: str) -> None:
         """DELETE /api/topic-schemas/{topic} — remove a topic schema."""
-        resp = await self._client.delete(f"/api/topic-schemas/{topic}")
+        resp = await self._client.delete(f"/api/topic-schemas/{quote(topic, safe='')}")
         self._raise_for_status(resp)
 
     # ------------------------------------------------------------------
@@ -184,7 +185,7 @@ class AsyncAdminClient:
 
     async def list_consumer_groups(self, topic: str) -> list[str]:
         """GET /api/topics/{topic}/consumer-groups — list registered consumer groups."""
-        resp = await self._client.get(f"/api/topics/{topic}/consumer-groups")
+        resp = await self._client.get(f"/api/topics/{quote(topic, safe='')}/consumer-groups")
         self._raise_for_status(resp)
         data: dict[str, Any] = resp.json()
         items = data.get("items") or []
@@ -193,14 +194,14 @@ class AsyncAdminClient:
     async def register_consumer_group(self, topic: str, group: str) -> None:
         """POST /api/topics/{topic}/consumer-groups — register a consumer group."""
         resp = await self._client.post(
-            f"/api/topics/{topic}/consumer-groups",
+            f"/api/topics/{quote(topic, safe='')}/consumer-groups",
             json={"consumer_group": group},
         )
         self._raise_for_status(resp)
 
     async def unregister_consumer_group(self, topic: str, group: str) -> None:
         """DELETE /api/topics/{topic}/consumer-groups/{group} — remove a consumer group."""
-        resp = await self._client.delete(f"/api/topics/{topic}/consumer-groups/{group}")
+        resp = await self._client.delete(f"/api/topics/{quote(topic, safe='')}/consumer-groups/{quote(group, safe='')}")
         self._raise_for_status(resp)
 
     # ------------------------------------------------------------------

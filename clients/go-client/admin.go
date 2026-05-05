@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -104,7 +105,7 @@ func (c *AdminClient) ListTopicConfigs(ctx context.Context) ([]TopicConfig, erro
 
 // UpsertTopicConfig creates or replaces the configuration for topic.
 func (c *AdminClient) UpsertTopicConfig(ctx context.Context, topic string, cfg TopicConfig) (*TopicConfig, error) {
-	resp, err := c.doRequest(ctx, http.MethodPut, c.baseURL+"/api/topic-configs/"+topic, cfg)
+	resp, err := c.doRequest(ctx, http.MethodPut, c.baseURL+"/api/topic-configs/"+url.PathEscape(topic), cfg)
 	if err != nil {
 		return nil, fmt.Errorf("upsert topic config %q: %w", topic, err)
 	}
@@ -120,7 +121,7 @@ func (c *AdminClient) UpsertTopicConfig(ctx context.Context, topic string, cfg T
 // DeleteTopicConfig removes the configuration for topic.
 // Returns nil on HTTP 204.
 func (c *AdminClient) DeleteTopicConfig(ctx context.Context, topic string) error {
-	resp, err := c.doRequest(ctx, http.MethodDelete, c.baseURL+"/api/topic-configs/"+topic, nil)
+	resp, err := c.doRequest(ctx, http.MethodDelete, c.baseURL+"/api/topic-configs/"+url.PathEscape(topic), nil)
 	if err != nil {
 		return fmt.Errorf("delete topic config %q: %w", topic, err)
 	}
@@ -150,7 +151,7 @@ func (c *AdminClient) ListTopicSchemas(ctx context.Context) ([]TopicSchema, erro
 // GetTopicSchema returns the registered schema for topic.
 // Returns ErrNotFound when no schema exists.
 func (c *AdminClient) GetTopicSchema(ctx context.Context, topic string) (*TopicSchema, error) {
-	resp, err := c.doRequest(ctx, http.MethodGet, c.baseURL+"/api/topic-schemas/"+topic, nil)
+	resp, err := c.doRequest(ctx, http.MethodGet, c.baseURL+"/api/topic-schemas/"+url.PathEscape(topic), nil)
 	if err != nil {
 		return nil, fmt.Errorf("get topic schema %q: %w", topic, err)
 	}
@@ -166,7 +167,7 @@ func (c *AdminClient) GetTopicSchema(ctx context.Context, topic string) (*TopicS
 // UpsertTopicSchema creates or replaces the Avro schema for topic.
 func (c *AdminClient) UpsertTopicSchema(ctx context.Context, topic, schemaJSON string) (*TopicSchema, error) {
 	body := map[string]string{"schema_json": schemaJSON}
-	resp, err := c.doRequest(ctx, http.MethodPut, c.baseURL+"/api/topic-schemas/"+topic, body)
+	resp, err := c.doRequest(ctx, http.MethodPut, c.baseURL+"/api/topic-schemas/"+url.PathEscape(topic), body)
 	if err != nil {
 		return nil, fmt.Errorf("upsert topic schema %q: %w", topic, err)
 	}
@@ -182,7 +183,7 @@ func (c *AdminClient) UpsertTopicSchema(ctx context.Context, topic, schemaJSON s
 // DeleteTopicSchema removes the schema for topic.
 // Returns nil on HTTP 204.
 func (c *AdminClient) DeleteTopicSchema(ctx context.Context, topic string) error {
-	resp, err := c.doRequest(ctx, http.MethodDelete, c.baseURL+"/api/topic-schemas/"+topic, nil)
+	resp, err := c.doRequest(ctx, http.MethodDelete, c.baseURL+"/api/topic-schemas/"+url.PathEscape(topic), nil)
 	if err != nil {
 		return fmt.Errorf("delete topic schema %q: %w", topic, err)
 	}
@@ -194,7 +195,7 @@ func (c *AdminClient) DeleteTopicSchema(ctx context.Context, topic string) error
 
 // ListConsumerGroups returns the names of all consumer groups registered on topic.
 func (c *AdminClient) ListConsumerGroups(ctx context.Context, topic string) ([]string, error) {
-	resp, err := c.doRequest(ctx, http.MethodGet, c.baseURL+"/api/topics/"+topic+"/consumer-groups", nil)
+	resp, err := c.doRequest(ctx, http.MethodGet, c.baseURL+"/api/topics/"+url.PathEscape(topic)+"/consumer-groups", nil)
 	if err != nil {
 		return nil, fmt.Errorf("list consumer groups for topic %q: %w", topic, err)
 	}
@@ -213,7 +214,7 @@ func (c *AdminClient) ListConsumerGroups(ctx context.Context, topic string) ([]s
 // Returns ErrConflict when the group already exists.
 func (c *AdminClient) RegisterConsumerGroup(ctx context.Context, topic, group string) error {
 	body := map[string]string{"consumer_group": group}
-	resp, err := c.doRequest(ctx, http.MethodPost, c.baseURL+"/api/topics/"+topic+"/consumer-groups", body)
+	resp, err := c.doRequest(ctx, http.MethodPost, c.baseURL+"/api/topics/"+url.PathEscape(topic)+"/consumer-groups", body)
 	if err != nil {
 		return fmt.Errorf("register consumer group %q on topic %q: %w", group, topic, err)
 	}
@@ -224,7 +225,7 @@ func (c *AdminClient) RegisterConsumerGroup(ctx context.Context, topic, group st
 // UnregisterConsumerGroup removes group from topic.
 // Returns ErrNotFound when the group does not exist.
 func (c *AdminClient) UnregisterConsumerGroup(ctx context.Context, topic, group string) error {
-	resp, err := c.doRequest(ctx, http.MethodDelete, c.baseURL+"/api/topics/"+topic+"/consumer-groups/"+group, nil)
+	resp, err := c.doRequest(ctx, http.MethodDelete, c.baseURL+"/api/topics/"+url.PathEscape(topic)+"/consumer-groups/"+url.PathEscape(group), nil)
 	if err != nil {
 		return fmt.Errorf("unregister consumer group %q on topic %q: %w", group, topic, err)
 	}

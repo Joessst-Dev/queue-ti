@@ -14,45 +14,14 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// adminFakeServer captures incoming requests and serves canned JSON responses.
-type adminFakeServer struct {
-	mu           sync.Mutex
-	requests     []*http.Request
-	rawBodies    [][]byte
-	statusCode   int
-	responseBody []byte
-}
-
-func (f *adminFakeServer) handler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-
-		// Snapshot the request body before the handler returns.
-		var raw []byte
-		if r.Body != nil {
-			if err := json.NewDecoder(r.Body).Decode(new(json.RawMessage)); err == nil {
-				// Re-read for recording: parse into generic map then re-encode.
-			}
-			r.Body.Close()
-		}
-		// Simpler: just store a clone of the decoded body separately.
-		f.requests = append(f.requests, r)
-		f.rawBodies = append(f.rawBodies, raw)
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(f.statusCode)
-		_, _ = w.Write(f.responseBody)
-	}
-}
-
-
-// newFake builds an httptest.Server with canned status + body.
+// newFake builds an httptest.Server that always responds with statusCode and body.
 // The caller is responsible for calling ts.Close().
-func newFake(statusCode int, body []byte) (*adminFakeServer, *httptest.Server) {
-	f := &adminFakeServer{statusCode: statusCode, responseBody: body}
-	ts := httptest.NewServer(f.handler())
-	return f, ts
+func newFake(statusCode int, body []byte) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
+		_, _ = w.Write(body)
+	}))
 }
 
 // captureBodyServer records the raw request body in addition to headers.
@@ -125,7 +94,7 @@ var _ = Describe("AdminClient", func() {
 		Context("when the server returns a list of configs", func() {
 			It("returns the items array", func() {
 				body := []byte(`{"items":[{"topic":"orders","replayable":true},{"topic":"payments","replayable":false}]}`)
-				_, ts := newFake(http.StatusOK, body)
+				ts := newFake(http.StatusOK, body)
 				defer ts.Close()
 
 				client := queueti.NewAdminClient(ts.URL, queueti.WithAdminToken("secret"))
@@ -142,7 +111,7 @@ var _ = Describe("AdminClient", func() {
 		Context("when the server returns an empty list", func() {
 			It("returns an empty (not nil) slice", func() {
 				body := []byte(`{"items":[]}`)
-				_, ts := newFake(http.StatusOK, body)
+				ts := newFake(http.StatusOK, body)
 				defer ts.Close()
 
 				client := queueti.NewAdminClient(ts.URL)
@@ -207,7 +176,7 @@ var _ = Describe("AdminClient", func() {
 		Context("when the server returns schemas", func() {
 			It("returns the items array", func() {
 				body := []byte(`{"items":[{"topic":"orders","schema_json":"{}","version":1,"updated_at":"2024-01-01T00:00:00Z"}]}`)
-				_, ts := newFake(http.StatusOK, body)
+				ts := newFake(http.StatusOK, body)
 				defer ts.Close()
 
 				client := queueti.NewAdminClient(ts.URL)
@@ -225,7 +194,7 @@ var _ = Describe("AdminClient", func() {
 		Context("when the schema exists", func() {
 			It("returns the schema for the requested topic", func() {
 				body := []byte(`{"topic":"orders","schema_json":"{\"type\":\"record\"}","version":2,"updated_at":"2024-06-01T00:00:00Z"}`)
-				_, ts := newFake(http.StatusOK, body)
+				ts := newFake(http.StatusOK, body)
 				defer ts.Close()
 
 				client := queueti.NewAdminClient(ts.URL)
@@ -239,7 +208,7 @@ var _ = Describe("AdminClient", func() {
 
 		Context("when the schema does not exist", func() {
 			It("returns ErrNotFound", func() {
-				_, ts := newFake(http.StatusNotFound, []byte(`{"error":"not found"}`))
+				ts := newFake(http.StatusNotFound, []byte(`{"error":"not found"}`))
 				defer ts.Close()
 
 				client := queueti.NewAdminClient(ts.URL)
@@ -296,7 +265,7 @@ var _ = Describe("AdminClient", func() {
 		Context("when consumer groups exist for the topic", func() {
 			It("returns the items array", func() {
 				body := []byte(`{"items":["billing","analytics"]}`)
-				_, ts := newFake(http.StatusOK, body)
+				ts := newFake(http.StatusOK, body)
 				defer ts.Close()
 
 				client := queueti.NewAdminClient(ts.URL)
@@ -328,7 +297,7 @@ var _ = Describe("AdminClient", func() {
 
 		Context("when the group already exists", func() {
 			It("returns ErrConflict", func() {
-				_, ts := newFake(http.StatusConflict, []byte(`{"error":"already exists"}`))
+				ts := newFake(http.StatusConflict, []byte(`{"error":"already exists"}`))
 				defer ts.Close()
 
 				client := queueti.NewAdminClient(ts.URL)
@@ -359,7 +328,7 @@ var _ = Describe("AdminClient", func() {
 
 		Context("when the group does not exist", func() {
 			It("returns ErrNotFound", func() {
-				_, ts := newFake(http.StatusNotFound, []byte(`{"error":"not found"}`))
+				ts := newFake(http.StatusNotFound, []byte(`{"error":"not found"}`))
 				defer ts.Close()
 
 				client := queueti.NewAdminClient(ts.URL)
@@ -378,7 +347,7 @@ var _ = Describe("AdminClient", func() {
 		Context("when the server returns topic statistics", func() {
 			It("returns the topics array", func() {
 				body := []byte(`{"topics":[{"topic":"orders","status":"pending","count":42},{"topic":"orders","status":"acked","count":7}]}`)
-				_, ts := newFake(http.StatusOK, body)
+				ts := newFake(http.StatusOK, body)
 				defer ts.Close()
 
 				client := queueti.NewAdminClient(ts.URL)
