@@ -33,6 +33,8 @@ npm install @queue-ti/client
 pip install queue-ti-client
 ```
 
+All clients include a `QueueTiAuth` helper (or `NewAuth` in Go) that automatically detects whether authentication is enabled, handles login, and manages token refresh—no boilerplate needed. See each client's README for usage.
+
 **Java** (GitHub Packages — [see setup instructions](https://joessst-dev.github.io/queue-ti/clients/java)):
 
 ```kotlin
@@ -48,6 +50,23 @@ dotnet add package QueueTi.Client
 ```
 
 Latest version: [nuget.org/packages/QueueTi.Client](https://www.nuget.org/packages/QueueTi.Client)
+
+### Example Applications
+
+Each client library includes a **producer → consumer → ack** order pipeline example:
+
+```bash
+# Go
+cd clients/go-client/examples/order-pipeline && go run main.go
+
+# Node.js
+cd clients/node && npx ts-node --transpile-only examples/order-pipeline/index.ts
+
+# Python
+cd clients/python && python -m examples.order_pipeline
+```
+
+The examples use built-in `QueueTiAuth` helpers and run against a local queue-ti instance (default credentials: `admin` / `secret`). Override with `QUEUETI_USERNAME` / `QUEUETI_PASSWORD` environment variables.
 
 ## License
 
