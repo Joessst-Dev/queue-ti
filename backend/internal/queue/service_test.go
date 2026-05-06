@@ -592,6 +592,103 @@ var _ = Describe("Queue Service", func() {
 					Expect(originalTopic).To(BeEmpty())
 				})
 			})
+
+			Context("when a topic has a per-topic MaxRetries of 1 and the global dlqThreshold is higher", func() {
+				var messageID string
+
+				BeforeEach(func() {
+					// Global dlqThreshold = 5 — without the fix the message would
+					// not be promoted on the first nack. Per-topic MaxRetries = 1
+					// should take precedence and trigger DLQ promotion immediately.
+					service = queue.NewService(pool, 30*time.Second, 10, 0, 5, false, queue.NoopRecorder{})
+
+					perTopicRetries := 1
+					err := service.UpsertTopicConfig(ctx, queue.TopicConfig{
+						Topic:      "payments",
+						MaxRetries: &perTopicRetries,
+					})
+					Expect(err).NotTo(HaveOccurred())
+
+					messageID, err = service.Enqueue(ctx, "payments", []byte("charge"), nil, nil)
+					Expect(err).NotTo(HaveOccurred())
+
+					_, err = service.Dequeue(ctx, "payments", 0)
+					Expect(err).NotTo(HaveOccurred())
+
+					err = service.Nack(ctx, messageID, "card declined")
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should promote the message to payments.dlq after the first nack", func() {
+					var topic string
+					err := pool.QueryRow(ctx,
+						`SELECT topic FROM messages WHERE id = $1`, messageID,
+					).Scan(&topic)
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(topic).To(Equal("payments.dlq"))
+				})
+			})
+
+			Context("when a topic has a per-topic MaxRetries of 3 and the global dlqThreshold is lower (1)", func() {
+				var messageID string
+
+				BeforeEach(func() {
+					// Global dlqThreshold = 1 — without the fix the message would
+					// be promoted after the first nack. Per-topic MaxRetries = 3
+					// should override and allow two retries before DLQ promotion.
+					service = queue.NewService(pool, 30*time.Second, 10, 0, 1, false, queue.NoopRecorder{})
+
+					perTopicRetries := 3
+					err := service.UpsertTopicConfig(ctx, queue.TopicConfig{
+						Topic:      "notifications",
+						MaxRetries: &perTopicRetries,
+					})
+					Expect(err).NotTo(HaveOccurred())
+
+					messageID, err = service.Enqueue(ctx, "notifications", []byte("send email"), nil, nil)
+					Expect(err).NotTo(HaveOccurred())
+
+					_, err = service.Dequeue(ctx, "notifications", 0)
+					Expect(err).NotTo(HaveOccurred())
+
+					// First nack — should NOT promote (retry_count 1 < 3).
+					err = service.Nack(ctx, messageID, "smtp timeout")
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should keep the message on the original topic after the first nack", func() {
+					var topic string
+					err := pool.QueryRow(ctx,
+						`SELECT topic FROM messages WHERE id = $1`, messageID,
+					).Scan(&topic)
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(topic).To(Equal("notifications"))
+				})
+
+				It("should promote to DLQ on the third nack (retry_count reaches 3)", func() {
+					// Second nack.
+					_, err := service.Dequeue(ctx, "notifications", 0)
+					Expect(err).NotTo(HaveOccurred())
+					err = service.Nack(ctx, messageID, "smtp timeout")
+					Expect(err).NotTo(HaveOccurred())
+
+					// Third nack — retry_count = 3 equals per-topic MaxRetries.
+					_, err = service.Dequeue(ctx, "notifications", 0)
+					Expect(err).NotTo(HaveOccurred())
+					err = service.Nack(ctx, messageID, "smtp timeout")
+					Expect(err).NotTo(HaveOccurred())
+
+					var topic string
+					err = pool.QueryRow(ctx,
+						`SELECT topic FROM messages WHERE id = $1`, messageID,
+					).Scan(&topic)
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(topic).To(Equal("notifications.dlq"))
+				})
+			})
 		})
 
 		// --- Requeue ---
@@ -650,6 +747,52 @@ var _ = Describe("Queue Service", func() {
 					msg, err := service.Dequeue(ctx, "shipments", 0)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(msg.ID).To(Equal(messageID))
+				})
+			})
+
+			Context("when the original topic has a per-topic MaxRetries configured", func() {
+				var messageID string
+
+				BeforeEach(func() {
+					// Per-topic MaxRetries = 1, global dlqThreshold = 10.
+					// One nack promotes to DLQ (per-topic wins over global).
+					// After requeue, max_retries should be restored to the per-topic value (1).
+					service = queue.NewService(pool, 30*time.Second, 10, 0, 10, false, queue.NoopRecorder{})
+
+					perTopicRetries := 1
+					err := service.UpsertTopicConfig(ctx, queue.TopicConfig{
+						Topic:      "refunds",
+						MaxRetries: &perTopicRetries,
+					})
+					Expect(err).NotTo(HaveOccurred())
+
+					messageID, err = service.Enqueue(ctx, "refunds", []byte("process refund"), nil, nil)
+					Expect(err).NotTo(HaveOccurred())
+
+					_, err = service.Dequeue(ctx, "refunds", 0)
+					Expect(err).NotTo(HaveOccurred())
+
+					err = service.Nack(ctx, messageID, "gateway error")
+					Expect(err).NotTo(HaveOccurred())
+
+					// Confirm it landed in the DLQ.
+					var topic string
+					err = pool.QueryRow(ctx, `SELECT topic FROM messages WHERE id = $1`, messageID).Scan(&topic)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(topic).To(Equal("refunds.dlq"))
+				})
+
+				It("should restore max_retries to the per-topic value after requeue", func() {
+					err := service.Requeue(ctx, messageID)
+					Expect(err).NotTo(HaveOccurred())
+
+					var maxRetries int
+					err = pool.QueryRow(ctx,
+						`SELECT max_retries FROM messages WHERE id = $1`, messageID,
+					).Scan(&maxRetries)
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(maxRetries).To(Equal(1))
 				})
 			})
 

@@ -551,5 +551,97 @@ var _ = Describe("Consumer Groups", func() {
 				Expect(err).To(MatchError(ContainSubstring(queue.ErrNotProcessing.Error())))
 			})
 		})
+
+		Context("when a per-topic MaxRetries is lower than the global dlqThreshold", func() {
+			const perTopicTopic = "cg-per-topic-low"
+			var msgID string
+
+			BeforeEach(func() {
+				// Global dlqThreshold = 5 — without the fix one nack would leave
+				// the delivery as 'pending'. Per-topic MaxRetries = 1 should take
+				// precedence and mark the delivery 'failed' immediately.
+				svc = queue.NewService(pool, 30*time.Second, 3, 0, 5, false, queue.NoopRecorder{})
+
+				perTopicRetries := 1
+				err := svc.UpsertTopicConfig(ctx, queue.TopicConfig{
+					Topic:      perTopicTopic,
+					MaxRetries: &perTopicRetries,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(svc.RegisterConsumerGroup(ctx, perTopicTopic, "groupA")).To(Succeed())
+
+				msgID, err = svc.Enqueue(ctx, perTopicTopic, []byte("work"), nil, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = svc.DequeueForGroup(ctx, perTopicTopic, "groupA", 30*time.Second)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should mark the delivery failed after the first nack", func() {
+				Expect(svc.NackForGroup(ctx, msgID, "groupA", "threshold hit")).To(Succeed())
+
+				var status string
+				Expect(pool.QueryRow(ctx,
+					`SELECT status FROM message_deliveries WHERE message_id = $1 AND consumer_group = 'groupA'`, msgID,
+				).Scan(&status)).To(Succeed())
+				Expect(status).To(Equal("failed"))
+			})
+		})
+
+		Context("when a per-topic MaxRetries is higher than the global dlqThreshold", func() {
+			const perTopicTopic = "cg-per-topic-high"
+			var msgID string
+
+			BeforeEach(func() {
+				// Global dlqThreshold = 1 — without the fix one nack would mark
+				// the delivery 'failed'. Per-topic MaxRetries = 3 should override
+				// and keep the delivery 'pending' so it can be retried.
+				svc = queue.NewService(pool, 30*time.Second, 3, 0, 1, false, queue.NoopRecorder{})
+
+				perTopicRetries := 3
+				err := svc.UpsertTopicConfig(ctx, queue.TopicConfig{
+					Topic:      perTopicTopic,
+					MaxRetries: &perTopicRetries,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(svc.RegisterConsumerGroup(ctx, perTopicTopic, "groupA")).To(Succeed())
+
+				msgID, err = svc.Enqueue(ctx, perTopicTopic, []byte("work"), nil, nil)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should keep the delivery pending after the first nack", func() {
+				_, err := svc.DequeueForGroup(ctx, perTopicTopic, "groupA", 30*time.Second)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(svc.NackForGroup(ctx, msgID, "groupA", "transient")).To(Succeed())
+
+				var status string
+				Expect(pool.QueryRow(ctx,
+					`SELECT status FROM message_deliveries WHERE message_id = $1 AND consumer_group = 'groupA'`, msgID,
+				).Scan(&status)).To(Succeed())
+				Expect(status).To(Equal("pending"))
+			})
+
+			It("should mark the delivery failed on the third nack", func() {
+				for i := range 3 {
+					_, err := svc.DequeueForGroup(ctx, perTopicTopic, "groupA", 30*time.Second)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(svc.NackForGroup(ctx, msgID, "groupA", "transient")).To(Succeed())
+
+					var status string
+					Expect(pool.QueryRow(ctx,
+						`SELECT status FROM message_deliveries WHERE message_id = $1 AND consumer_group = 'groupA'`, msgID,
+					).Scan(&status)).To(Succeed())
+
+					if i < 2 {
+						Expect(status).To(Equal("pending"), "expected pending after nack %d", i+1)
+					} else {
+						Expect(status).To(Equal("failed"), "expected failed after nack %d", i+1)
+					}
+				}
+			})
+		})
 	})
 })
