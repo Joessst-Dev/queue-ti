@@ -158,7 +158,7 @@ In the DLQ topic:
 - `dlq_moved_at` is set to the promotion timestamp
 - `retry_count` resets to 0
 
-To reprocess a DLQ message, call the `POST /api/messages/:id/requeue` endpoint. This restores the message to its original topic with `retry_count = 0` and `max_retries` restored to the configured default, allowing it to be dequeued and processed again.
+To reprocess a DLQ message, call the `POST /api/messages/:id/requeue` endpoint. This restores the message to its original topic with `retry_count = 0` and `max_retries` restored to the effective DLQ threshold for that topic (per-topic `max_retries` if configured, otherwise the global `dlq_threshold`), allowing it to be dequeued and processed again.
 
 > **Note:** The DLQ topic name (`<topic>.dlq`) is reserved. Attempting to enqueue directly to a topic ending in `.dlq` returns an error.
 
