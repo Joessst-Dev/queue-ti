@@ -117,13 +117,14 @@ client = await connect("myserver:50051")
 ### Custom CA certificate (self-signed server)
 
 ```python
+from pathlib import Path
 from queueti import connect, ConnectOptions, TLSOptions
 
 client = await connect(
     "myserver:50051",
     options=ConnectOptions(
         tls=TLSOptions(
-            root_certificates=open("/path/to/ca.pem", "rb").read(),
+            root_certificates=Path("/path/to/ca.pem").read_bytes(),
         ),
     ),
 )
@@ -132,13 +133,16 @@ client = await connect(
 ### Mutual TLS (mTLS)
 
 ```python
+from pathlib import Path
+from queueti import connect, ConnectOptions, TLSOptions
+
 client = await connect(
     "myserver:50051",
     options=ConnectOptions(
         tls=TLSOptions(
-            root_certificates=open("/path/to/ca.pem", "rb").read(),
-            private_key=open("/path/to/client-key.pem", "rb").read(),
-            certificate_chain=open("/path/to/client-cert.pem", "rb").read(),
+            root_certificates=Path("/path/to/ca.pem").read_bytes(),
+            private_key=Path("/path/to/client-key.pem").read_bytes(),
+            certificate_chain=Path("/path/to/client-cert.pem").read_bytes(),
         ),
     ),
 )
@@ -147,15 +151,19 @@ client = await connect(
 ### Self-signed cert with hostname override
 
 ```python
+from pathlib import Path
+from queueti import connect, ConnectOptions, TLSOptions
+
 client = await connect(
     "localhost:50051",
     options=ConnectOptions(
         tls=TLSOptions(
-            root_certificates=open("/path/to/ca.pem", "rb").read(),
+            root_certificates=Path("/path/to/ca.pem").read_bytes(),
             server_name_override="myserver.internal",
         ),
     ),
 )
+```
 
 ### connect_sync
 

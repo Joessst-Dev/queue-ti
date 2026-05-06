@@ -143,6 +143,7 @@ c, err := queueti.Dial("localhost:50051",
         ServerName: "myserver.internal",
     }),
 )
+```
 
 ### Producer
 

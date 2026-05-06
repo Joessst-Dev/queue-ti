@@ -69,6 +69,9 @@ func WithTokenRefresher(r TokenRefresher) DialOption {
 //	// Server name override (self-signed cert with different hostname):
 //	queueti.WithTLS(&tls.Config{RootCAs: pool, ServerName: "myserver.internal"})
 func WithTLS(cfg *tls.Config) DialOption {
+	if cfg == nil {
+		cfg = &tls.Config{}
+	}
 	return func(d *dialConfig) {
 		d.grpcOpts = append(d.grpcOpts, grpc.WithTransportCredentials(credentials.NewTLS(cfg)))
 	}

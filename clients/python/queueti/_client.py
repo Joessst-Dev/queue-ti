@@ -125,7 +125,7 @@ async def connect(address: str, options: ConnectOptions | None = None) -> AsyncC
         channel = grpc.aio.secure_channel(
             address,
             grpc.composite_channel_credentials(base_creds, token_creds),
-            options=channel_opts or None,
+            options=channel_opts if channel_opts else None,
         )
     elif insecure:
         channel = grpc.aio.insecure_channel(address)

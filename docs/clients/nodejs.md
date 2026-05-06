@@ -133,6 +133,7 @@ const client = await connect('localhost:50051', {
     serverNameOverride: 'myserver.internal',
   },
 })
+```
 
 ### Producer
 
