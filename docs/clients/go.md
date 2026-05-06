@@ -88,8 +88,62 @@ defer c.Close()
 
 **Options:**
 - `WithInsecure()` — Use plaintext instead of TLS (for local development)
+- `WithTLS(cfg *tls.Config)` — Custom TLS configuration (custom CA, mTLS, server name override); mutually exclusive with `WithInsecure`
 - `WithBearerToken(token)` — Set initial JWT token for auth
 - `WithTokenRefresher(func(ctx context.Context) (string, error))` — Function to refresh JWT tokens before expiry
+- `WithGRPCOption(o grpc.DialOption)` — Pass a raw gRPC dial option for advanced use
+
+## TLS Configuration
+
+### Default TLS (system CAs)
+
+```go
+c, err := queueti.Dial("myserver:50051",
+    queueti.WithBearerToken(token),
+)
+```
+
+### Custom CA certificate (self-signed server)
+
+```go
+import (
+    "crypto/tls"
+    "crypto/x509"
+    "os"
+)
+
+caPEM, _ := os.ReadFile("/path/to/ca.pem")
+pool := x509.NewCertPool()
+pool.AppendCertsFromPEM(caPEM)
+
+c, err := queueti.Dial("myserver:50051",
+    queueti.WithTLS(&tls.Config{RootCAs: pool}),
+)
+```
+
+### Mutual TLS (mTLS)
+
+```go
+cert, _ := tls.LoadX509KeyPair("/path/to/client-cert.pem", "/path/to/client-key.pem")
+
+c, err := queueti.Dial("myserver:50051",
+    queueti.WithTLS(&tls.Config{
+        RootCAs:      pool,
+        Certificates: []tls.Certificate{cert},
+    }),
+)
+```
+
+### Self-signed cert with hostname override
+
+```go
+c, err := queueti.Dial("localhost:50051",
+    queueti.WithTLS(&tls.Config{
+        RootCAs:    pool,
+        ServerName: "myserver.internal",
+    }),
+)
+```
 
 ### Producer
 

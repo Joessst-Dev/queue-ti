@@ -2,6 +2,7 @@ package queueti
 
 import (
 	"context"
+	"crypto/tls"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -47,6 +48,32 @@ func WithBearerToken(token string) DialOption {
 func WithTokenRefresher(r TokenRefresher) DialOption {
 	return func(cfg *dialConfig) {
 		cfg.refresher = r
+	}
+}
+
+// WithTLS configures custom TLS transport credentials. Pass a *tls.Config to
+// supply a custom CA pool, client certificate (mTLS), or server name override.
+// Mutually exclusive with WithInsecure.
+//
+// Common patterns:
+//
+//	// Custom CA (self-signed server):
+//	pool := x509.NewCertPool()
+//	pool.AppendCertsFromPEM(caPEM)
+//	queueti.WithTLS(&tls.Config{RootCAs: pool})
+//
+//	// mTLS:
+//	cert, _ := tls.X509KeyPair(certPEM, keyPEM)
+//	queueti.WithTLS(&tls.Config{RootCAs: pool, Certificates: []tls.Certificate{cert}})
+//
+//	// Server name override (self-signed cert with different hostname):
+//	queueti.WithTLS(&tls.Config{RootCAs: pool, ServerName: "myserver.internal"})
+func WithTLS(cfg *tls.Config) DialOption {
+	if cfg == nil {
+		cfg = &tls.Config{}
+	}
+	return func(d *dialConfig) {
+		d.grpcOpts = append(d.grpcOpts, grpc.WithTransportCredentials(credentials.NewTLS(cfg)))
 	}
 }
 

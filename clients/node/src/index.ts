@@ -5,6 +5,7 @@ export type { MessageHandler, BatchHandler } from './consumer'
 export type { Message } from './message'
 export type {
   ConnectOptions,
+  TLSOptions,
   TokenRefresher,
   PublishOptions,
   ConsumerOptions,

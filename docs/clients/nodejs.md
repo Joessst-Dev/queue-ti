@@ -81,8 +81,59 @@ const client = await connect('localhost:50051', {
 
 **Options:**
 - `insecure` (boolean) — Use plaintext instead of TLS (for local development)
-- `auth.token` (string, optional) — Initial JWT token for auth
-- `auth.refreshToken` (async function, optional) — Function to refresh JWT tokens before expiry
+- `tls` (TLSOptions, optional) — Custom TLS configuration (ignored when `insecure` is true)
+- `token` (string, optional) — Initial JWT token for auth
+- `tokenRefresher` (async function, optional) — Function to refresh JWT tokens before expiry
+
+**TLSOptions:**
+- `rootCerts` (Buffer, optional) — PEM-encoded CA certificate(s); uses system CAs when omitted
+- `privateKey` (Buffer, optional) — PEM-encoded client private key for mTLS (requires `certChain`)
+- `certChain` (Buffer, optional) — PEM-encoded client certificate chain for mTLS (requires `privateKey`)
+- `serverNameOverride` (string, optional) — Override the hostname used for TLS SNI/verification (useful with self-signed certs)
+
+## TLS Configuration
+
+### Default TLS (system CAs)
+
+```typescript
+const client = await connect('myserver:50051')
+```
+
+### Custom CA certificate (self-signed server)
+
+```typescript
+import fs from 'fs'
+import { connect } from '@queue-ti/client'
+
+const client = await connect('myserver:50051', {
+  tls: {
+    rootCerts: fs.readFileSync('/path/to/ca.pem'),
+  },
+})
+```
+
+### Mutual TLS (mTLS)
+
+```typescript
+const client = await connect('myserver:50051', {
+  tls: {
+    rootCerts: fs.readFileSync('/path/to/ca.pem'),
+    privateKey: fs.readFileSync('/path/to/client-key.pem'),
+    certChain: fs.readFileSync('/path/to/client-cert.pem'),
+  },
+})
+```
+
+### Self-signed cert with hostname override
+
+```typescript
+const client = await connect('localhost:50051', {
+  tls: {
+    rootCerts: fs.readFileSync('/path/to/ca.pem'),
+    serverNameOverride: 'myserver.internal',
+  },
+})
+```
 
 ### Producer
 
