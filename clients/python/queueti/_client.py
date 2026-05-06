@@ -7,7 +7,7 @@ import grpc
 import grpc.aio
 
 from queueti._consumer import AsyncConsumer
-from queueti._options import ConnectOptions, ConsumerOptions, TokenRefresher
+from queueti._options import ConnectOptions, ConsumerOptions, TLSOptions, TokenRefresher
 from queueti._producer import AsyncProducer
 from queueti._token_store import TokenStore, seconds_until_expiry
 from queueti.pb import queue_pb2_grpc
@@ -94,6 +94,16 @@ class AsyncClient:
             retry_backoff = _RETRY_BACKOFF_START
 
 
+def _ssl_creds(tls: TLSOptions | None) -> grpc.ChannelCredentials:
+    if tls is None:
+        return grpc.ssl_channel_credentials()
+    return grpc.ssl_channel_credentials(
+        root_certificates=tls.root_certificates,
+        private_key=tls.private_key,
+        certificate_chain=tls.certificate_chain,
+    )
+
+
 async def connect(address: str, options: ConnectOptions | None = None) -> AsyncClient:
     """Connect to a queue-ti server and return an :class:`AsyncClient`.
 
@@ -106,17 +116,21 @@ async def connect(address: str, options: ConnectOptions | None = None) -> AsyncC
         store = TokenStore(options.token)
 
     insecure = options is not None and options.insecure
+    tls = options.tls if options is not None else None
+    channel_opts = [('grpc.ssl_target_name_override', tls.server_name_override)] if tls and tls.server_name_override else []
 
     if store is not None:
-        base_creds = grpc.local_channel_credentials() if insecure else grpc.ssl_channel_credentials()
+        base_creds = grpc.local_channel_credentials() if insecure else _ssl_creds(tls)
         token_creds = grpc.metadata_call_credentials(_BearerPlugin(store))
         channel = grpc.aio.secure_channel(
-            address, grpc.composite_channel_credentials(base_creds, token_creds)
+            address,
+            grpc.composite_channel_credentials(base_creds, token_creds),
+            options=channel_opts or None,
         )
     elif insecure:
         channel = grpc.aio.insecure_channel(address)
     else:
-        channel = grpc.aio.secure_channel(address, grpc.ssl_channel_credentials())
+        channel = grpc.aio.secure_channel(address, _ssl_creds(tls), options=channel_opts or None)
 
     stub = queue_pb2_grpc.QueueServiceStub(channel)
     return AsyncClient(channel, stub, store, options)

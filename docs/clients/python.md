@@ -96,8 +96,66 @@ client = await connect(
 
 **ConnectOptions:**
 - `insecure` (bool) — Use plaintext instead of TLS (for local development)
-- `auth_token` (str, optional) — Initial JWT token for auth
+- `tls` (TLSOptions, optional) — Custom TLS configuration (ignored when `insecure=True`)
+- `token` (str, optional) — Initial JWT token for auth
 - `token_refresher` (async callable, optional) — Function to refresh JWT tokens before expiry
+
+**TLSOptions:**
+- `root_certificates` (bytes, optional) — PEM-encoded CA certificate(s); uses system CAs when omitted
+- `private_key` (bytes, optional) — PEM-encoded client private key for mTLS (requires `certificate_chain`)
+- `certificate_chain` (bytes, optional) — PEM-encoded client certificate chain for mTLS (requires `private_key`)
+- `server_name_override` (str, optional) — Override the hostname used for TLS SNI/verification (useful with self-signed certs)
+
+## TLS Configuration
+
+### Default TLS (system CAs)
+
+```python
+client = await connect("myserver:50051")
+```
+
+### Custom CA certificate (self-signed server)
+
+```python
+from queueti import connect, ConnectOptions, TLSOptions
+
+client = await connect(
+    "myserver:50051",
+    options=ConnectOptions(
+        tls=TLSOptions(
+            root_certificates=open("/path/to/ca.pem", "rb").read(),
+        ),
+    ),
+)
+```
+
+### Mutual TLS (mTLS)
+
+```python
+client = await connect(
+    "myserver:50051",
+    options=ConnectOptions(
+        tls=TLSOptions(
+            root_certificates=open("/path/to/ca.pem", "rb").read(),
+            private_key=open("/path/to/client-key.pem", "rb").read(),
+            certificate_chain=open("/path/to/client-cert.pem", "rb").read(),
+        ),
+    ),
+)
+```
+
+### Self-signed cert with hostname override
+
+```python
+client = await connect(
+    "localhost:50051",
+    options=ConnectOptions(
+        tls=TLSOptions(
+            root_certificates=open("/path/to/ca.pem", "rb").read(),
+            server_name_override="myserver.internal",
+        ),
+    ),
+)
 
 ### connect_sync
 

@@ -5,10 +5,19 @@ TokenRefresher = Callable[[], Awaitable[str]]
 
 
 @dataclass
+class TLSOptions:
+    root_certificates: bytes | None = None   # PEM CA cert(s); uses system CAs when None
+    private_key: bytes | None = None         # PEM client private key for mTLS
+    certificate_chain: bytes | None = None   # PEM client cert chain for mTLS
+    server_name_override: str | None = None  # override hostname for TLS SNI/verification
+
+
+@dataclass
 class ConnectOptions:
     token: str | None = None
     token_refresher: TokenRefresher | None = None
     insecure: bool = False
+    tls: TLSOptions | None = None  # custom TLS config; ignored when insecure=True
 
 
 @dataclass

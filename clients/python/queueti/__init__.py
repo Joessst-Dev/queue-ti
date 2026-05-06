@@ -6,7 +6,7 @@ from queueti._client import AsyncClient, connect
 from queueti._consumer import AsyncConsumer, BatchHandler, MessageHandler
 from queueti._exceptions import AckError, AdminError, NackError, PublishError, QueueTiError
 from queueti._message import Message, SyncMessage
-from queueti._options import BatchOptions, ConnectOptions, ConsumerOptions, PublishOptions
+from queueti._options import BatchOptions, ConnectOptions, ConsumerOptions, PublishOptions, TLSOptions
 from queueti._producer import AsyncProducer
 from queueti._sync import Client, Consumer, Producer, connect_sync
 
@@ -35,6 +35,7 @@ __all__ = [
     "SyncMessage",
     # Options
     "ConnectOptions",
+    "TLSOptions",
     "PublishOptions",
     "ConsumerOptions",
     "BatchOptions",

@@ -2,7 +2,7 @@ import * as protoLoader from '@grpc/proto-loader'
 import * as grpc from '@grpc/grpc-js'
 import fs from 'fs'
 import path from 'path'
-import { ConnectOptions, ConsumerOptions, TokenRefresher } from './options'
+import { ConnectOptions, ConsumerOptions, TLSOptions, TokenRefresher } from './options'
 import { TokenStore, parseTokenExpiry } from './token-store'
 import { sleepUntilOrAbort } from './internal/sleep'
 import { Producer, ProducerStub } from './producer'
@@ -116,14 +116,23 @@ export class Client {
 
 export async function connect(address: string, options?: ConnectOptions): Promise<Client> {
   let credentials: grpc.ChannelCredentials
+  const channelOptions: grpc.ChannelOptions = {}
+
   if (options?.insecure) {
     credentials = grpc.credentials.createInsecure()
   } else {
-    credentials = grpc.credentials.createSsl()
+    const tls: TLSOptions | undefined = options?.tls
+    credentials = grpc.credentials.createSsl(
+      tls?.rootCerts ?? null,
+      tls?.privateKey ?? null,
+      tls?.certChain ?? null,
+    )
+    if (tls?.serverNameOverride) {
+      channelOptions['grpc.ssl_target_name_override'] = tls.serverNameOverride
+    }
   }
 
   let store: TokenStore | null = null
-  const channelOptions: grpc.ChannelOptions = {}
 
   if (options?.token) {
     store = new TokenStore(options.token)
