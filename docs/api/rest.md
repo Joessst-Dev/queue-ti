@@ -249,7 +249,7 @@ Signals that processing of a message failed.
 **Response:** HTTP 204 No Content
 
 **Behavior:**
-- If `retry_count + 1 >= dlq_threshold` (and `dlq_threshold > 0`): message is promoted to the dead-letter queue (`<topic>.dlq`)
+- If `retry_count + 1 >= dlq_threshold` (and `dlq_threshold > 0`): message is promoted to the dead-letter queue (`<topic>.dlq`); the effective threshold is the per-topic `max_retries` when configured, otherwise the global `dlq_threshold`
 - If retries remain: status reverts to `pending` and `retry_count` is incremented
 - Otherwise: status becomes `failed`
 
@@ -264,7 +264,7 @@ curl -X POST -H "Authorization: Bearer <token>" \
 
 **Response:** HTTP 204 No Content
 
-**Behavior:** Restores the message to its `original_topic`, resets `retry_count` to 0, restores `max_retries` to the configured default, and sets status to `pending`.
+**Behavior:** Restores the message to its `original_topic`, resets `retry_count` to 0, restores `max_retries` to the effective DLQ threshold for that topic (per-topic `max_retries` if configured, otherwise the global `dlq_threshold`), and sets status to `pending`.
 
 **Errors:**
 - HTTP 404 if the message is not found or is not a dead-letter message
@@ -302,7 +302,7 @@ curl -H "Authorization: Bearer <token>" http://localhost:8080/api/topic-configs
 | Field | Type | Description |
 |-------|------|-------------|
 | `topic` | string | Topic name |
-| `max_retries` | int\|null | Max delivery attempts before moving to DLQ |
+| `max_retries` | int\|null | Max delivery attempts before moving to DLQ; also overrides the global `dlq_threshold` for this topic |
 | `message_ttl_seconds` | int\|null | Seconds until an unprocessed message expires |
 | `max_depth` | int\|null | Maximum number of pending messages; enqueue returns HTTP 429 when full |
 | `throughput_limit` | int\|null | Max messages dequeued per second (soft limit) |

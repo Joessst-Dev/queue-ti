@@ -23,7 +23,7 @@ queue:
   visibility_timeout: 30s       # Time a dequeued message remains invisible to other consumers
   max_retries: 3                # Maximum number of retries for a failed message
   message_ttl: 24h              # Time-to-live for messages (0 = no expiry)
-  dlq_threshold: 3              # Retry count at which messages are promoted to DLQ (0 = disabled); overridden per-topic by max_retries in topic config
+  dlq_threshold: 3              # Retry count at which messages are promoted to DLQ (0 = disabled); overridden per-topic by `max_retries` in topic config
   require_topic_registration: false  # Require explicit topic registration before enqueue (default: false)
   delete_reaper_schedule: ""    # Cron schedule for automatic expired message deletion (empty = disabled)
 
