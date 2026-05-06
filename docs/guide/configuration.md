@@ -23,7 +23,7 @@ queue:
   visibility_timeout: 30s       # Time a dequeued message remains invisible to other consumers
   max_retries: 3                # Maximum number of retries for a failed message
   message_ttl: 24h              # Time-to-live for messages (0 = no expiry)
-  dlq_threshold: 3              # Retry count at which messages are promoted to DLQ (0 = disabled)
+  dlq_threshold: 3              # Retry count at which messages are promoted to DLQ (0 = disabled); overridden per-topic by max_retries in topic config
   require_topic_registration: false  # Require explicit topic registration before enqueue (default: false)
   delete_reaper_schedule: ""    # Cron schedule for automatic expired message deletion (empty = disabled)
 
@@ -58,7 +58,7 @@ Any configuration key can be overridden with an environment variable using the k
 | `QUEUETI_QUEUE_VISIBILITY_TIMEOUT` | Visibility timeout | `30s` |
 | `QUEUETI_QUEUE_MAX_RETRIES` | Max retry count per message | `3` |
 | `QUEUETI_QUEUE_MESSAGE_TTL` | Message time-to-live (0 = no expiry) | `24h` |
-| `QUEUETI_QUEUE_DLQ_THRESHOLD` | Retry count for DLQ promotion (0 = disabled) | `3` |
+| `QUEUETI_QUEUE_DLQ_THRESHOLD` | Global retry count for DLQ promotion (0 = disabled); per-topic `max_retries` takes precedence when set | `3` |
 | `QUEUETI_QUEUE_REQUIRE_TOPIC_REGISTRATION` | Require topics to be registered before enqueue | `false` |
 | `QUEUETI_QUEUE_DELETE_REAPER_SCHEDULE` | Cron schedule for automatic expired message deletion (empty = disabled) | (empty) |
 | `QUEUETI_AUTH_ENABLED` | Enable JWT authentication | `true` |

@@ -186,7 +186,7 @@ See [Configuration](./configuration) for details on setting the TTL and configur
 Individual topics can override the global queue settings. This is useful when certain topics require stricter retry limits, longer TTLs, queue depth constraints, or rate limiting.
 
 **Supported overrides:**
-- `max_retries` — Maximum retry count for messages on this topic (overrides global `max_retries`)
+- `max_retries` — Maximum retry count for messages on this topic **and** the DLQ promotion threshold (overrides both global `max_retries` and `dlq_threshold`). When set, a message is promoted to the DLQ after this many failed attempts instead of the global threshold.
 - `message_ttl_seconds` — Time-to-live for messages in seconds (overrides global `message_ttl`); set to `0` to disable TTL for this topic
 - `max_depth` — Maximum number of pending+processing messages allowed on this topic; set to `null` or `0` for unlimited; `Enqueue` returns HTTP 429 when the topic reaches capacity
 - `throughput_limit` — Maximum messages per second allowed to be dequeued from this topic; set to `null` or `0` for unlimited; when exhausted, dequeue returns fewer messages than requested (soft limiting, not an error)
