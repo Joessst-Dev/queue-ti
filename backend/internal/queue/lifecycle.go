@@ -10,6 +10,16 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// effectiveDLQThreshold returns the DLQ threshold to apply for a given topic.
+// Per-topic MaxRetries takes precedence over the global dlqThreshold when set.
+func (s *Service) effectiveDLQThreshold(ctx context.Context, topic string) int {
+	cfg, err := s.GetTopicConfig(ctx, topic)
+	if err == nil && cfg != nil && cfg.MaxRetries != nil {
+		return *cfg.MaxRetries
+	}
+	return s.dlqThreshold
+}
+
 // archiveToLog inserts a message into message_log when the topic is configured
 // as replayable. It is a no-op (nil error) when the topic is not replayable.
 func (s *Service) archiveToLog(ctx context.Context, tx pgx.Tx, id, topic string, key *string, payload, metaJSON []byte, retryCount, maxRetries int, lastError, originalTopic *string, createdAt time.Time) error {
@@ -115,7 +125,8 @@ func (s *Service) Nack(ctx context.Context, id string, processingError string) e
 	nextRetryCount := retryCount + 1
 
 	// Promote to DLQ when the threshold is configured and reached.
-	if s.dlqThreshold > 0 && nextRetryCount >= s.dlqThreshold {
+	dlqThreshold := s.effectiveDLQThreshold(ctx, topic)
+	if dlqThreshold > 0 && nextRetryCount >= dlqThreshold {
 		dlqTopic := topic + ".dlq"
 		_, err = tx.Exec(ctx, `
 			UPDATE messages
@@ -294,7 +305,8 @@ func (s *Service) NackForGroup(ctx context.Context, id, group, processingError s
 	// When the DLQ threshold is configured and reached, mark the delivery
 	// failed without touching the parent message — full per-group DLQ
 	// promotion is deferred to a future phase.
-	if s.dlqThreshold > 0 && nextRetryCount >= s.dlqThreshold {
+	dlqThreshold := s.effectiveDLQThreshold(ctx, topic)
+	if dlqThreshold > 0 && nextRetryCount >= dlqThreshold {
 		_, err = tx.Exec(ctx, `
 			UPDATE message_deliveries
 			SET    status      = 'failed',
@@ -390,7 +402,7 @@ func (s *Service) Requeue(ctx context.Context, id string) error {
 		    visibility_timeout = NULL,
 		    updated_at     = now()
 		WHERE id = $1
-	`, id, *originalTopic, s.dlqThreshold)
+	`, id, *originalTopic, s.effectiveDLQThreshold(ctx, *originalTopic))
 	if err != nil {
 		return fmt.Errorf("requeue update: %w", err)
 	}
