@@ -576,7 +576,6 @@ jobs:
             echo "Release $TAG already exists — updating."
             gh release edit "$TAG" \
               --title "$TAG" \
-              --generate-notes \
               $PRERELEASE_FLAG
           else
             gh release create "$TAG" \
