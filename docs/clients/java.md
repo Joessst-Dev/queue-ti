@@ -105,6 +105,42 @@ cd queue-ti-java-client
 
 Then use `mavenLocal()` as the repository and `1.0-SNAPSHOT` as the version.
 
+## Spring Boot Starter
+
+**Spring Boot users:** A Spring Boot starter is available as a separate artifact (`queue-ti-spring-boot-starter`) that auto-configures `QueueTiClient`, `Producer`, `AdminClient`, and `QueueTiAuth` as Spring beans — no boilerplate required.
+
+### Installation
+
+Add the starter instead of (or alongside) the core client:
+
+**Gradle (Kotlin DSL)**
+
+```kotlin
+dependencies {
+    implementation("de.joesst.dev:queue-ti-spring-boot-starter:VERSION")
+}
+```
+
+**Maven**
+
+```xml
+<dependency>
+    <groupId>de.joesst.dev</groupId>
+    <artifactId>queue-ti-spring-boot-starter</artifactId>
+    <version>VERSION</version>
+</dependency>
+```
+
+### Configuration
+
+```yaml
+queueti:
+  grpc-address: localhost:50051
+  insecure: true
+```
+
+All beans are then available for injection with no additional setup. For the full property reference see the [Spring Boot Starter](https://github.com/Joessst-Dev/queue-ti-java-client#spring-boot-starter) section in the Java client README.
+
 ## Quick Start
 
 ```java
