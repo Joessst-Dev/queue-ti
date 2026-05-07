@@ -177,6 +177,7 @@ consumer.consumeBatch(10, messages -> {
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `insecure` | `boolean` | `false` | Use plaintext channel (no TLS) |
+| `tls` | `TlsOptions` | `null` | Custom TLS configuration (custom CA, mTLS, server name override). Ignored when `insecure` is `true`. |
 | `token` | `String` | `null` | Initial JWT sent on every request |
 | `tokenRefresher` | `TokenRefresher` | `null` | Strategy to obtain fresh tokens |
 
@@ -232,6 +233,79 @@ The client wakes a background virtual thread 60 seconds before token expiry. On 
 ```java
 client.setToken(newToken);
 ```
+
+## TLS Configuration
+
+### Default TLS (system CAs)
+
+```java
+try (var client = QueueTiClient.connect("myserver:50051",
+        ConnectOptions.builder().build())) {
+    // ...
+}
+```
+
+### Custom CA certificate (self-signed server)
+
+```java
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+byte[] caPem = Files.readAllBytes(Path.of("/path/to/ca.pem"));
+
+try (var client = QueueTiClient.connect("myserver:50051",
+        ConnectOptions.builder()
+            .tls(TlsOptions.builder()
+                .rootCertificates(caPem)
+                .build())
+            .build())) {
+    // ...
+}
+```
+
+### Mutual TLS (mTLS)
+
+```java
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+try (var client = QueueTiClient.connect("myserver:50051",
+        ConnectOptions.builder()
+            .tls(TlsOptions.builder()
+                .rootCertificates(Files.readAllBytes(Path.of("/path/to/ca.pem")))
+                .privateKey(Files.readAllBytes(Path.of("/path/to/client-key.pem")))
+                .certificateChain(Files.readAllBytes(Path.of("/path/to/client-cert.pem")))
+                .build())
+            .build())) {
+    // ...
+}
+```
+
+### Self-signed cert with hostname override
+
+```java
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+try (var client = QueueTiClient.connect("localhost:50051",
+        ConnectOptions.builder()
+            .tls(TlsOptions.builder()
+                .rootCertificates(Files.readAllBytes(Path.of("/path/to/ca.pem")))
+                .serverNameOverride("myserver.internal")
+                .build())
+            .build())) {
+    // ...
+}
+```
+
+### TlsOptions
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `rootCertificates` | `byte[]` | `null` | PEM-encoded CA certificate(s); uses system CAs when `null`. |
+| `privateKey` | `byte[]` | `null` | PEM-encoded client private key for mTLS (requires `certificateChain`). |
+| `certificateChain` | `byte[]` | `null` | PEM-encoded client certificate chain for mTLS (requires `privateKey`). |
+| `serverNameOverride` | `String` | `null` | Override the hostname used for TLS SNI/verification (useful with self-signed certs). |
 
 ## Message fields
 
