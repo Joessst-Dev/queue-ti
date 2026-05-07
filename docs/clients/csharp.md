@@ -245,12 +245,11 @@ using QueueTi;
 
 var auth = await QueueTiAuth.LoginAsync("http://localhost:8080", "admin", "secret");
 // auth.Token is null when auth is disabled — QueueTiClient treats null BearerToken as unauthenticated
-// auth.RefreshAsync is a no-op delegate when auth is disabled, so it is always safe to assign
 
 await using var client = QueueTiClient.Create("https://queue.example.com:50051", new QueueTiClientOptions
 {
     BearerToken = auth.Token,
-    TokenRefresher = auth.RefreshAsync,
+    TokenRefresher = auth.Token is not null ? auth.RefreshAsync : null,
 });
 
 var admin = AdminClient.Create("http://localhost:8080",
