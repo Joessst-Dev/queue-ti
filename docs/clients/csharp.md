@@ -89,6 +89,61 @@ app.MapPost("/orders", async ([FromServices] QueueTiClient client) =>
 });
 ```
 
+## TLS Configuration
+
+### Default TLS (system CAs)
+
+```csharp
+var client = QueueTiClient.Create("https://queue.example.com:50051");
+```
+
+### Custom CA certificate (self-signed server)
+
+```csharp
+var caPem = await File.ReadAllBytesAsync("/path/to/ca.pem");
+
+var client = QueueTiClient.Create("https://myserver:50051", new QueueTiClientOptions
+{
+    Tls = new TlsOptions { RootCertificates = caPem }
+});
+```
+
+### Mutual TLS (mTLS)
+
+```csharp
+var client = QueueTiClient.Create("https://myserver:50051", new QueueTiClientOptions
+{
+    Tls = new TlsOptions
+    {
+        RootCertificates = await File.ReadAllBytesAsync("/path/to/ca.pem"),
+        PrivateKey = await File.ReadAllBytesAsync("/path/to/client-key.pem"),
+        CertificateChain = await File.ReadAllBytesAsync("/path/to/client-cert.pem"),
+    }
+});
+```
+
+### Self-signed cert with hostname override
+
+```csharp
+var client = QueueTiClient.Create("https://localhost:50051", new QueueTiClientOptions
+{
+    Tls = new TlsOptions
+    {
+        RootCertificates = await File.ReadAllBytesAsync("/path/to/ca.pem"),
+        ServerNameOverride = "myserver.internal",
+    }
+});
+```
+
+### TlsOptions
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `RootCertificates` | `byte[]?` | `null` | PEM-encoded CA certificate(s); uses system CAs when `null`. |
+| `PrivateKey` | `byte[]?` | `null` | PEM-encoded client private key for mTLS (requires `CertificateChain`). |
+| `CertificateChain` | `byte[]?` | `null` | PEM-encoded client certificate chain for mTLS (requires `PrivateKey`). |
+| `ServerNameOverride` | `string?` | `null` | Override the hostname used for TLS SNI/verification (useful with self-signed certs). |
+
 ## Publishing Messages
 
 ```csharp
@@ -189,6 +244,8 @@ await consumer.ConsumeBatchAsync(
 using QueueTi;
 
 var auth = await QueueTiAuth.LoginAsync("http://localhost:8080", "admin", "secret");
+// auth.Token is null when auth is disabled — QueueTiClient treats null BearerToken as unauthenticated
+// auth.RefreshAsync is a no-op delegate when auth is disabled, so it is always safe to assign
 
 await using var client = QueueTiClient.Create("https://queue.example.com:50051", new QueueTiClientOptions
 {
@@ -202,7 +259,7 @@ var admin = AdminClient.Create("http://localhost:8080",
 
 The `QueueTiAuth` helper:
 1. Calls `GET /api/auth/status` to check if authentication is required
-2. If auth is disabled, returns a no-op instance with a `null` token
+2. If auth is disabled, returns a no-op instance with a `null` token and a no-op `RefreshAsync`
 3. If auth is enabled, calls `POST /api/auth/login` with the provided credentials
 4. Exposes `.Token` (`string?`) for the current JWT and `.RefreshAsync` (`Func<CancellationToken, Task<string>>`) which satisfies the `TokenRefresher` interface for automatic token refresh
 
@@ -250,63 +307,6 @@ client.SetToken("new-jwt-token");  // thread-safe; immediate effect
 | `Tls` | `TlsOptions?` | `null` | Custom TLS configuration (custom CA, mTLS, server name override). Ignored when `Insecure` is `true`. |
 | `ConfigureChannel` | `Action<GrpcChannelOptions>?` | `null` | Callback to configure gRPC channel options. |
 | `ConfigureHttpClientBuilder` | `Action<IHttpClientBuilder>?` | `null` | DI only: configure the `IHttpClientBuilder`. |
-
-## TLS Configuration
-
-### Default TLS (system CAs)
-
-```csharp
-var client = QueueTiClient.Create("https://queue.example.com:50051");
-```
-
-### Custom CA certificate (self-signed server)
-
-```csharp
-using QueueTi;
-
-var caPem = await File.ReadAllBytesAsync("/path/to/ca.pem");
-
-var client = QueueTiClient.Create("https://myserver:50051", new QueueTiClientOptions
-{
-    Tls = new TlsOptions { RootCertificates = caPem }
-});
-```
-
-### Mutual TLS (mTLS)
-
-```csharp
-var client = QueueTiClient.Create("https://myserver:50051", new QueueTiClientOptions
-{
-    Tls = new TlsOptions
-    {
-        RootCertificates = await File.ReadAllBytesAsync("/path/to/ca.pem"),
-        PrivateKey = await File.ReadAllBytesAsync("/path/to/client-key.pem"),
-        CertificateChain = await File.ReadAllBytesAsync("/path/to/client-cert.pem"),
-    }
-});
-```
-
-### Self-signed cert with hostname override
-
-```csharp
-var client = QueueTiClient.Create("https://localhost:50051", new QueueTiClientOptions
-{
-    Tls = new TlsOptions
-    {
-        RootCertificates = await File.ReadAllBytesAsync("/path/to/ca.pem"),
-        ServerNameOverride = "myserver.internal",
-    }
-});
-```
-
-### TlsOptions
-
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `RootCertificates` | `byte[]?` | `null` | PEM-encoded CA certificate(s); uses system CAs when `null`. |
-| `PrivateKey` | `byte[]?` | `null` | PEM-encoded client private key for mTLS (requires `CertificateChain`). |
-| `CertificateChain` | `byte[]?` | `null` | PEM-encoded client certificate chain for mTLS (requires `PrivateKey`). |
-| `ServerNameOverride` | `string?` | `null` | Override the hostname used for TLS SNI/verification (useful with self-signed certs). |
 
 ## Disposal
 

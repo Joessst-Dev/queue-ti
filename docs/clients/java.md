@@ -266,6 +266,9 @@ try (var client = QueueTiClient.connect("myserver:50051",
 ### Mutual TLS (mTLS)
 
 ```java
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 try (var client = QueueTiClient.connect("myserver:50051",
         ConnectOptions.builder()
             .tls(TlsOptions.builder()
@@ -281,6 +284,9 @@ try (var client = QueueTiClient.connect("myserver:50051",
 ### Self-signed cert with hostname override
 
 ```java
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 try (var client = QueueTiClient.connect("localhost:50051",
         ConnectOptions.builder()
             .tls(TlsOptions.builder()
