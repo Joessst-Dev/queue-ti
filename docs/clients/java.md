@@ -149,6 +149,77 @@ queueti:
 
 All beans are then available for injection with no additional setup. For the full property reference see the [Spring Boot Starter](https://github.com/Joessst-Dev/queue-ti-java-client#spring-boot-starter) section in the Java client README.
 
+## Spring Integration
+
+`queue-ti-spring-integration` provides `QueueTiInboundChannelAdapter` — a `MessageProducerSupport`-based adapter that consumes a queue-ti topic and publishes messages onto any Spring Integration `MessageChannel`. It plugs directly into `IntegrationFlow` pipelines with no boilerplate consumer loop. The core client is pulled in as a transitive dependency.
+
+### Installation
+
+Replace `VERSION` with a release tag (e.g. `2026.05.0`). See [releases](https://github.com/Joessst-Dev/queue-ti-java-client/releases) for available versions.
+
+**Gradle (Kotlin DSL)**
+
+```kotlin
+dependencies {
+    implementation("de.joesst.dev:queue-ti-spring-integration:VERSION")
+}
+```
+
+**Gradle (Groovy)**
+
+```groovy
+dependencies {
+    implementation 'de.joesst.dev:queue-ti-spring-integration:VERSION'
+}
+```
+
+**Maven**
+
+```xml
+<dependency>
+    <groupId>de.joesst.dev</groupId>
+    <artifactId>queue-ti-spring-integration</artifactId>
+    <version>VERSION</version>
+</dependency>
+```
+
+### Quick Start
+
+```java
+var adapter = new QueueTiInboundChannelAdapter(client, "orders");
+adapter.setOutputChannel(myChannel);
+adapter.afterPropertiesSet();
+adapter.start();
+```
+
+`QueueTiInboundChannelAdapter` implements `SmartLifecycle` — declaring it as a Spring bean lets the context call `start()` and `stop()` automatically.
+
+### Acknowledge Modes
+
+**AUTO (default)** — the adapter acks when downstream processing returns normally; any uncaught exception causes a nack.
+
+**MANUAL** — a `QueueTiAcknowledgment` is added to the message headers. Downstream code must call `ack.acknowledge()` or `ack.nack(reason)`. The handler thread blocks until settlement; if settlement does not occur within the configured timeout (default 30s), the message is nacked automatically.
+
+```java
+var adapter = new QueueTiInboundChannelAdapter(client, "orders");
+adapter.setAcknowledgeMode(QueueTiInboundChannelAdapter.AcknowledgeMode.MANUAL);
+adapter.setSettlementTimeout(Duration.ofSeconds(60));
+adapter.setOutputChannel(myChannel);
+```
+
+### Message Headers
+
+| Constant (`QueueTiMessageHeaders.*`) | Header key | Type | Modes |
+|--------------------------------------|-----------|------|-------|
+| `MESSAGE_ID` | `queueti_messageId` | `String` | AUTO + MANUAL |
+| `TOPIC` | `queueti_topic` | `String` | AUTO + MANUAL |
+| `RETRY_COUNT` | `queueti_retryCount` | `int` | AUTO + MANUAL |
+| `CREATED_AT` | `queueti_createdAt` | `Instant` | AUTO + MANUAL |
+| `METADATA` | `queueti_metadata` | `Map<String, String>` | AUTO + MANUAL |
+| `ACKNOWLEDGMENT` | `queueti_acknowledgment` | `QueueTiAcknowledgment` | MANUAL only |
+
+For the full reference including `ConsumerOptions` and `IntegrationFlow` examples see the [Spring Integration](https://github.com/Joessst-Dev/queue-ti-java-client#spring-integration) section in the Java client README.
+
 ## Quick Start
 
 ```java
