@@ -1,0 +1,7 @@
+FROM nginx:alpine3.21
+RUN rm /etc/nginx/conf.d/default.conf && \
+    chown -R nginx:nginx /var/cache/nginx /var/run /run
+COPY --chown=nginx:nginx dist/admin-ui/browser /usr/share/nginx/html
+COPY --chown=nginx:nginx nginx.conf /etc/nginx/conf.d/default.conf
+USER nginx
+EXPOSE 80

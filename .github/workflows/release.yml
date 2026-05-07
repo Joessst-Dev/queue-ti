@@ -121,6 +121,13 @@ jobs:
       - name: Run ESLint
         run: npx nx lint
 
+      - name: Upload admin UI dist
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: admin-ui-dist
+          path: ui/dist/
+          retention-days: 1
+
   # ─────────────────────────────────────────────────────────────────────────────
   # Job 1c: Node.js client — build, test, lint (gates the release)
   # Mirrors the node-client job in ci.yml exactly.
@@ -312,7 +319,7 @@ jobs:
   publish-ui-image:
     name: "Docker: Build & push admin UI image"
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: [backend, frontend, node-client, python-client, go-client]
 
     permissions:
@@ -322,6 +329,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download pre-built admin UI dist
+        # Reuses the dist/ output from the frontend gate job — no npm or Angular
+        # build runs inside Docker. The multi-arch image just copies static files
+        # into nginx, so both platforms complete in under 2 minutes.
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: admin-ui-dist
+          path: ui/dist/
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
@@ -347,13 +363,11 @@ jobs:
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: ./ui
-          file: ./ui/Dockerfile
+          file: ./ui/Dockerfile.release
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=ui
-          cache-to: type=gha,mode=max,scope=ui
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Job 3: Publish @queue-ti/client to npm
