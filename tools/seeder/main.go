@@ -57,7 +57,16 @@ func newRootCmd() *cobra.Command {
 
 			authToken := token
 			if authToken == "" && username != "" {
-				auth, err := queueti.NewAuth(adminURL, username, resolvedPassword)
+				if resolvedPassword == "" {
+					return fmt.Errorf("--password or SEEDER_PASSWORD is required when --username is set")
+				}
+				auth, err := queueti.NewAuth(
+					cmd.Context(),
+					adminURL,
+					username,
+					resolvedPassword,
+					queueti.WithAuthHTTPClient(&http.Client{Timeout: timeout}),
+				)
 				if err != nil {
 					return fmt.Errorf("auth: %w", err)
 				}

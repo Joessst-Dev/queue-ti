@@ -28,20 +28,33 @@ type Auth struct {
 	token string // empty when auth is disabled
 }
 
+// AuthOption configures a NewAuth call.
+type AuthOption func(*Auth)
+
+// WithAuthHTTPClient replaces the default http.Client used for auth requests.
+// Use this to control timeouts or transport settings.
+func WithAuthHTTPClient(hc *http.Client) AuthOption {
+	return func(a *Auth) { a.httpClient = hc }
+}
+
 // NewAuth connects to adminAddr, checks whether auth is required, and — when
 // it is — performs a login with username/password to obtain a JWT.
 //
 // adminAddr should be the scheme+host+port of the admin API, e.g.
 // "http://localhost:8080". A trailing slash is stripped automatically.
-func NewAuth(adminAddr, username, password string) (*Auth, error) {
+// The context controls the timeout for the initial status check and login.
+func NewAuth(ctx context.Context, adminAddr, username, password string, opts ...AuthOption) (*Auth, error) {
 	a := &Auth{
 		adminAddr:  strings.TrimRight(adminAddr, "/"),
 		username:   username,
 		password:   password,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
+	for _, o := range opts {
+		o(a)
+	}
 
-	required, err := a.authRequired(context.Background())
+	required, err := a.authRequired(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("queue-ti auth: check auth status: %w", err)
 	}
@@ -49,7 +62,7 @@ func NewAuth(adminAddr, username, password string) (*Auth, error) {
 		return a, nil
 	}
 
-	if err := a.login(context.Background()); err != nil {
+	if err := a.login(ctx); err != nil {
 		return nil, fmt.Errorf("queue-ti auth: login: %w", err)
 	}
 	return a, nil

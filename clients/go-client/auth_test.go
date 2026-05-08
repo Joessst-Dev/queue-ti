@@ -31,7 +31,7 @@ var _ = Describe("Auth", func() {
 				}))
 				defer srv.Close()
 
-				auth, err := queueti.NewAuth(srv.URL, "user", "pass")
+				auth, err := queueti.NewAuth(context.Background(), srv.URL, "user", "pass")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(auth.Token()).To(BeEmpty())
 				Expect(loginCalled).To(BeFalse())
@@ -46,7 +46,7 @@ var _ = Describe("Auth", func() {
 				}))
 				defer srv.Close()
 
-				_, err := queueti.NewAuth(srv.URL+"/", "user", "pass")
+				_, err := queueti.NewAuth(context.Background(), srv.URL+"/", "user", "pass")
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})
@@ -68,7 +68,7 @@ var _ = Describe("Auth", func() {
 				}))
 				defer srv.Close()
 
-				auth, err := queueti.NewAuth(srv.URL, "admin", "secret")
+				auth, err := queueti.NewAuth(context.Background(), srv.URL, "admin", "secret")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(auth.Token()).To(Equal("jwt-token-abc"))
 			})
@@ -89,7 +89,7 @@ var _ = Describe("Auth", func() {
 				}))
 				defer srv.Close()
 
-				_, err := queueti.NewAuth(srv.URL, `user"name`, `p\a"ss`)
+				_, err := queueti.NewAuth(context.Background(), srv.URL, `user"name`, `p\a"ss`)
 				Expect(err).NotTo(HaveOccurred())
 				var body map[string]string
 				json.Unmarshal(capturedBody, &body)
@@ -110,7 +110,7 @@ var _ = Describe("Auth", func() {
 				}))
 				defer srv.Close()
 
-				_, err := queueti.NewAuth(srv.URL, "bad", "creds")
+				_, err := queueti.NewAuth(context.Background(), srv.URL, "bad", "creds")
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("login"))
 			})
@@ -118,7 +118,7 @@ var _ = Describe("Auth", func() {
 
 		Context("when the status endpoint is unreachable", func() {
 			It("returns an error", func() {
-				_, err := queueti.NewAuth("http://127.0.0.1:1", "u", "p")
+				_, err := queueti.NewAuth(context.Background(), "http://127.0.0.1:1", "u", "p")
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("check auth status"))
 			})
@@ -140,7 +140,7 @@ var _ = Describe("Auth", func() {
 			}))
 			defer srv.Close()
 
-			auth, err := queueti.NewAuth(srv.URL, "admin", "secret")
+			auth, err := queueti.NewAuth(context.Background(), srv.URL, "admin", "secret")
 			Expect(err).NotTo(HaveOccurred())
 			loginCalled = false // reset after initial login
 
@@ -162,7 +162,7 @@ var _ = Describe("Auth", func() {
 				}))
 				defer srv.Close()
 
-				auth, err := queueti.NewAuth(srv.URL, "u", "p")
+				auth, err := queueti.NewAuth(context.Background(), srv.URL, "u", "p")
 				Expect(err).NotTo(HaveOccurred())
 
 				tok, err := auth.Refresh(context.Background())
@@ -186,7 +186,7 @@ var _ = Describe("Auth", func() {
 				}))
 				defer srv.Close()
 
-				auth, err := queueti.NewAuth(srv.URL, "admin", "secret")
+				auth, err := queueti.NewAuth(context.Background(), srv.URL, "admin", "secret")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(callCount).To(Equal(1))
 
