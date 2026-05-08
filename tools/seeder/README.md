@@ -10,13 +10,13 @@ go run ./tools/seeder -f seed.json [flags]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-f` / `-file` | (required) | Path to seed JSON file |
-| `-admin-url` | `http://localhost:8080` | Base URL of the admin HTTP API |
-| `-token` | `""` | Static bearer token |
-| `-username` | `""` | Username for login-based auth |
-| `-password` | `""` | Password (prefer `SEEDER_PASSWORD` env var to avoid ps exposure) |
-| `-dry-run` | `false` | Print planned actions without calling the API |
-| `-timeout` | `30s` | Per-request HTTP timeout |
+| `-f` / `--file` | (required) | Path to seed JSON file |
+| `--admin-url` | `http://localhost:8080` | Base URL of the admin HTTP API |
+| `--token` | `""` | Static bearer token |
+| `--username` | `""` | Username for login-based auth |
+| `--password` | `""` | Password (prefer `SEEDER_PASSWORD` env var to avoid ps exposure) |
+| `--dry-run` | `false` | Print planned actions without calling the API |
+| `--timeout` | `30s` | Per-request HTTP timeout |
 
 ## Seed file format
 
@@ -66,7 +66,7 @@ services:
     build:
       context: .
       dockerfile: tools/seeder/Dockerfile
-    command: ["-f", "/seed.json", "-admin-url", "http://backend:8080"]
+    command: ["-f", "/seed.json", "--admin-url", "http://backend:8080"]
     environment:
       SEEDER_PASSWORD: "${ADMIN_PASSWORD}"
     volumes:
