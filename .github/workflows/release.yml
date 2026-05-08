@@ -411,7 +411,7 @@ jobs:
     name: "Docker: Build & push seeder image"
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [backend, frontend, node-client, python-client, go-client, seeder]
+    needs: [backend, go-client, seeder]
 
     permissions:
       contents: read
