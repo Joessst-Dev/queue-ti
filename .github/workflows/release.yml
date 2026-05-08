@@ -512,8 +512,15 @@ jobs:
         # replace the "latest" pointer on npm.
         # --provenance attaches a signed build provenance to the package for
         # supply chain transparency (requires id-token: write above).
+        # Skip gracefully if this exact version was already published (e.g. a
+        # re-triggered release run after a partial failure).
         run: |
           TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          if npm view "@queue-ti/client@${VERSION}" version > /dev/null 2>&1; then
+            echo "Version ${VERSION} already published on npm — skipping."
+            exit 0
+          fi
           if [[ "$TAG" == *"-preview"* || "$TAG" == *"-rc"* ]]; then
             npm publish --access public --tag next --provenance
           else
