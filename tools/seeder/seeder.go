@@ -59,10 +59,18 @@ func newSeeder(admin *queueti.AdminClient, dryRun bool, log *slog.Logger) *Seede
 }
 
 // Apply upserts all resources declared in f.
-// Topic configs and schemas are always PUT (idempotent).
-// Consumer groups are registered only when not already present.
 func (s *Seeder) Apply(ctx context.Context, f *SeedFile) error {
-	for _, cfg := range f.TopicConfigs {
+	if err := s.applyTopicConfigs(ctx, f.TopicConfigs); err != nil {
+		return err
+	}
+	if err := s.applyTopicSchemas(ctx, f.TopicSchemas); err != nil {
+		return err
+	}
+	return s.applyConsumerGroups(ctx, f.ConsumerGroups)
+}
+
+func (s *Seeder) applyTopicConfigs(ctx context.Context, configs []queueti.TopicConfig) error {
+	for _, cfg := range configs {
 		if s.dryRun {
 			s.log.Info("dry-run: would upsert topic config", "topic", cfg.Topic)
 			continue
@@ -72,8 +80,11 @@ func (s *Seeder) Apply(ctx context.Context, f *SeedFile) error {
 		}
 		s.log.Info("upserted topic config", "topic", cfg.Topic)
 	}
+	return nil
+}
 
-	for _, schema := range f.TopicSchemas {
+func (s *Seeder) applyTopicSchemas(ctx context.Context, schemas []TopicSchemaEntry) error {
+	for _, schema := range schemas {
 		if s.dryRun {
 			s.log.Info("dry-run: would upsert topic schema", "topic", schema.Topic)
 			continue
@@ -83,8 +94,11 @@ func (s *Seeder) Apply(ctx context.Context, f *SeedFile) error {
 		}
 		s.log.Info("upserted topic schema", "topic", schema.Topic)
 	}
+	return nil
+}
 
-	for _, entry := range f.ConsumerGroups {
+func (s *Seeder) applyConsumerGroups(ctx context.Context, entries []ConsumerGroupEntry) error {
+	for _, entry := range entries {
 		if len(entry.Groups) == 0 {
 			s.log.Warn("consumer group entry has no groups, skipping", "topic", entry.Topic)
 			continue
@@ -110,6 +124,5 @@ func (s *Seeder) Apply(ctx context.Context, f *SeedFile) error {
 			s.log.Info("registered consumer group", "topic", entry.Topic, "group", group)
 		}
 	}
-
 	return nil
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -34,56 +35,25 @@ func newRootCmd() *cobra.Command {
 		Short: "Idempotently provision queue-ti resources from a JSON seed file",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+			hc := &http.Client{Timeout: timeout}
 
-			raw, err := os.ReadFile(seedFile)
+			seed, err := loadSeed(seedFile)
 			if err != nil {
-				return fmt.Errorf("read seed file: %w", err)
+				return err
 			}
 
-			var seed SeedFile
-			if err := json.Unmarshal(raw, &seed); err != nil {
-				return fmt.Errorf("parse seed file: %w", err)
+			authToken, err := resolveToken(cmd.Context(), adminURL, token, username, password, hc)
+			if err != nil {
+				return err
 			}
 
-			if err := seed.validate(); err != nil {
-				return fmt.Errorf("invalid seed file: %w", err)
-			}
-
-			// Prefer SEEDER_PASSWORD env var to avoid exposing the password in ps output.
-			resolvedPassword := password
-			if resolvedPassword == "" {
-				resolvedPassword = os.Getenv("SEEDER_PASSWORD")
-			}
-
-			authToken := token
-			if authToken == "" && username != "" {
-				if resolvedPassword == "" {
-					return fmt.Errorf("--password or SEEDER_PASSWORD is required when --username is set")
-				}
-				auth, err := queueti.NewAuth(
-					cmd.Context(),
-					adminURL,
-					username,
-					resolvedPassword,
-					queueti.WithAuthHTTPClient(&http.Client{Timeout: timeout}),
-				)
-				if err != nil {
-					return fmt.Errorf("auth: %w", err)
-				}
-				authToken = auth.Token()
-			}
-
-			opts := []queueti.AdminOption{
-				queueti.WithAdminHTTPClient(&http.Client{Timeout: timeout}),
-			}
+			opts := []queueti.AdminOption{queueti.WithAdminHTTPClient(hc)}
 			if authToken != "" {
 				opts = append(opts, queueti.WithAdminToken(authToken))
 			}
 
-			admin := queueti.NewAdminClient(adminURL, opts...)
-			seeder := newSeeder(admin, dryRun, log)
-
-			if err := seeder.Apply(cmd.Context(), &seed); err != nil {
+			seeder := newSeeder(queueti.NewAdminClient(adminURL, opts...), dryRun, log)
+			if err := seeder.Apply(cmd.Context(), seed); err != nil {
 				return err
 			}
 
@@ -103,4 +73,43 @@ func newRootCmd() *cobra.Command {
 	_ = cmd.MarkFlagRequired("file")
 
 	return cmd
+}
+
+// loadSeed reads, parses, and validates a seed file.
+func loadSeed(path string) (*SeedFile, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read seed file: %w", err)
+	}
+	var seed SeedFile
+	if err := json.Unmarshal(raw, &seed); err != nil {
+		return nil, fmt.Errorf("parse seed file: %w", err)
+	}
+	if err := seed.validate(); err != nil {
+		return nil, fmt.Errorf("invalid seed file: %w", err)
+	}
+	return &seed, nil
+}
+
+// resolveToken returns a bearer token from the given sources, in priority order:
+// explicit --token flag, then username+password login, then empty (no auth).
+func resolveToken(ctx context.Context, adminURL, token, username, password string, hc *http.Client) (string, error) {
+	if token != "" {
+		return token, nil
+	}
+	if username == "" {
+		return "", nil
+	}
+	// Prefer SEEDER_PASSWORD env var to avoid exposing the password in ps output.
+	if password == "" {
+		password = os.Getenv("SEEDER_PASSWORD")
+	}
+	if password == "" {
+		return "", fmt.Errorf("--password or SEEDER_PASSWORD is required when --username is set")
+	}
+	auth, err := queueti.NewAuth(ctx, adminURL, username, password, queueti.WithAuthHTTPClient(hc))
+	if err != nil {
+		return "", fmt.Errorf("auth: %w", err)
+	}
+	return auth.Token(), nil
 }
