@@ -85,6 +85,10 @@ func (s *Seeder) Apply(ctx context.Context, f *SeedFile) error {
 	}
 
 	for _, entry := range f.ConsumerGroups {
+		if len(entry.Groups) == 0 {
+			s.log.Warn("consumer group entry has no groups, skipping", "topic", entry.Topic)
+			continue
+		}
 		if s.dryRun {
 			for _, group := range entry.Groups {
 				s.log.Info("dry-run: would register consumer group (if not exists)", "topic", entry.Topic, "group", group)

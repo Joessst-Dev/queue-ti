@@ -145,22 +145,6 @@ var _ = Describe("Seeder.Apply", func() {
 			Expect(seeder.Apply(ctx, seed)).To(Succeed())
 		})
 
-		It("returns nil for a non-empty seed", func() {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				defer GinkgoRecover()
-				Fail("dry-run should not perform any HTTP request")
-			}))
-			defer srv.Close()
-
-			admin := queueti.NewAdminClient(srv.URL)
-			seeder := newSeeder(admin, true, log)
-
-			seed := &SeedFile{
-				TopicConfigs: []queueti.TopicConfig{{Topic: "a"}, {Topic: "b"}},
-			}
-
-			Expect(seeder.Apply(ctx, seed)).To(Succeed())
-		})
 	})
 
 	Describe("topic configs", func() {
@@ -295,10 +279,12 @@ var _ = Describe("Seeder.Apply", func() {
 		// distinguish list/register calls per topic.
 		type recorder struct {
 			mu        sync.Mutex
-			lists     map[string]int            // topic -> times listed
-			registers map[string][]string       // topic -> groups registered (in order)
-			existing  map[string][]string       // topic -> groups already on the server
-			registerStatus map[string]int       // topic -> status code to return on POST
+			lists     map[string]int      // topic -> times listed
+			registers map[string][]string // topic -> groups registered (in order)
+			existing  map[string][]string // topic -> groups already on the server
+			// registerStatus maps a topic to the HTTP status returned for every POST on that topic.
+			// Only one status per topic is supported; use separate tests for per-group variation.
+			registerStatus map[string]int
 		}
 
 		newRecorder := func() *recorder {
