@@ -184,13 +184,13 @@ services:
 The same pattern works as a Kubernetes init container:
 
 ::: tip Image availability
-`ghcr.io/joessst-dev/queue-ti-seeder` is published on every release. Use a specific version tag (e.g. `v2026.05.0`) in production rather than `:latest`.
+`ghcr.io/joessst-dev/queue-ti-seeder` is published on every release. Pin a specific version tag in production rather than `:latest` — check the [releases page](https://github.com/Joessst-Dev/queue-ti/releases) for the latest tag.
 :::
 
 ```yaml
 initContainers:
 - name: seeder
-  image: ghcr.io/joessst-dev/queue-ti-seeder:v2026.05.0
+  image: ghcr.io/joessst-dev/queue-ti-seeder:v2026.05.0-preview.1  # replace with current release tag
   args: ["-f", "/config/seed.json", "--admin-url", "http://queue-ti:8080", "--username", "admin"]
   env:
   - name: SEEDER_PASSWORD
