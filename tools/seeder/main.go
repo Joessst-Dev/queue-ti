@@ -1,11 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -38,12 +35,6 @@ func newRootCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-			// Prefer SEEDER_PASSWORD env var to avoid exposing the password in ps output.
-			resolvedPassword := password
-			if resolvedPassword == "" {
-				resolvedPassword = os.Getenv("SEEDER_PASSWORD")
-			}
-
 			raw, err := os.ReadFile(seedFile)
 			if err != nil {
 				return fmt.Errorf("read seed file: %w", err)
@@ -58,12 +49,19 @@ func newRootCmd() *cobra.Command {
 				return fmt.Errorf("invalid seed file: %w", err)
 			}
 
+			// Prefer SEEDER_PASSWORD env var to avoid exposing the password in ps output.
+			resolvedPassword := password
+			if resolvedPassword == "" {
+				resolvedPassword = os.Getenv("SEEDER_PASSWORD")
+			}
+
 			authToken := token
 			if authToken == "" && username != "" {
-				authToken, err = login(cmd.Context(), adminURL, username, resolvedPassword, timeout)
+				auth, err := queueti.NewAuth(adminURL, username, resolvedPassword)
 				if err != nil {
-					return fmt.Errorf("login: %w", err)
+					return fmt.Errorf("auth: %w", err)
 				}
+				authToken = auth.Token()
 			}
 
 			opts := []queueti.AdminOption{
@@ -96,37 +94,4 @@ func newRootCmd() *cobra.Command {
 	_ = cmd.MarkFlagRequired("file")
 
 	return cmd
-}
-
-func login(ctx context.Context, adminURL, username, password string, timeout time.Duration) (string, error) {
-	body, err := json.Marshal(map[string]string{"username": username, "password": password})
-	if err != nil {
-		return "", fmt.Errorf("marshal login request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, adminURL+"/api/auth/login", bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	hc := &http.Client{Timeout: timeout}
-	resp, err := hc.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(raw))
-	}
-
-	var result struct {
-		Token string `json:"token"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
-	}
-	return result.Token, nil
 }
