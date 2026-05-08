@@ -190,7 +190,7 @@ The same pattern works as a Kubernetes init container:
 ```yaml
 initContainers:
 - name: seeder
-  image: ghcr.io/joessst-dev/queue-ti-seeder:v2026.05.0-preview.1  # replace with current release tag
+  image: ghcr.io/joessst-dev/queue-ti-seeder:v2026.05.4
   args: ["-f", "/config/seed.json", "--admin-url", "http://queue-ti:8080", "--username", "admin"]
   env:
   - name: SEEDER_PASSWORD
