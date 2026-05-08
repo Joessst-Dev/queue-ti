@@ -23,7 +23,7 @@ func main() {
 	adminURL := flag.String("admin-url", "http://localhost:8080", "base URL of the admin HTTP API")
 	token := flag.String("token", "", "static bearer token for authentication")
 	username := flag.String("username", "", "username for login-based auth")
-	password := flag.String("password", "", "password for login-based auth")
+	password := flag.String("password", "", "password for login-based auth (or set SEEDER_PASSWORD)")
 	dryRun := flag.Bool("dry-run", false, "print planned actions without calling the API")
 	timeout := flag.Duration("timeout", 30*time.Second, "per-request HTTP timeout")
 	flag.Parse()
@@ -34,6 +34,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error: -file is required")
 		flag.Usage()
 		os.Exit(1)
+	}
+
+	// Prefer SEEDER_PASSWORD env var to avoid exposing the password in ps output.
+	resolvedPassword := *password
+	if resolvedPassword == "" {
+		resolvedPassword = os.Getenv("SEEDER_PASSWORD")
 	}
 
 	raw, err := os.ReadFile(seedFilePath)
@@ -48,9 +54,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := seed.validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: invalid seed file: %v\n", err)
+		os.Exit(1)
+	}
+
 	authToken := *token
 	if authToken == "" && *username != "" {
-		authToken, err = login(context.Background(), *adminURL, *username, *password, *timeout)
+		authToken, err = login(context.Background(), *adminURL, *username, resolvedPassword, *timeout)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: login: %v\n", err)
 			os.Exit(1)
@@ -75,7 +86,11 @@ func main() {
 }
 
 func login(ctx context.Context, adminURL, username, password string, timeout time.Duration) (string, error) {
-	body, _ := json.Marshal(map[string]string{"username": username, "password": password})
+	body, err := json.Marshal(map[string]string{"username": username, "password": password})
+	if err != nil {
+		return "", fmt.Errorf("marshal login request: %w", err)
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, adminURL+"/api/auth/login", bytes.NewReader(body))
 	if err != nil {
 		return "", err

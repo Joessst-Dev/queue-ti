@@ -2,7 +2,7 @@ FROM golang:1.25-bookworm AS builder
 
 WORKDIR /src
 
-COPY go.work go.work.sum* ./
+COPY go.work go.work.sum ./
 COPY backend/go.mod backend/go.sum ./backend/
 COPY clients/go-client/go.mod clients/go-client/go.sum ./clients/go-client/
 COPY tools/seeder/go.mod ./tools/seeder/

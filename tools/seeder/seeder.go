@@ -27,6 +27,26 @@ type ConsumerGroupEntry struct {
 	Groups []string `json:"groups"`
 }
 
+// validate returns an error if any entry has an empty topic field.
+func (f *SeedFile) validate() error {
+	for i, cfg := range f.TopicConfigs {
+		if cfg.Topic == "" {
+			return fmt.Errorf("topic_configs[%d]: topic must not be empty", i)
+		}
+	}
+	for i, s := range f.TopicSchemas {
+		if s.Topic == "" {
+			return fmt.Errorf("topic_schemas[%d]: topic must not be empty", i)
+		}
+	}
+	for i, cg := range f.ConsumerGroups {
+		if cg.Topic == "" {
+			return fmt.Errorf("consumer_groups[%d]: topic must not be empty", i)
+		}
+	}
+	return nil
+}
+
 // Seeder applies a SeedFile against a queue-ti admin API.
 type Seeder struct {
 	admin  *queueti.AdminClient
