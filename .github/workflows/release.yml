@@ -248,6 +248,38 @@ jobs:
         run: ginkgo ./...
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1f: Seeder — build + test (gates the release)
+  # Mirrors the seeder job in ci.yml exactly.
+  # ─────────────────────────────────────────────────────────────────────────────
+  seeder:
+    name: "Seeder: Build & Test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Go 1.25.5
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: "1.25.5"
+          cache-dependency-path: tools/seeder/go.sum
+
+      - name: Install Ginkgo CLI
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.28.1
+
+      - name: Build seeder binary
+        run: go build ./tools/seeder
+
+      - name: Run seeder tests
+        working-directory: tools/seeder
+        run: ginkgo ./...
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Job 2: Build & push Docker image to GHCR
   # Only runs after all four gate jobs pass. Builds a multi-platform manifest
   # (linux/amd64 + linux/arm64) and pushes three conditional tags:
@@ -259,7 +291,7 @@ jobs:
     name: "Docker: Build & push multi-arch image"
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [backend, frontend, node-client, python-client, go-client]
+    needs: [backend, frontend, node-client, python-client, go-client, seeder]
 
     permissions:
       contents: read
@@ -320,7 +352,7 @@ jobs:
     name: "Docker: Build & push admin UI image"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [backend, frontend, node-client, python-client, go-client]
+    needs: [backend, frontend, node-client, python-client, go-client, seeder]
 
     permissions:
       contents: read
@@ -368,6 +400,58 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2c: Build & push seeder Docker image to GHCR
+  # Runs in parallel with publish-image and publish-ui-image.
+  # The seeder Dockerfile requires the workspace root as context.
+  # Same CalVer tag strategy as the other images.
+  # ─────────────────────────────────────────────────────────────────────────────
+  publish-seeder-image:
+    name: "Docker: Build & push seeder image"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [backend, frontend, node-client, python-client, go-client, seeder]
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Docker metadata and tags
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ghcr.io/joessst-dev/queue-ti-seeder
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+            type=raw,value=preview,enable=${{ contains(github.ref_name, '-preview') }}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-preview') && !contains(github.ref_name, '-rc') }}
+
+      - name: Build and push multi-arch seeder image
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: .
+          file: tools/seeder/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=seeder
+          cache-to: type=gha,mode=max,scope=seeder
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Job 3: Publish @queue-ti/client to npm
@@ -530,7 +614,7 @@ jobs:
     name: "GitHub: Create release"
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [publish-image, publish-ui-image, publish-npm, publish-pypi]
+    needs: [publish-image, publish-ui-image, publish-seeder-image, publish-npm, publish-pypi]
 
     permissions:
       contents: write
