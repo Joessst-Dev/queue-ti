@@ -1,5 +1,6 @@
 node_modules/
 .nx/
 dist/
+!dist/admin-ui/browser
 .angular/
 coverage/
