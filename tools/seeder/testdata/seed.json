@@ -1,0 +1,25 @@
+{
+  "topic_configs": [
+    {
+      "topic": "orders",
+      "max_retries": 3,
+      "message_ttl_seconds": 3600,
+      "replayable": true,
+      "max_depth": 10000,
+      "replay_window_seconds": 86400,
+      "throughput_limit": 100
+    }
+  ],
+  "topic_schemas": [
+    {
+      "topic": "orders",
+      "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"amount\":{\"type\":\"number\"}},\"required\":[\"id\"]}"
+    }
+  ],
+  "consumer_groups": [
+    {
+      "topic": "orders",
+      "groups": ["billing", "invoicing", "notifications"]
+    }
+  ]
+}
