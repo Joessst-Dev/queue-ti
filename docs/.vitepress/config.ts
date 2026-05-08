@@ -26,6 +26,7 @@ export default withMermaid(defineConfig({
             { text: 'Schema Validation', link: '/guide/schema-validation' },
             { text: 'Observability', link: '/guide/observability' },
             { text: 'Deployment', link: '/guide/deployment' },
+            { text: 'Seeder', link: '/guide/seeder' },
             { text: 'Configuration', link: '/guide/configuration' },
           ],
         },
