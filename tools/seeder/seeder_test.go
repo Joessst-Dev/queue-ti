@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sync"
 
 	queueti "github.com/Joessst-Dev/queue-ti/clients/go-client"
@@ -108,6 +110,121 @@ var _ = Describe("SeedFile.validate", func() {
 			}
 
 			Expect(seed.validate()).To(Succeed())
+		})
+	})
+})
+
+var _ = Describe("loadSeed", func() {
+	Context("when the file does not exist", func() {
+		It("returns a read error", func() {
+			_, err := loadSeed("/no/such/file.json")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("read seed file"))
+		})
+	})
+
+	Context("when the file contains invalid JSON", func() {
+		It("returns a parse error", func() {
+			path := filepath.Join(GinkgoT().TempDir(), "bad.json")
+			Expect(os.WriteFile(path, []byte("not json"), 0600)).To(Succeed())
+
+			_, err := loadSeed(path)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("parse seed file"))
+		})
+	})
+
+	Context("when the file fails validation", func() {
+		It("returns a validation error", func() {
+			path := filepath.Join(GinkgoT().TempDir(), "invalid.json")
+			Expect(os.WriteFile(path, []byte(`{"topic_configs":[{"topic":""}]}`), 0600)).To(Succeed())
+
+			_, err := loadSeed(path)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid seed file"))
+		})
+	})
+
+	Context("when the file is valid", func() {
+		It("returns the parsed SeedFile", func() {
+			path := filepath.Join(GinkgoT().TempDir(), "seed.json")
+			Expect(os.WriteFile(path, []byte(`{"topic_configs":[{"topic":"orders"}]}`), 0600)).To(Succeed())
+
+			seed, err := loadSeed(path)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(seed.TopicConfigs).To(HaveLen(1))
+			Expect(seed.TopicConfigs[0].Topic).To(Equal("orders"))
+		})
+	})
+})
+
+var _ = Describe("resolveToken", func() {
+	Context("when --token is provided", func() {
+		It("returns it immediately without any HTTP calls", func() {
+			tok, err := resolveToken(context.Background(), "http://unused", "static-token", "", "", nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(tok).To(Equal("static-token"))
+		})
+	})
+
+	Context("when neither token nor username is set", func() {
+		It("returns an empty token", func() {
+			tok, err := resolveToken(context.Background(), "http://unused", "", "", "", nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(tok).To(BeEmpty())
+		})
+	})
+
+	Context("when username is set but no password is available", func() {
+		It("returns an error", func() {
+			_, err := resolveToken(context.Background(), "http://unused", "", "admin", "", &http.Client{})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("--password or SEEDER_PASSWORD"))
+		})
+	})
+
+	Context("when username and password flag are provided", func() {
+		It("calls NewAuth and returns the token", func() {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/api/auth/status":
+					Expect(json.NewEncoder(w).Encode(map[string]any{"auth_required": true})).To(Succeed())
+				case "/api/auth/login":
+					Expect(json.NewEncoder(w).Encode(map[string]any{"token": "jwt-from-login"})).To(Succeed())
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer srv.Close()
+
+			tok, err := resolveToken(context.Background(), srv.URL, "", "admin", "secret", &http.Client{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(tok).To(Equal("jwt-from-login"))
+		})
+	})
+
+	Context("when SEEDER_PASSWORD env var is set and --password is not", func() {
+		It("uses the env var for login", func() {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/api/auth/status":
+					Expect(json.NewEncoder(w).Encode(map[string]any{"auth_required": true})).To(Succeed())
+				case "/api/auth/login":
+					Expect(json.NewEncoder(w).Encode(map[string]any{"token": "env-token"})).To(Succeed())
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer srv.Close()
+
+			GinkgoT().Setenv("SEEDER_PASSWORD", "env-secret")
+			tok, err := resolveToken(context.Background(), srv.URL, "", "admin", "", &http.Client{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(tok).To(Equal("env-token"))
 		})
 	})
 })
@@ -333,6 +450,25 @@ var _ = Describe("Seeder.Apply", func() {
 			})
 			return httptest.NewServer(mux)
 		}
+
+		It("skips entries with no groups and makes no HTTP calls for them", func() {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+				Fail("should not make any HTTP call for an empty groups entry, got " + r.Method + " " + r.URL.Path)
+			}))
+			defer srv.Close()
+
+			admin := queueti.NewAdminClient(srv.URL)
+			seeder := newSeeder(admin, false, log)
+
+			seed := &SeedFile{
+				ConsumerGroups: []ConsumerGroupEntry{
+					{Topic: "orders", Groups: nil},
+				},
+			}
+
+			Expect(seeder.Apply(ctx, seed)).To(Succeed())
+		})
 
 		It("lists existing groups before registering and registers only missing ones", func() {
 			rec := newRecorder()
