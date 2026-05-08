@@ -37,7 +37,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	auth, err := queueti.NewAuth(adminAddr, envOr("QUEUETI_USERNAME", "admin"), envOr("QUEUETI_PASSWORD", "secret"))
+	auth, err := queueti.NewAuth(ctx, adminAddr, envOr("QUEUETI_USERNAME", "admin"), envOr("QUEUETI_PASSWORD", "secret"))
 	if err != nil {
 		log.Fatalf("auth: %v", err)
 	}
